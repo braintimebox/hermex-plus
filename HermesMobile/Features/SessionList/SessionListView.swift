@@ -35,6 +35,7 @@ struct SessionListView: View {
     @State private var selectedProjectID: String?
     @State private var sidebarScrollPosition: String?
     @State private var didCompleteInitialLoad = false
+    @State private var returnRefreshID: UUID?
     @FocusState private var searchFieldIsFocused: Bool
     @AppStorage(SessionSidebarDisclosureSettings.profilesAreExpandedKey)
     private var profilesAreExpanded = SessionSidebarDisclosureSettings.defaultProfilesAreExpanded
@@ -214,6 +215,10 @@ struct SessionListView: View {
             }
             .task(id: activeSessionMonitorTaskID) {
                 await monitorActiveSessionRows()
+            }
+            .task(id: returnRefreshID) {
+                guard returnRefreshID != nil else { return }
+                await refreshSessionsAndActiveProfile()
             }
             .onAppear {
                 openPendingSharedImportIfNeeded()
@@ -884,6 +889,7 @@ struct SessionListView: View {
 
     private func refreshSessionsAndActiveProfile() async {
         await loadSessions()
+        guard !Task.isCancelled else { return }
         await viewModel.loadActiveProfile()
     }
 
@@ -949,10 +955,7 @@ struct SessionListView: View {
 
     private func refreshAfterReturningIfNeeded() {
         guard didCompleteInitialLoad else { return }
-
-        Task {
-            await refreshSessionsAndActiveProfile()
-        }
+        returnRefreshID = UUID()
     }
 
     private func monitorActiveSessionRows() async {
@@ -994,10 +997,12 @@ struct SessionListView: View {
 
     private func loadSessions() async {
         await viewModel.load(modelContext: modelContext)
+        guard !Task.isCancelled else { return }
         handleLastError()
 
         if !viewModel.isViewingCachedData {
             await viewModel.loadProjects()
+            guard !Task.isCancelled else { return }
             handleLastError()
         }
     }
