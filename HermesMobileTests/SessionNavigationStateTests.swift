@@ -154,6 +154,58 @@ final class SessionNavigationStateTests: XCTestCase {
         XCTAssertTrue(state.isCreatingNewChat)
     }
 
+    func testReturningFromContentfulNewChatSuppressesPlaceholdersThenRefreshesSessions() {
+        let route = PendingNewChatRoute()
+        var state = SessionNavigationState()
+        state.select(route)
+        state.remember(SessionSummary(sessionId: "created-session"))
+        let oldDestination = state.destination
+        state.clearDestination()
+        var events: [NewChatReturnEvent] = []
+
+        SessionListNewChatReturn.run(
+            from: oldDestination,
+            to: state.destination,
+            suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
+            refreshSessions: { events.append(.refreshedSessions) }
+        )
+
+        XCTAssertEqual(events, [.suppressedPlaceholders, .refreshedSessions])
+    }
+
+    func testReturningFromEmptyNewChatSuppressesPlaceholderThenRefreshesSessions() {
+        let route = PendingNewChatRoute()
+        var state = SessionNavigationState()
+        state.select(route)
+        let oldDestination = state.destination
+        state.clearDestination()
+        var events: [NewChatReturnEvent] = []
+
+        SessionListNewChatReturn.run(
+            from: oldDestination,
+            to: state.destination,
+            suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
+            refreshSessions: { events.append(.refreshedSessions) }
+        )
+
+        XCTAssertEqual(events, [.suppressedPlaceholders, .refreshedSessions])
+    }
+
+    func testReplacingNewChatRouteDoesNotRefreshSessions() {
+        let firstRoute = PendingNewChatRoute()
+        let secondRoute = PendingNewChatRoute()
+        var events: [NewChatReturnEvent] = []
+
+        SessionListNewChatReturn.run(
+            from: .newChat(firstRoute),
+            to: .newChat(secondRoute),
+            suppressEmptyPlaceholders: { events.append(.suppressedPlaceholders) },
+            refreshSessions: { events.append(.refreshedSessions) }
+        )
+
+        XCTAssertTrue(events.isEmpty)
+    }
+
     func testRemovingSelectedSessionClearsDestinationAndRestorationID() {
         let session = SessionSummary(sessionId: "session-1")
         var state = SessionNavigationState()
@@ -233,6 +285,11 @@ final class SessionNavigationStateTests: XCTestCase {
             "second-session"
         )
     }
+}
+
+private enum NewChatReturnEvent: Equatable {
+    case suppressedPlaceholders
+    case refreshedSessions
 }
 
 private actor SessionInitialLoadEventRecorder {

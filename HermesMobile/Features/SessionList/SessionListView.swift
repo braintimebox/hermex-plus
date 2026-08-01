@@ -230,14 +230,12 @@ struct SessionListView: View {
                 openRequestedNewChatIfNeeded()
             }
             .onChange(of: navigationState.destination) { oldValue, newValue in
-                if case .newChat = oldValue,
-                   case .newChat = newValue {
-                    return
-                }
-
-                if case .newChat = oldValue {
-                    viewModel.removeEmptySidebarPlaceholders()
-                }
+                SessionListNewChatReturn.run(
+                    from: oldValue,
+                    to: newValue,
+                    suppressEmptyPlaceholders: viewModel.removeEmptySidebarPlaceholders,
+                    refreshSessions: refreshAfterReturningIfNeeded
+                )
             }
             .refreshable {
                 await refreshSessionsAndActiveProfile()
@@ -1214,6 +1212,24 @@ enum SessionListInitialLoad {
         async let initialRefresh: Void = refreshSessionsAndActiveProfile()
         await resolvePendingDeepLink()
         await initialRefresh
+    }
+}
+
+enum SessionListNewChatReturn {
+    static func run(
+        from oldValue: SessionNavigationDestination?,
+        to newValue: SessionNavigationDestination?,
+        suppressEmptyPlaceholders: () -> Void,
+        refreshSessions: () -> Void
+    ) {
+        guard case .newChat = oldValue else { return }
+        if case .newChat = newValue { return }
+
+        // Keep this synchronous so an empty Untitled placeholder cannot flash
+        // during the navigation transition. The refresh then adopts the server's
+        // latest metadata for a new chat that has become contentful.
+        suppressEmptyPlaceholders()
+        refreshSessions()
     }
 }
 
