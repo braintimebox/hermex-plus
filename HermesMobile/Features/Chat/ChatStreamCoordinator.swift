@@ -13,12 +13,16 @@ struct ChatStreamCoordinatorTiming: Equatable {
     let reconnectInterval: TimeInterval
     let runningToolReconnectInterval: TimeInterval
     let statusPollCooldown: TimeInterval
+    // Transport quieter than this is treated as provably alive; must sit above
+    // the server's ~5s SSE heartbeat cadence and below reconnectInterval (#227).
+    let transportFreshInterval: TimeInterval
 
     static let standard = ChatStreamCoordinatorTiming(
         checkingInterval: 5,
         reconnectInterval: 18,
         runningToolReconnectInterval: 25,
-        statusPollCooldown: 4
+        statusPollCooldown: 4,
+        transportFreshInterval: 12
     )
 }
 
@@ -374,8 +378,17 @@ final class ChatStreamCoordinator {
             return
         }
 
-        recoveryState = .checking
         let transportElapsed = now.timeIntervalSince(lastTransportActivityDate ?? lastProgressDate)
+        guard transportElapsed >= timing.transportFreshInterval else {
+            // #227: heartbeats prove the connection is alive during a
+            // semantically quiet window (model thinking / slow tool call), so
+            // stay idle and skip status polls. A genuinely silent transport
+            // still escalates below once past transportFreshInterval.
+            recoveryState = .idle
+            return
+        }
+
+        recoveryState = .checking
         let shouldForceReconnect = transportElapsed >= reconnectInterval
         guard shouldForceReconnect || shouldPollStatus(now: now) else { return }
 
@@ -496,7 +509,13 @@ final class ChatStreamCoordinator {
         case .transportError(let message):
             handleTransportError(message)
         case .heartbeat:
-            break
+            // #227: a heartbeat proves the transport is alive without carrying
+            // semantic progress — drop an already-shown "Checking stream" state
+            // immediately. Never demote .reconnecting; that chip is owned by
+            // the reconnect flow until real progress lands.
+            if recoveryState == .checking {
+                recoveryState = .idle
+            }
         case .ignored:
             break
         }
