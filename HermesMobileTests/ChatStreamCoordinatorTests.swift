@@ -388,6 +388,56 @@ final class ChatStreamCoordinatorTests: APIClientTestCase {
         XCTAssertEqual(streamClient.stopCount, 0)
     }
 
+    // The MockURLProtocol handler runs on URLSession's protocol thread while the
+    // coordinator's status-poll await has suspended the main actor, so a
+    // main-queue sync hop delivers the heartbeat deterministically *mid-flight*
+    // — before the poll's continuation resumes (PR #238 review).
+    @MainActor
+    func testHeartbeatDuringStatusPollKeepsIdleStateWithoutReassertingChecking() async throws {
+        var statusRequests = 0
+        let streamClient = CoordinatorSpySSEStreamingClient()
+        let coordinator = makeCoordinator(streamClient: streamClient) { request in
+            statusRequests += 1
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated { streamClient.emit(.heartbeat) }
+            }
+            return apiTestJSONResponse(#"{"active": true, "stream_id": "stream-123"}"#, for: request)
+        }
+
+        coordinator.start(streamID: "stream-123")
+        coordinator.markProgress(now: Date().addingTimeInterval(-13))
+
+        await coordinator.recoverStaleStreamIfNeeded(now: Date())
+
+        XCTAssertEqual(statusRequests, 1)
+        XCTAssertEqual(coordinator.recoveryState, .idle)
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+        XCTAssertEqual(streamClient.stopCount, 0)
+    }
+
+    @MainActor
+    func testHeartbeatDuringForceReconnectStatusPollSkipsReconnect() async throws {
+        let streamClient = CoordinatorSpySSEStreamingClient()
+        let coordinator = makeCoordinator(streamClient: streamClient) { request in
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated { streamClient.emit(.heartbeat) }
+            }
+            return apiTestJSONResponse(
+                #"{"active": true, "stream_id": "stream-123", "replay_available": true}"#,
+                for: request
+            )
+        }
+
+        coordinator.start(streamID: "stream-123")
+        coordinator.markProgress(now: Date().addingTimeInterval(-19))
+
+        await coordinator.recoverStaleStreamIfNeeded(now: Date())
+
+        XCTAssertEqual(coordinator.recoveryState, .idle)
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+        XCTAssertEqual(streamClient.stopCount, 0)
+    }
+
     @MainActor
     func testHeartbeatDoesNotDemoteReconnectingState() async throws {
         let streamClient = CoordinatorSpySSEStreamingClient()

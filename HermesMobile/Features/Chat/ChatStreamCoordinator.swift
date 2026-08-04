@@ -575,10 +575,12 @@ final class ChatStreamCoordinator {
                 return
             }
 
-            guard forceReconnect else {
-                recoveryState = .checking
-                return
-            }
+            // PR #238 review: recoveryState was set to .checking before this
+            // await. If it changed mid-flight (a heartbeat or real progress
+            // demoted it to .idle), the transport just proved itself alive —
+            // don't resurrect the chip or churn a live connection; the next
+            // recovery tick re-evaluates from scratch.
+            guard recoveryState == .checking, forceReconnect else { return }
 
             reconnectStaleStream(
                 streamID: expectedStreamID,
@@ -599,13 +601,13 @@ final class ChatStreamCoordinator {
                 return
             }
 
-            guard forceReconnect,
+            // Same mid-flight demotion guard as the success path (PR #238
+            // review): only a still-.checking state may escalate.
+            guard recoveryState == .checking,
+                  forceReconnect,
                   activeStreamID == expectedStreamID,
                   !isConnectionSuspended
-            else {
-                recoveryState = .checking
-                return
-            }
+            else { return }
 
             reconnectStaleStream(streamID: expectedStreamID, usesReplay: true)
         }
