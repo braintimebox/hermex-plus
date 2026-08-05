@@ -28,15 +28,13 @@ Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex), a na
 
 ---
 
-### ⚡ This fork changes three things. Nothing else.
+### ✦ Why Hermes Plus?
 
-|  | Hermex | Hermes Plus |
-|--|--------|-------------|
-| Swipe gestures | ✅ | ❌ Long-press only |
-| App Store | ✅ | ❌ Unsigned IPA via Actions |
-| Header logo | Hermex | **Hermes Plus** |
-| Features | ✅ All | ✅ All (identical) |
-| Server API | ✅ Same | ✅ Same |
+**Because you want the Hermes experience without the friction.**
+
+- **No swipes** — never accidentally archive a chat again. Every action lives in one place: long-press.
+- **No App Store** — download the `.ipa` directly from [Actions](https://github.com/braintimebox/hermex-plus/actions). Sideload with AltStore or SideStore. No Apple ID, no wait.
+- **No compromises** — same server, same features, same API. Hermes Plus is Hermex, minus the things that get in your way.
 
 ## Features
 
