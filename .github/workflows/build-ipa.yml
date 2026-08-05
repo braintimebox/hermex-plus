@@ -1,0 +1,34 @@
+name: Build Hermes Plus
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build for device
+        run: >
+          xcodebuild
+          -project HermesMobile.xcodeproj
+          -scheme HermesMobile
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -derivedDataPath DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          build
+      - name: Locate .app
+        run: |
+          echo "APP_PATH=$(find DerivedData/Build/Products -name '*.app' -path '*/Release-iphoneos/*' -type d | head -1)" >> $GITHUB_ENV
+      - name: Package IPA
+        run: |
+          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r HermesPlus.ipa Payload && rm -rf Payload && ls -lh HermesPlus.ipa
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HermesPlus-unsigned
+          path: HermesPlus.ipa
+          retention-days: 30
