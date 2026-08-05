@@ -26,11 +26,16 @@ Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex), a na
 - **Native.** Real SwiftUI, built for iOS 18+, not a web wrapper.
 - **Sideload-friendly.** Pre-built unsigned IPA available for [AltStore](https://altstore.io) and [SideStore](https://sidestore.io).
 
-## What's different from Hermex
+## ✦ What's different
 
-- **No swipe gestures.** Pin, archive, and delete — only via long-press context menu.
-- **Unsigned IPA.** Every push produces a downloadable `.ipa` via GitHub Actions. Install with AltStore or SideStore.
-- **"Hermes Plus" header.** The app says Hermes Plus. Nothing else changed.
+> **No swipe gestures.**  
+> Pin, archive, delete — only via long-press context menu. No accidental actions.
+>
+> **Unsigned IPA on every push.**  
+> GitHub Actions builds a downloadable `.ipa`. AltStore, SideStore — no App Store, no Mac required.
+>
+> **"Hermes Plus" header.**  
+> The app says Hermes Plus. Everything else is identical to upstream Hermex.
 
 ## Features
 
