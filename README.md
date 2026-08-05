@@ -38,6 +38,18 @@ Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex), a na
 
 **Everything else** — server API, features, settings, onboarding, model selection, profiles, tasks, skills, workspace browser, memory, insights — is identical to upstream Hermex.
 
+## Why Hermes Plus?
+
+| You want… | Hermex (App Store) | Hermes Plus (SideStore) |
+|-----------|-------------------|------------------------|
+| Install without App Store | ❌ | ✅ Download .ipa from Actions |
+| No accidental swipes | ❌ | ✅ Context menu only |
+| Apple-notarised build | ✅ | ❌ Unsigned (SideStore re-signs) |
+| Automatic updates | ✅ App Store | ❌ Manual download |
+| Same server, same features | ✅ | ✅ Identical client |
+
+**Bottom line:** Hermes Plus is for users who sideload and prefer context-menu-only interactions. If you're on the App Store and fine with swipes — stick with the original Hermex.
+
 ---
 
 ## Getting the IPA (no Mac required)
