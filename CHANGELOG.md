@@ -2,16 +2,23 @@
 
 ## 1.0.0 — 2026-08-05
 
-### Added
-- App header now shows "Hermes Plus" (Hermes logo + "Plus" text)
+Forked from [Hermex](https://github.com/uzairansaruzi/hermex) `master`. Three surgical changes applied:
 
-### Changed
-- App display name: "Hermex" → "Hermes Plus"
-- Swipe-to-pin/archive/delete removed (use long-press context menu instead)
+### App name → "Hermes Plus"
+- `HermesMobile.xcodeproj/project.pbxproj`: `APP_DISPLAY_NAME = "Hermes Plus"`
+- `HermesMobile/Features/SessionList/SessionListView.swift`: `HermesHeaderLogo` — original graphic "Hermes" logo + "Plus" text label in `HStack`
+- `HermesMobile/Features/Onboarding/OnboardingWelcomePage.swift`: accessibility label updated
 
-### Fixed
-- Build pipeline: `macos-26` runner required (Xcode 26 beta for `Glass` API)
-- Unsigned IPA: `build` instead of `archive` to avoid extension signing failures
+### Swipe gestures removed
+- `HermesMobile/Features/SessionList/SessionListComponents.swift`: `.swipeActions(edge: .leading)` and `.swipeActions(edge: .trailing)` removed
+- Helper functions `sessionLeadingSwipeActions` / `sessionTrailingSwipeActions` deleted
+- All session actions (pin, archive, delete) remain available via long-press `.contextMenu`
 
-### Forked from
-- [Hermex](https://github.com/uzairansaruzi/hermex) — native iOS client for Hermes Agent
+### Unsigned IPA CI
+- `.github/workflows/build-ipa.yml`: GitHub Actions workflow with `macos-26` runner (Xcode 26 beta for `Glass` API)
+- `xcodebuild build` (not `archive`) to avoid extension signing issues
+- `.app` → Payload → `.ipa` → uploaded as artifact (30-day retention)
+
+### Documentation
+- `README.md`: fork notice, diff table, IPA download instructions
+- `CHANGELOG.md`: this file
