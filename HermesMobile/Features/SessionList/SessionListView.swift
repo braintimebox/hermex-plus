@@ -1271,31 +1271,38 @@ struct HermesHeaderLogo: View {
     private static let aspectRatio = 643.0 / 185.0
 
     var body: some View {
-        ZStack {
-            Image("hermes-fill-mask")
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
+        HStack(alignment: .lastTextBaseline, spacing: 6) {
+            ZStack {
+                Image("hermes-fill-mask")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(selectedColor)
+
+                Image("hermes-shading-overlay")
+                    .resizable()
+                    .scaledToFit()
+                    .blendMode(.multiply)
+
+                Image("hermes-highlight")
+                    .resizable()
+                    .scaledToFit()
+                    .blendMode(.screen)
+
+                Image("hermes-outline-shadow")
+                    .resizable()
+                    .scaledToFit()
+            }
+            .aspectRatio(Self.aspectRatio, contentMode: .fit)
+            .compositingGroup()
+
+            Text("Plus")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(selectedColor)
-
-            Image("hermes-shading-overlay")
-                .resizable()
-                .scaledToFit()
-                .blendMode(.multiply)
-
-            Image("hermes-highlight")
-                .resizable()
-                .scaledToFit()
-                .blendMode(.screen)
-
-            Image("hermes-outline-shadow")
-                .resizable()
-                .scaledToFit()
+                .opacity(0.8)
         }
-        .aspectRatio(Self.aspectRatio, contentMode: .fit)
-        .compositingGroup()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("HERMEX")
+        .accessibilityLabel("Hermes Plus")
     }
 }
 
