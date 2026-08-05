@@ -533,12 +533,7 @@ struct SessionInteractiveRow: View {
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .transition(SessionListMotion.sessionRowTransition(reduceMotion: reduceMotion))
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            sessionLeadingSwipeActions(for: session)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            sessionTrailingSwipeActions(for: session)
-        }
+
         .contextMenu {
             SessionRowContextMenu(
                 session: session,
@@ -555,39 +550,7 @@ struct SessionInteractiveRow: View {
         .sessionsScreenListRow(insets: EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
     }
 
-    @ViewBuilder
-    private func sessionLeadingSwipeActions(for session: SessionSummary) -> some View {
-        if canShowSessionMutationActions(for: session) {
-            Button {
-                actions.togglePinned(session)
-            } label: {
-                Label(session.pinned == true ? "Unpin" : "Pin", systemImage: "pin")
-            }
-            .disabled(viewModel.isMutating(session))
-            .tint(.accentColor)
-        }
-    }
 
-    @ViewBuilder
-    private func sessionTrailingSwipeActions(for session: SessionSummary) -> some View {
-        if canShowSessionMutationActions(for: session) {
-            Button {
-                actions.archive(session)
-            } label: {
-                Label("Archive", systemImage: "archivebox")
-            }
-            .disabled(viewModel.isMutating(session))
-            .tint(.orange)
-
-            Button {
-                actions.delete(session)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .disabled(viewModel.isMutating(session))
-            .tint(.red)
-        }
-    }
 
     private func canShowSessionMutationActions(for session: SessionSummary) -> Bool {
         SessionRowActionPolicy.offersMutationActions(for: session)
