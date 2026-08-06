@@ -35,7 +35,7 @@ enum HealthBackgroundTask {
         task.expirationHandler = {}
 
         let provider = AppleHealthProvider.shared
-        guard provider.isAuthorized else {
+        guard await provider.isAuthorized else {
             task.setTaskCompleted(success: true)
             return
         }

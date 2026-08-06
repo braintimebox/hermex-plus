@@ -58,10 +58,12 @@ struct HermesMobileApp: App {
             } else {
                 ContentView(authManager: authManager)
                     .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
+                    .task { HealthBackgroundTask.register() }
             }
             #else
             ContentView(authManager: authManager)
                 .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
+                .task { HealthBackgroundTask.register() }
             #endif
         }
         .modelContainer(for: [CachedSession.self, CachedMessage.self])

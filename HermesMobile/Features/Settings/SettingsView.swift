@@ -1348,7 +1348,7 @@ struct SettingsView: View {
             appleHealthProvider.lastSyncError = nil
             // Store server URL for background tasks
             UserDefaults.standard.set(server.absoluteString, forKey: "dataChannels.serverURL")
-            // HealthBackgroundTask.schedule()  // TODO: re-enable after BGTask troubleshooting
+            HealthBackgroundTask.schedule()
         } catch {
             appleHealthProvider.lastSyncError = error.localizedDescription
         }
