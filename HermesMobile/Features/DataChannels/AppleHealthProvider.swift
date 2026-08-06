@@ -78,7 +78,7 @@ final class AppleHealthProvider: ObservableObject {
         Metric(identifier: .walkingHeartRateAverage, label: "heart_rate_walking", query: .latest,
                unit: hUnit("count/min")),
         Metric(identifier: .heartRateVariabilitySDNN, label: "hrv_rmssd", query: .latest,
-               unit: hUnit("ms")),
+               unit: HKUnit.secondUnit(with: .milli)),
         Metric(identifier: .heartRateRecoveryOneMinute, label: "heart_rate_recovery_1min", query: .latest,
                unit: hUnit("count/min")),
 
@@ -111,9 +111,9 @@ final class AppleHealthProvider: ObservableObject {
         // Environment / other
         Metric(identifier: .timeInDaylight, label: "time_in_daylight_min", query: .sum, unit: .minute()),
         Metric(identifier: .headphoneAudioExposure, label: "headphone_audio_db", query: .latest,
-               unit: hUnit("dBASPL")),
+               unit: HKUnit.decibelAWeightedSoundPressureLevel()),
         Metric(identifier: .environmentalAudioExposure, label: "env_audio_db", query: .latest,
-               unit: hUnit("dBASPL")),
+               unit: HKUnit.decibelAWeightedSoundPressureLevel()),
         Metric(identifier: .uvExposure, label: "uv_index", query: .latest, unit: .count()),
         Metric(identifier: .appleSleepingWristTemperature, label: "wrist_temperature_c", query: .latest,
                unit: .degreeCelsius()),
