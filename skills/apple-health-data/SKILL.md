@@ -1,23 +1,25 @@
 ---
-name: focus-tracker
+name: apple-health-data
 description: >
-  Health data pipeline for Hermes Agent. Ingest Apple Health data from Hermes Plus
+  Apple Health data pipeline for Hermes Agent. Ingest health data from Hermes Plus
   (JSON via [TRACKER] prefix), auto-assess Focus/Energy score, append to log.md.
-  Also accepts manual MD and A4 tracker photos.
-  Bundled with Hermes Plus — copy this directory to your Hermes Agent's skills/ folder.
+  Bundled with Hermes Plus — copy to ~/.hermes/skills/ for automatic Apple Health sync.
 ---
 
 # Focus Tracker — Health Data Pipeline
 
 ## Quick Setup
 
+> ⚠️ Remove old `focus-tracker` first if present:
+> `rm -rf ~/.hermes/skills/health/focus-tracker`
+
 ```bash
 # 1. Copy this skill to your Hermes Agent
-cp -r skills/focus-tracker ~/.hermes/skills/
+cp -r skills/apple-health-data ~/.hermes/skills/
 
-# 2. Set your vault path (or accept default)
-export HERMES_HEALTH_LOG=~/.hermes/_projects/Obsidian/raw/health/log.md
-export HERMES_HEALTH_RAW=~/.hermes/_projects/Obsidian/raw/health
+# 2. Set your vault path (or accept default ~/.hermes/health/)
+export HERMES_HEALTH_LOG=~/.hermes/health/log.md
+export HERMES_HEALTH_RAW=~/.hermes/health
 
 # 3. That's it. Hermes Plus will auto-sync.
 ```

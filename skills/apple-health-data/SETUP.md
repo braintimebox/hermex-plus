@@ -5,7 +5,7 @@
 ### 1. Copy the skill to your Hermes Agent server
 
 ```bash
-cp -r skills/focus-tracker ~/.hermes/skills/
+cp -r skills/apple-health-data ~/.hermes/skills/
 ```
 
 ### 2. (Optional) Set your vault path

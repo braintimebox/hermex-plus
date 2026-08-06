@@ -41,7 +41,7 @@ Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex), a na
 
 1. Copy the bundled skill to your Hermes Agent server:
    ```bash
-   cp -r skills/focus-tracker ~/.hermes/skills/
+   cp -r skills/apple-health-data ~/.hermes/skills/
    ```
 2. Hermes Plus → Settings → Data Channels → Apple Health [ON] → grant permission.
 3. Auto-sync runs every 1-4 hours. Tap "Sync Now" for immediate sync.
