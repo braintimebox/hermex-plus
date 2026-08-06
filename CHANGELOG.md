@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 — 2026-08-06
+
+### Data Channels — Apple Health
+
+- `HermesMobile/Features/DataChannels/AppleHealthProvider.swift`: HealthKit singleton. 35+ metrics across Activity, Body, Heart, Vitals, Sleep, Nutrition, Environment. `[TRACKER]` prefix triggers focus-tracker skill. Uses `startBackground` for fire-and-forget delivery.
+- `HermesMobile/Features/DataChannels/DataChannelsSettings.swift`: `UserDefaults` keys.
+- `HermesMobile/Resources/HermesMobile.entitlements`: `com.apple.developer.healthkit`.
+- `HermesMobile/Resources/Info.plist`: `NSHealthShareUsageDescription`.
+- `HermesMobile/Features/Settings/SettingsView.swift`: «Data Channels» card: Apple Health toggle + «Sync Now». Persistent session; `startBackground` → agent processes without blocking.
+
 ## 1.0.0 — 2026-08-05
 
 Forked from [Hermex](https://github.com/uzairansaruzi/hermex) `master`. Three surgical changes applied:

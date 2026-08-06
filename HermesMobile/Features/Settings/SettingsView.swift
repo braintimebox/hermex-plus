@@ -92,8 +92,11 @@ struct SettingsView: View {
     @AppStorage(SectionVisibilitySettings.projectsKey) private var showsProjectsSection = true
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsChatFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsChatGitControls = true
+    @AppStorage(DataChannelsSettings.appleHealthEnabledKey) private var isAppleHealthEnabled = false
+    @AppStorage(DataChannelsSettings.dataChannelsSessionIDKey) private var dataChannelsSessionID = ""
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var appleHealthProvider = AppleHealthProvider.shared
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -566,6 +569,46 @@ struct SettingsView: View {
                         isConfirmingClearCache = true
                     }
                     .disabled(isClearingCache)
+                }
+
+                SettingsCard(title: String(localized: "Data Channels")) {
+                    SettingsToggleRow(
+                        title: String(localized: "Apple Health"),
+                        systemImage: "heart.fill",
+                        isOn: $isAppleHealthEnabled
+                    )
+                    .onChange(of: isAppleHealthEnabled) { enabled in
+                        guard enabled else { return }
+                        Task {
+                            do {
+                                try await appleHealthProvider.requestAuthorization()
+                            } catch {
+                                isAppleHealthEnabled = false
+                            }
+                        }
+                    }
+
+                    if isAppleHealthEnabled && appleHealthProvider.isAuthorized {
+                        SettingsDivider()
+
+                        if let lastSync = appleHealthProvider.lastSyncDate {
+                            SettingsFootnote(String(localized: "Last sync: \(lastSync.formatted(date: .abbreviated, time: .shortened))"))
+                        }
+
+                        SettingsButton(
+                            String(localized: "Sync Now"),
+                            isLoading: appleHealthProvider.isSyncing
+                        ) {
+                            Task { @MainActor in
+                                await syncHealthData()
+                            }
+                        }
+                        .disabled(!appleHealthProvider.isAuthorized)
+                    }
+
+                    if let error = appleHealthProvider.lastSyncError {
+                        SettingsFootnote(error)
+                    }
                 }
 
                 SettingsCard(title: String(localized: "Account")) {
@@ -1270,6 +1313,41 @@ struct SettingsView: View {
         @unknown default:
             isResponseCompletionNotificationsEnabled = false
             notificationStatusMessage = String(localized: "Notifications unavailable.")
+        }
+    }
+
+    // MARK: - Data Channels
+
+    private func syncHealthData() async {
+        appleHealthProvider.lastSyncError = nil
+        do {
+            guard let message = try await appleHealthProvider.syncToday() else {
+                appleHealthProvider.lastSyncError = String(localized: "No health data available for today")
+                return
+            }
+
+            let client = APIClient(baseURL: server)
+
+            // Create a persistent Data Channels session (once)
+            if dataChannelsSessionID.isEmpty {
+                let session = try await client.createSession(
+                    workspace: nil, model: nil, modelProvider: nil, profile: nil
+                )
+                guard let sid = session.session?.sessionId else {
+                    throw HealthKitError.unavailable
+                }
+                dataChannelsSessionID = sid
+            }
+
+            // Send health data in background (fire-and-forget — agent processes silently)
+            _ = try await client.startBackground(
+                sessionID: dataChannelsSessionID,
+                prompt: message
+            )
+
+            appleHealthProvider.lastSyncError = nil
+        } catch {
+            appleHealthProvider.lastSyncError = error.localizedDescription
         }
     }
 

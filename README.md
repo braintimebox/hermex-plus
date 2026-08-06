@@ -35,6 +35,7 @@ Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex), a na
 - **No swipes** — never accidentally archive a chat again. Every action lives in one place: long-press.
 - **No App Store** — download the `.ipa` directly from [Actions](https://github.com/braintimebox/hermex-plus/actions). Sideload with AltStore or SideStore. No Apple ID, no wait.
 - **No compromises** — same server, same features, same API. Hermes Plus is Hermex, minus the things that get in your way.
+- **Yes Apple Health** — sync your health data directly from iPhone to your Hermes agent. Steps, sleep, heart rate, HRV, and more sent automatically as Data Channels.
 
 ## Features
 
