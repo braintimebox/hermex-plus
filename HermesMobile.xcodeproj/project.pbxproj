@@ -1513,7 +1513,6 @@
 				1A2B3C4D5E6F7000000000F1 /* CacheStore.swift in Sources */,
 				DC0100000000000000000001 /* AppleHealthProvider.swift in Sources */,
 				DC0100000000000000000002 /* DataChannelsSettings.swift in Sources */,
-				DC0100000000000000000003 /* HealthBackgroundTask.swift in Sources */,
 				1A2B3C4D5E6F7000000000F5 /* SettingsView.swift in Sources */,
 				C012400000000000000004 /* AppIconSettingsSection.swift in Sources */,
 				1A2B3C4D5E6F70000000114 /* DefaultModelPickerView.swift in Sources */,
