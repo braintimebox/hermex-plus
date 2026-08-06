@@ -64,7 +64,7 @@ final class AppleHealthProvider: ObservableObject {
                unit: .gramUnit(with: .kilo)),
         Metric(identifier: .bodyMassIndex, label: "bmi", query: .latest, unit: .count()),
         Metric(identifier: .bodyFatPercentage, label: "body_fat_pct", query: .latest,
-               unit: .decimalPercent()),
+               unit: .percent()),
         Metric(identifier: .leanBodyMass, label: "lean_body_mass_kg", query: .latest,
                unit: .gramUnit(with: .kilo)),
         Metric(identifier: .waistCircumference, label: "waist_cm", query: .latest,
@@ -84,7 +84,7 @@ final class AppleHealthProvider: ObservableObject {
 
         // Vitals
         Metric(identifier: .oxygenSaturation, label: "spo2_pct", query: .latest,
-               unit: .decimalPercent()),
+               unit: .percent()),
         Metric(identifier: .respiratoryRate, label: "respiratory_rate", query: .latest,
                unit: hUnit("count/min")),
         Metric(identifier: .vo2Max, label: "vo2max", query: .latest,

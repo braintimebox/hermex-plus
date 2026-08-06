@@ -1,13 +1,10 @@
 import BackgroundTasks
 import Foundation
-import os
 
 /// Manages BGAppRefreshTask for Data Channels auto-sync.
 /// iOS wakes the app periodically (1-4h intervals), runs sync, schedules next task.
 enum HealthBackgroundTask {
     static let identifier = "com.hermesplus.health-sync"
-
-    private static let log = Logger(subsystem: "com.hermesplus", category: "health-bg-task")
 
     /// Call once at app launch.
     static func register() {
@@ -16,7 +13,6 @@ enum HealthBackgroundTask {
                 await handleRefresh(task: task as! BGAppRefreshTask)
             }
         }
-        log.info("BGTask registered: \(identifier)")
     }
 
     /// Schedule next background sync. Call after each successful sync (foreground or background).
@@ -27,9 +23,8 @@ enum HealthBackgroundTask {
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            log.debug("BGTask scheduled: earliestBeginDate +1h")
         } catch {
-            log.error("BGTask schedule failed: \(error.localizedDescription)")
+            // Silently fail — iOS may refuse scheduling under certain conditions
         }
     }
 
@@ -37,9 +32,7 @@ enum HealthBackgroundTask {
         // Schedule next before work — if we crash, next one still fires
         schedule()
 
-        task.expirationHandler = {
-            log.warning("BGTask expired before completion")
-        }
+        task.expirationHandler = {}
 
         let provider = AppleHealthProvider.shared
         guard provider.isAuthorized else {
@@ -49,17 +42,11 @@ enum HealthBackgroundTask {
 
         do {
             guard let message = try await provider.syncToday() else {
-                log.info("No health data — skipping BG sync")
                 task.setTaskCompleted(success: true)
                 return
             }
 
-            // We need the active server URL. Use the stored session ID as a proxy —
-            // the regular Settings→Sync flow persists a session. For BG, we need
-            // a stored server base URL.
-            // Fallback: read from UserDefaults (set when user enables Data Channels)
             guard let serverURL = storedServerURL() else {
-                log.warning("No stored server URL — skipping BG sync")
                 task.setTaskCompleted(success: false)
                 return
             }
@@ -84,10 +71,8 @@ enum HealthBackgroundTask {
 
             // Fire-and-forget to agent
             _ = try await client.startBackground(sessionID: sid, prompt: message)
-            log.info("BG sync sent: \(provider.lastSyncDate?.description ?? "?")")
             task.setTaskCompleted(success: true)
         } catch {
-            log.error("BG sync failed: \(error.localizedDescription)")
             task.setTaskCompleted(success: false)
         }
     }
