@@ -583,7 +583,8 @@ struct SettingsView: View {
                             do {
                                 try await appleHealthProvider.requestAuthorization()
                             } catch {
-                                isAppleHealthEnabled = false
+                                // Don't silently revert — show the error so user knows why
+                                appleHealthProvider.lastSyncError = error.localizedDescription
                             }
                         }
                     }

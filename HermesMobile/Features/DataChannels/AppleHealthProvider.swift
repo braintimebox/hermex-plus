@@ -278,8 +278,10 @@ enum HealthKitError: LocalizedError {
     case unavailable, notAuthorized
     var errorDescription: String? {
         switch self {
-        case .unavailable:  "HealthKit is not available on this device"
-        case .notAuthorized: "Health data access not authorized. Enable in Settings → Health → Hermex."
+        case .unavailable:
+            "HealthKit is not available on this device, or the app is not properly signed.\n\nHealth requires a paid Apple Developer account. Free accounts cannot access Health data. If you installed via SideStore with a free Apple ID, the Health entitlement is removed during re-signing."
+        case .notAuthorized:
+            "Health data access not authorized. Open Settings → Health → Data Access & Devices → Hermes Plus to enable."
         }
     }
 }
