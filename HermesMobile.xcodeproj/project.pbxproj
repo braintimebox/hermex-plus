@@ -313,6 +313,9 @@
 		C5A0D8F5502048B6B9258B01 /* InsightsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A0D8F5502048B6B9258B00 /* InsightsViewModelTests.swift */; };
 		105050000000000000000001 /* ComposerModelPickerSectionExpansionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */; };
 		105050000000000000000003 /* ComposerModelPickerSectionExpansionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */; };
+		DC0100000000000000000001 /* AppleHealthProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0100000000000000000011 /* AppleHealthProvider.swift */; };
+		DC0100000000000000000002 /* DataChannelsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0100000000000000000012 /* DataChannelsSettings.swift */; };
+		DC0100000000000000000003 /* HealthBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0100000000000000000013 /* HealthBackgroundTask.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -657,6 +660,9 @@
 		FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandAutocompleteView.swift; sourceTree = "<group>"; };
 		105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionState.swift; sourceTree = "<group>"; };
 		105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionStateTests.swift; sourceTree = "<group>"; };
+		DC0100000000000000000011 /* AppleHealthProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthProvider.swift; sourceTree = "<group>"; };
+		DC0100000000000000000012 /* DataChannelsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataChannelsSettings.swift; sourceTree = "<group>"; };
+		DC0100000000000000000013 /* HealthBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBackgroundTask.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -929,6 +935,7 @@
 				1A2B3C4D5E6F7000000000C6 /* Chat */,
 				1A2B3C4D5E6F7000000000C7 /* Workspace */,
 				1A2B3C4D5E6F7000000000F7 /* Settings */,
+				DC0100000000000000000100 /* DataChannels */,
 				B5A100000000000000000050 /* Share */,
 				3F91D2A54B9A4F66A2C01020 /* Tasks */,
 				1A2B3C4D5E6F70000000216 /* Skills */,
@@ -1113,6 +1120,16 @@
 				26AB000000000000000000F1 /* ProvidersViewModel.swift */,
 			);
 			path = Settings;
+			sourceTree = "<group>";
+		};
+		DC0100000000000000000100 /* DataChannels */ = {
+			isa = PBXGroup;
+			children = (
+				DC0100000000000000000011 /* AppleHealthProvider.swift */,
+				DC0100000000000000000012 /* DataChannelsSettings.swift */,
+				DC0100000000000000000013 /* HealthBackgroundTask.swift */,
+			);
+			path = DataChannels;
 			sourceTree = "<group>";
 		};
 		1A2B3C4D5E6F7000000000FA /* Config */ = {
@@ -1494,6 +1511,9 @@
 				1A2B3C4D5E6F7000000000EC /* CachedSession.swift in Sources */,
 				1A2B3C4D5E6F7000000000ED /* CachedMessage.swift in Sources */,
 				1A2B3C4D5E6F7000000000F1 /* CacheStore.swift in Sources */,
+				DC0100000000000000000001 /* AppleHealthProvider.swift in Sources */,
+				DC0100000000000000000002 /* DataChannelsSettings.swift in Sources */,
+				DC0100000000000000000003 /* HealthBackgroundTask.swift in Sources */,
 				1A2B3C4D5E6F7000000000F5 /* SettingsView.swift in Sources */,
 				C012400000000000000004 /* AppIconSettingsSection.swift in Sources */,
 				1A2B3C4D5E6F70000000114 /* DefaultModelPickerView.swift in Sources */,
