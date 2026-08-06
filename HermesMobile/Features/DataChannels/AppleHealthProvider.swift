@@ -120,7 +120,7 @@ final class AppleHealthProvider: ObservableObject {
     ]
 
     private static var readTypes: Set<HKObjectType> {
-        var types = Set(allMetrics.map { HKQuantityType($0.identifier) })
+        var types: Set<HKObjectType> = Set(allMetrics.map { HKQuantityType($0.identifier) })
         types.insert(HKCategoryType(.sleepAnalysis))
         return types
     }
