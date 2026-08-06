@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import BackgroundTasks
 
 struct HermexSceneActions {
     let canCreateNewChat: Bool
@@ -45,10 +44,6 @@ struct HermexCommands: Commands {
 struct HermesMobileApp: App {
     @State private var authManager = AuthManager()
     @AppStorage(AppTheme.storageKey) private var appThemeRawValue = AppTheme.system.rawValue
-
-    init() {
-        HealthBackgroundTask.register()
-    }
 
     var body: some Scene {
         WindowGroup {
