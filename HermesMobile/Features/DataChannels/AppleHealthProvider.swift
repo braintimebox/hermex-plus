@@ -1,11 +1,11 @@
 import Foundation
 import HealthKit
 
-// MARK: - Metric descriptor (declarative query config)
+// MARK: - Metric descriptor
 
 private struct Metric {
     let identifier: HKQuantityTypeIdentifier
-    let label: String          // ключ в markdown
+    let label: String          // ключ в JSON
     let query: QueryType
     let unit: HKUnit
 }
@@ -29,12 +29,12 @@ final class AppleHealthProvider: ObservableObject {
     @Published var lastSyncError: String?
 
     // ── Full metric catalogue ──────────────────────────────────────────
-    // Всё, что Apple Health может отдать. Группировка: Activity → Body → Heart → Vitals → Sleep → Nutrition → Environment.
+    // 40+ метрик. Добавлено: walking-метрики (скорость, шаг, асимметрия, лестницы).
 
     private static let allMetrics: [Metric] = [
         // Activity (daily cumulative)
         Metric(identifier: .stepCount, label: "steps", query: .sum, unit: .count()),
-        Metric(identifier: .activeEnergyBurned, label: "active_energy", query: .sum, unit: .kilocalorie()),
+        Metric(identifier: .activeEnergyBurned, label: "active_calories", query: .sum, unit: .kilocalorie()),
         Metric(identifier: .appleExerciseTime, label: "exercise_minutes", query: .sum, unit: .minute()),
         Metric(identifier: .appleStandTime, label: "stand_minutes", query: .sum, unit: .minute()),
         Metric(identifier: .flightsClimbed, label: "flights_climbed", query: .sum, unit: .count()),
@@ -44,6 +44,20 @@ final class AppleHealthProvider: ObservableObject {
                unit: HKUnit.meterUnit(with: .kilo)),
         Metric(identifier: .distanceSwimming, label: "distance_swimming_m", query: .sum, unit: .meter()),
         Metric(identifier: .swimmingStrokeCount, label: "swim_strokes", query: .sum, unit: .count()),
+
+        // Walking metrics (AW7 — valuable trend data)
+        Metric(identifier: .walkingSpeed, label: "walking_speed_ms", query: .latest,
+               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
+        Metric(identifier: .walkingStepLength, label: "walking_step_length_cm", query: .latest,
+               unit: HKUnit.meterUnit(with: .centi)),
+        Metric(identifier: .walkingAsymmetryPercentage, label: "walking_asymmetry_pct", query: .latest,
+               unit: .percent()),
+        Metric(identifier: .walkingDoubleSupportPercentage, label: "walking_double_support_pct", query: .latest,
+               unit: .percent()),
+        Metric(identifier: .stairAscentSpeed, label: "stair_ascent_speed_ms", query: .latest,
+               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
+        Metric(identifier: .stairDescentSpeed, label: "stair_descent_speed_ms", query: .latest,
+               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
 
         // Body
         Metric(identifier: .bodyMass, label: "weight_kg", query: .latest,
@@ -70,7 +84,7 @@ final class AppleHealthProvider: ObservableObject {
 
         // Vitals
         Metric(identifier: .oxygenSaturation, label: "spo2_pct", query: .latest,
-               unit: hDecimalPercent()),
+               unit: .decimalPercent()),
         Metric(identifier: .respiratoryRate, label: "respiratory_rate", query: .latest,
                unit: hUnit("count/min")),
         Metric(identifier: .vo2Max, label: "vo2max", query: .latest,
@@ -136,8 +150,10 @@ final class AppleHealthProvider: ObservableObject {
         isAuthorized = status == .unnecessary
     }
 
-    // MARK: - Sync
+    // MARK: - Sync (JSON output for focus-tracker scoring)
 
+    /// Возвращает JSON-строку в формате focus-tracker: {"date":..., "source":..., "metrics":{...}}.
+    /// Сообщение начинается с `[TRACKER]` — триггер для агента передать в convert.py.
     func syncToday() async throws -> String? {
         guard isAuthorized else { throw HealthKitError.notAuthorized }
         isSyncing = true
@@ -147,9 +163,7 @@ final class AppleHealthProvider: ObservableObject {
         let startOfDay = Calendar.current.startOfDay(for: now)
         let pred = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictEndDate)
 
-        var lines: [String] = ["[TRACKER]",
-                               "## \(Self.dateStr(now))",
-                               "- source: Apple Health (Hermes Plus)"]
+        var metrics: [String: Any] = [:]
 
         // Query all quantity metrics
         for metric in Self.allMetrics {
@@ -159,17 +173,33 @@ final class AppleHealthProvider: ObservableObject {
             case .latest: value = try await latestQuantity(id: metric.identifier, unit: metric.unit, predicate: pred)
             }
             guard let v = value else { continue }
-            lines.append("- \(metric.label): \(Self.fmt(v))")
+            metrics[metric.label] = v.truncatingRemainder(dividingBy: 1) == 0
+                ? Int(v) : roundTo(v, 1)
         }
 
-        // Sleep (category)
+        // Sleep
         if let sh = try await sleepHours(predicate: pred) {
-            lines.append("- sleep_hours: \(Self.fmt(sh))")
+            metrics["sleep_hours"] = roundTo(sh, 1)
+        }
+
+        guard !metrics.isEmpty else { return nil }
+
+        let payload: [String: Any] = [
+            "date": Self.dateStr(now),
+            "source": "Apple Health (Hermes Plus)",
+            "metrics": metrics,
+        ]
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: payload, options: .sortedKeys),
+              let jsonStr = String(data: jsonData, encoding: .utf8) else {
+            throw HealthKitError.unavailable
         }
 
         lastSyncDate = now
         lastSyncError = nil
-        return lines.joined(separator: "\n")
+
+        // [TRACKER] prefix — trigger for agent → convert.py
+        return "[TRACKER]\n\(jsonStr)"
     }
 
     // MARK: - Query primitives
@@ -234,13 +264,12 @@ final class AppleHealthProvider: ObservableObject {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
     }()
     static func dateStr(_ d: Date) -> String { dateFmt.string(from: d) }
-    static func fmt(_ v: Double) -> String { v.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(v))" : String(format: "%.1f", v) }
+    private func roundTo(_ v: Double, _ places: Int) -> Double {
+        let m = pow(10.0, Double(places))
+        return (v * m).rounded() / m
+    }
 
     private static func hUnit(_ s: String) -> HKUnit { HKUnit(from: s) }
-    private static func hDecimalPercent() -> HKUnit {
-        // decimal fraction 0.0–1.0. We store as %, so query as raw decimal
-        HKUnit(from: "")
-    }
 }
 
 // MARK: - Errors

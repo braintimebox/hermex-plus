@@ -7,8 +7,11 @@
 - `HermesMobile/Features/DataChannels/AppleHealthProvider.swift`: HealthKit singleton. 35+ metrics across Activity, Body, Heart, Vitals, Sleep, Nutrition, Environment. `[TRACKER]` prefix triggers focus-tracker skill. Uses `startBackground` for fire-and-forget delivery.
 - `HermesMobile/Features/DataChannels/DataChannelsSettings.swift`: `UserDefaults` keys.
 - `HermesMobile/Resources/HermesMobile.entitlements`: `com.apple.developer.healthkit`.
-- `HermesMobile/Resources/Info.plist`: `NSHealthShareUsageDescription`.
-- `HermesMobile/Features/Settings/SettingsView.swift`: «Data Channels» card: Apple Health toggle + «Sync Now». Persistent session; `startBackground` → agent processes without blocking.
+- `HermesMobile/Resources/Info.plist`: `NSHealthShareUsageDescription` + `fetch` background mode for auto-sync.
+- `HermesMobile/Features/DataChannels/HealthBackgroundTask.swift`: BGTaskScheduler auto-sync every 1-4h. Works with any Hermes server that has `focus-tracker` skill.
+- `HermesMobile/HermesMobileApp.swift`: register BGTask at app launch.
+- `HermesMobile/Features/Settings/SettingsView.swift`: «Data Channels» card: Apple Health toggle + «Sync Now». Persistent session + server URL storage for background tasks.
+- `README.md`: setup instructions for any fork user.
 
 ## 1.0.0 — 2026-08-05
 
