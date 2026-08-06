@@ -47,7 +47,7 @@ final class AppleHealthProvider: ObservableObject {
 
         // Walking metrics (AW7 — valuable trend data)
         Metric(identifier: .walkingSpeed, label: "walking_speed_ms", query: .latest,
-               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
+               unit: HKUnit.meter().unitDivided(by: .second())),
         Metric(identifier: .walkingStepLength, label: "walking_step_length_cm", query: .latest,
                unit: HKUnit.meterUnit(with: .centi)),
         Metric(identifier: .walkingAsymmetryPercentage, label: "walking_asymmetry_pct", query: .latest,
@@ -55,9 +55,9 @@ final class AppleHealthProvider: ObservableObject {
         Metric(identifier: .walkingDoubleSupportPercentage, label: "walking_double_support_pct", query: .latest,
                unit: .percent()),
         Metric(identifier: .stairAscentSpeed, label: "stair_ascent_speed_ms", query: .latest,
-               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
+               unit: HKUnit.meter().unitDivided(by: .second())),
         Metric(identifier: .stairDescentSpeed, label: "stair_descent_speed_ms", query: .latest,
-               unit: HKUnit.meterUnit(with: .none).unitDivided(by: .second())),
+               unit: HKUnit.meter().unitDivided(by: .second())),
 
         // Body
         Metric(identifier: .bodyMass, label: "weight_kg", query: .latest,
