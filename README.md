@@ -11,7 +11,6 @@ Your server. Your iPhone. No middleman.
 [![iOS 18+](https://img.shields.io/badge/iOS-18%2B-000000?logo=apple&logoColor=white)]()
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
-[![Build](https://github.com/braintimebox/hermex-plus/actions/workflows/build-ipa.yml/badge.svg)](https://github.com/braintimebox/hermex-plus/actions)
 
 </div>
 
@@ -21,7 +20,6 @@ Upstream Hermex is excellent. Hermes Plus exists to fix the friction that matter
 
 - **Faster streaming** — incremental transcript updates eliminate UI hangs on long chats
 - **No accidental swipes** — pin, archive, and delete via long-press menu only
-- **Builds on every push** — CI runs automatically, IPA available in artifacts
 - **Tagged releases** — stable builds are versioned and reproducible
 
 ## What's unchanged
