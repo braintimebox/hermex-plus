@@ -4,50 +4,41 @@
 
 # Hermes Plus
 
-**iOS client for [Hermes Agent](https://github.com/nesquena/hermes-webui) — a fork of [Hermex](https://github.com/uzairansaruzi/hermex).**
+**Native iPhone client for self-hosted Hermes Agent — a fork of [Hermex](https://github.com/uzairansaruzi/hermex).**
 
 Your server. Your iPhone. No middleman.
 
 [![iOS 18+](https://img.shields.io/badge/iOS-18%2B-000000?logo=apple&logoColor=white)]()
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
+[![Build](https://github.com/braintimebox/hermex-plus/actions/workflows/build-ipa.yml/badge.svg)](https://github.com/braintimebox/hermex-plus/actions)
 
 </div>
 
-## What's different from Hermex
+## Why Hermes Plus
 
-- **Header shows "Hermes Plus"** — logo + "Plus" text
-- **No swipe gestures** — pin, archive, and delete via long-press context menu only (no accidental swipe actions)
-- **Unsigned IPA builds** — built via GitHub Actions (`macos-26` runner, Xcode 26 beta), install via AltStore/SideStore
+Upstream Hermex is excellent. Hermes Plus exists to fix the friction that matters:
 
-Everything else is identical to upstream Hermex: same server API, same features, same codebase.
+- **Faster streaming** — incremental transcript updates eliminate UI hangs on long chats
+- **No accidental swipes** — pin, archive, and delete via long-press menu only
+- **Builds on every push** — CI runs automatically, IPA available in artifacts
+- **Tagged releases** — stable builds are versioned and reproducible
 
-## Getting the IPA
+## What's unchanged
 
-1. Go to [Actions](https://github.com/braintimebox/hermex-plus/actions)
-2. Click the latest successful **Build Hermes Plus** run
-3. Download `HermesPlus-unsigned.zip` from Artifacts
-4. Extract → install `.ipa` via AltStore or SideStore
+Everything else is upstream Hermex: same API, same features, same UI. Pull upstream changes, apply our three diffs, rebuild. Clean and minimal.
 
-## Building from source
+## Install
 
-Requires Xcode 26+ (iOS 18 SDK). The CI uses `macos-26` runner.
-
-```zsh
-xcodebuild -project HermesMobile.xcodeproj -scheme HermesMobile -configuration Release -destination 'generic/platform=iOS' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO build
-```
-
-For unsigned IPA (no Mac needed):
-
-```zsh
-APP=$(find DerivedData -name "*.app" -path "*/Release-iphoneos/*" -type d | head -1)
-mkdir Payload && cp -R "$APP" Payload/ && zip -r HermesPlus.ipa Payload
-```
+1. Download the latest IPA from [Actions](https://github.com/braintimebox/hermex-plus/actions)
+2. Install via SideStore / AltStore / TrollStore
+3. Connect to your Hermes server — done
 
 ## Credits
 
-Hermes Plus is a fork of [Hermex](https://github.com/uzairansaruzi/hermex) by [@uzairansar](https://x.com/uzairansar). All credit for the original app goes to Uzair. Hermes Plus adds minor UX tweaks and a no-Mac build pipeline.
+- [Hermex](https://github.com/uzairansaruzi/hermex) by Uzair Ansar — the original app
+- [Hermes Agent](https://github.com/nesquena/hermes-webui) — the server
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Original Hermex is also MIT-licensed.
+MIT — same as upstream.
