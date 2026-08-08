@@ -200,6 +200,11 @@ enum ActiveStreamRecoveryState: Equatable {
 final class ChatViewModel {
     private static let messagePageLimit = 50
 
+    /// Previous snapshot of `messages` used by incremental transcript update to
+    /// skip full recomputation when only a single message's content was mutated
+    /// during streaming.
+    private var previousMessages: [ChatMessage] = []
+
     private(set) var messages: [ChatMessage] = [] {
         didSet { recomputeDisplayedTranscriptMessages() }
     }
@@ -272,11 +277,35 @@ final class ChatViewModel {
     }
 
     private func recomputeDisplayedTranscriptMessages() {
-        displayedTranscriptMessages = Self.transcriptMessages(
-            from: messages,
-            messageOffset: messagesOffset
-        )
-        recomputeCompressionReferenceCard()
+        // Incremental path: when only message content changed (same count, same IDs)
+        // during streaming, update just the affected slot — O(1) instead of O(n).
+        let prev = previousMessages
+        if messages.count == prev.count,
+           messages.last?.messageId == prev.last?.messageId,
+           zip(messages, prev).allSatisfy({ $0.messageId == $1.messageId }),
+           let changedIndex = zip(messages, prev).firstIndex(where: { $0.content != $1.content })
+        {
+            // Only content mutated; update the single slot without full recompute.
+            if changedIndex < displayedTranscriptMessages.count,
+               displayedTranscriptMessages[changedIndex].message.messageId == messages[changedIndex].messageId
+            {
+                let slot = displayedTranscriptMessages[changedIndex]
+                displayedTranscriptMessages[changedIndex] = TranscriptMessage(
+                    loadedIndex: slot.loadedIndex,
+                    renderID: slot.renderID,
+                    anchorID: slot.anchorID,
+                    message: messages[changedIndex]
+                )
+            } else {
+                // Transcript slot mismatch — fall through to full recompute.
+                displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
+            }
+        } else {
+            // Structural change (insert/delete/reorder) — full recompute.
+            displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
+            recomputeCompressionReferenceCard()
+        }
+        previousMessages = messages
     }
     /// Synthesized "Context compaction · Reference only" card resolved from the
     /// session's `compression_anchor_*` metadata; nil when the session has no

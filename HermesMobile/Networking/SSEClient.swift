@@ -226,65 +226,71 @@ struct SSEEventDecoder {
         category: "SSEEventDecoder"
     )
 
-    static func decode(eventType: String, data: String) -> SSEEvent {
-        let eventData = Data(data.utf8)
+    /// Reused across all SSE events — safe because all decode calls are
+    /// serialized through @MainActor via Task { @MainActor in … }.
+    nonisolated(unsafe) private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
+        return decoder
+    }()
+
+    static func decode(eventType: String, data: String) -> SSEEvent {
+        let eventData = data.data(using: .utf8) ?? Data()
 
         switch eventType {
         case "token":
-            let payload = decodePayload(TokenPayload.self, eventType: eventType, from: eventData, decoder: decoder)
+            let payload = decodePayload(TokenPayload.self, eventType: eventType, from: eventData)
             return .token(payload?.text ?? "")
         case "interim_assistant":
             let payload = decodePayload(
                 InterimAssistantStreamEvent.self,
                 eventType: eventType,
                 from: eventData,
-                decoder: decoder
+                
             )
             return .interimAssistant(payload ?? InterimAssistantStreamEvent())
         case "reasoning":
-            let payload = decodePayload(ReasoningPayload.self, eventType: eventType, from: eventData, decoder: decoder)
+            let payload = decodePayload(ReasoningPayload.self, eventType: eventType, from: eventData)
             return .reasoning(payload?.text ?? "")
         case "tool":
-            let payload = decodePayload(ToolStreamEvent.self, eventType: eventType, from: eventData, decoder: decoder)
+            let payload = decodePayload(ToolStreamEvent.self, eventType: eventType, from: eventData)
             return .toolStarted(payload ?? ToolStreamEvent())
         case "tool_complete":
-            let payload = decodePayload(ToolStreamEvent.self, eventType: eventType, from: eventData, decoder: decoder)
+            let payload = decodePayload(ToolStreamEvent.self, eventType: eventType, from: eventData)
             return .toolCompleted(payload ?? ToolStreamEvent())
         case "title":
-            let payload = decodePayload(TitleStreamEvent.self, eventType: eventType, from: eventData, decoder: decoder)
+            let payload = decodePayload(TitleStreamEvent.self, eventType: eventType, from: eventData)
             return .title(payload ?? TitleStreamEvent())
         case "metering":
             let payload = decodePayload(
                 MeteringStreamEvent.self,
                 eventType: eventType,
                 from: eventData,
-                decoder: decoder
+                
             )
             return .metering(payload ?? MeteringStreamEvent())
         case "done":
-            guard let payload = decodePayload(DonePayload.self, eventType: eventType, from: eventData, decoder: decoder) else {
+            guard let payload = decodePayload(DonePayload.self, eventType: eventType, from: eventData) else {
                 return .transportError("The stream returned a malformed completion event.")
             }
             return .done(payload.event)
         case "initial":
             logInvalidJSONIfNeeded(eventType: eventType, payloadName: "pending stream payload", data: eventData)
             if ClarificationPendingResponse.containsClarificationMarkers(in: eventData) {
-                return .clarificationPending(ClarificationPendingResponse.streamPayload(from: eventData, decoder: decoder))
+                return .clarificationPending(ClarificationPendingResponse.streamPayload(from: eventData))
             }
-            return .approvalPending(ApprovalPendingResponse.streamPayload(from: eventData, decoder: decoder))
+            return .approvalPending(ApprovalPendingResponse.streamPayload(from: eventData))
         case "approval":
             logInvalidJSONIfNeeded(eventType: eventType, payloadName: "approval stream payload", data: eventData)
-            return .approvalPending(ApprovalPendingResponse.streamPayload(from: eventData, decoder: decoder))
+            return .approvalPending(ApprovalPendingResponse.streamPayload(from: eventData))
         case "clarify":
             logInvalidJSONIfNeeded(eventType: eventType, payloadName: "clarification stream payload", data: eventData)
-            return .clarificationPending(ClarificationPendingResponse.streamPayload(from: eventData, decoder: decoder))
+            return .clarificationPending(ClarificationPendingResponse.streamPayload(from: eventData))
         case "pending_steer_leftover":
             let payload = decodePayload(
                 PendingSteerLeftoverPayload.self,
                 eventType: eventType,
                 from: eventData,
-                decoder: decoder
+                
             )
             return .pendingSteerLeftover(payload?.text ?? "")
         case "stream_end":
@@ -298,7 +304,7 @@ struct SSEEventDecoder {
             // details, …}; decoding both `error` and `message` covers either shape.
             // Mapping it onto `.error` reuses the existing terminal error path
             // (surface the message, finish the stream) unchanged.
-            guard let payload = decodePayload(ErrorPayload.self, eventType: eventType, from: eventData, decoder: decoder) else {
+            guard let payload = decodePayload(ErrorPayload.self, eventType: eventType, from: eventData) else {
                 return .error(String(localized: "The stream returned a malformed error event."))
             }
             return .error(payload.error ?? payload.message ?? String(localized: "The stream returned an error."))
@@ -311,11 +317,10 @@ struct SSEEventDecoder {
     private static func decodePayload<Payload: Decodable>(
         _ type: Payload.Type,
         eventType: String,
-        from data: Data,
-        decoder: JSONDecoder
+        from data: Data
     ) -> Payload? {
         do {
-            return try decoder.decode(type, from: data)
+            return try Self.decoder.decode(type, from: data)
         } catch {
             logDecodeFailure(eventType: eventType, payloadName: String(describing: type), error: error, data: data)
             return nil
