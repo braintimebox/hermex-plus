@@ -280,11 +280,18 @@ final class ChatViewModel {
         // Incremental path: when only message content changed (same count, same IDs)
         // during streaming, update just the affected slot — O(1) instead of O(n).
         let prev = previousMessages
-        if messages.count == prev.count,
-           messages.last?.messageId == prev.last?.messageId,
-           zip(messages, prev).allSatisfy({ $0.messageId == $1.messageId }),
-           let changedIndex = zip(messages, prev).firstIndex(where: { $0.content != $1.content })
-        {
+        let sameCount = messages.count == prev.count
+        let sameLastID = messages.last?.messageId == prev.last?.messageId
+        let allSameIDs = sameCount && zip(messages, prev).allSatisfy({ $0.messageId == $1.messageId })
+        var changedIndex: Int?
+        if allSameIDs {
+            for i in messages.indices where messages[i].content != prev[i].content {
+                changedIndex = i
+                break
+            }
+        }
+
+        if sameCount, sameLastID, allSameIDs, let changedIndex {
             // Only content mutated; update the single slot without full recompute.
             if changedIndex < displayedTranscriptMessages.count,
                displayedTranscriptMessages[changedIndex].message.messageId == messages[changedIndex].messageId

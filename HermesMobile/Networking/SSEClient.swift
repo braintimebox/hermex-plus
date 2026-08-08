@@ -228,7 +228,7 @@ struct SSEEventDecoder {
 
     /// Reused across all SSE events — safe because all decode calls are
     /// serialized through @MainActor via Task { @MainActor in … }.
-    nonisolated(unsafe) private static let decoder: JSONDecoder = {
+    private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         return decoder
     }()
