@@ -356,15 +356,7 @@ struct SessionListView: View {
 
     @ViewBuilder
     private var savedMessagesDestination: some View {
-        SavedMessagesView { sessionId, messageId in
-            let summary = SessionSummary(
-                id: sessionId,
-                sessionId: sessionId,
-                title: "Saved",
-                serverURLString: server.urlString
-            )
-            selectSession(summary)
-        }
+        SavedMessagesView { _, _ in }
     }
 
     @ViewBuilder
