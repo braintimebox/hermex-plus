@@ -308,7 +308,6 @@ struct ChatView: View {
     @State private var forwardSessions: [SessionSummary] = []
     @State private var isLoadingForwardSessions = false
     @State private var showingSchedulePicker = false
-    @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var showProfileNewSessionConfirmation = false
     @State private var goalDraft = ""
     @State private var showsGoalSheet = false
@@ -737,39 +736,14 @@ struct ChatView: View {
                 )
             }
             .sheet(isPresented: $showingSchedulePicker) {
-                NavigationStack {
-                    VStack(spacing: 20) {
-                        DatePicker(
-                            "Send at",
-                            selection: $scheduledDate,
-                            in: Date()...,
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
-                        .datePickerStyle(.wheel)
-                        .labelsHidden()
-                        .padding()
-
-                        Text(draftMessage)
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .lineLimit(3)
-                            .padding(.horizontal)
-                    }
-                    .navigationTitle("Schedule Message")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { showingSchedulePicker = false }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Schedule") {
-                                saveScheduledMessage()
-                                showingSchedulePicker = false
-                            }
-                        }
-                    }
-                }
-                .presentationDetents([.medium])
+                ScheduleMessageSheet(
+                    draftMessage: draftMessage,
+                    onSchedule: { date in
+                        saveScheduledMessage(at: date)
+                        showingSchedulePicker = false
+                    },
+                    onCancel: { showingSchedulePicker = false }
+                )
             }
             .alert(
                 "Discard Later Messages?",
@@ -2262,12 +2236,14 @@ struct ChatView: View {
         modelContext.insert(saved)
     }
 
-    private func saveScheduledMessage() {
+    private func saveScheduledMessage(at date: Date) {
         guard !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let scheduled = PendingScheduledMessage(
+            scheduleKey: UUID().uuidString,
             sessionId: "",
             draftText: draftMessage,
-            scheduledAt: scheduledDate
+            scheduledAt: date,
+            serverURLString: ""
         )
         modelContext.insert(scheduled)
         draftMessage = ""
