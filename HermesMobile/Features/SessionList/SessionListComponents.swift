@@ -80,6 +80,7 @@ struct SidebarSectionVisibility: Equatable {
     var insights: Bool
     var activeProfile: Bool
     var projects: Bool
+    var saved: Bool
 
     /// Show every row, primarily for previews and tests.
     static let showAll = SidebarSectionVisibility(
@@ -89,7 +90,8 @@ struct SidebarSectionVisibility: Equatable {
         memory: true,
         insights: true,
         activeProfile: true,
-        projects: true
+        projects: true,
+        saved: true
     )
 
     /// The five plain links share one List row, so that row is dropped entirely
@@ -209,7 +211,8 @@ struct SessionSidebarUtilityRows: View {
                 }
             }
 
-            HapticButton(action: { openDestination(.saved) }) {
+            if sectionVisibility.saved {
+                HapticButton(action: { openDestination(.saved) }) {
                 HStack(spacing: 18) {
                     Image(systemName: "bookmark.fill")
                         .font(.body)
@@ -229,6 +232,7 @@ struct SessionSidebarUtilityRows: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Saved")
+            }
         }
         .padding(.horizontal, 24)
     }

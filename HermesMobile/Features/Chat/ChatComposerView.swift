@@ -115,6 +115,7 @@ struct MessageComposerView: View {
     let onSendVoiceNote: (Data, String) -> Void
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
+    let onSchedule: () -> Void
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -368,6 +369,15 @@ struct MessageComposerView: View {
                         .buttonStyle(.chatTactile(.icon))
                         .disabled(isActionButtonDisabled)
                         .accessibilityLabel(showsStopButton ? "Stop response" : "Send")
+                        .contextMenu {
+                            if !showsStopButton && !isActionButtonDisabled {
+                                Button {
+                                    onSchedule()
+                                } label: {
+                                    Label("Schedule Message", systemImage: "calendar.badge.clock")
+                                }
+                            }
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 2)

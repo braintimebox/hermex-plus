@@ -55,6 +55,7 @@ struct SessionListView: View {
     @AppStorage(SectionVisibilitySettings.insightsKey) private var showsInsightsSection = true
     @AppStorage(SectionVisibilitySettings.activeProfileKey) private var showsActiveProfileSection = true
     @AppStorage(SectionVisibilitySettings.projectsKey) private var showsProjectsSection = true
+    @AppStorage("sidebar_shows_saved_section") private var showsSavedSection = true
     // Per-server key (#19): the CLI toggle mirrors the active server's
     // `show_cli_sessions`, so its cached value must not leak across servers.
     // Configured in `init`, where the server URL is known.
@@ -709,7 +710,8 @@ struct SessionListView: View {
             memory: showsMemorySection,
             insights: showsInsightsSection,
             activeProfile: showsActiveProfileSection,
-            projects: showsProjectsSection
+            projects: showsProjectsSection,
+            saved: showsSavedSection
         )
     }
 
