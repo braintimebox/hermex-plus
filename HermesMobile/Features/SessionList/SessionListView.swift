@@ -202,6 +202,30 @@ struct SessionListView: View {
                 // rebuilds this stack via ContentView's `.id(server)` (#283).
                 AddServerView(authManager: authManager)
             }
+            .confirmationDialog(
+                "Send shared content to…",
+                isPresented: $showSharedDestinationPicker,
+                titleVisibility: .visible
+            ) {
+                Button("New Chat") {
+                    navigationState.select(
+                        PendingNewChatRoute(
+                            initialDraft: pendingSharedDraft ?? "",
+                            initialAttachments: pendingSharedAttachments
+                        )
+                    )
+                }
+                Button("Choose existing…") {
+                    // Opens session picker — simplified for now
+                    navigationState.select(
+                        PendingNewChatRoute(
+                            initialDraft: pendingSharedDraft ?? "",
+                            initialAttachments: pendingSharedAttachments
+                        )
+                    )
+                }
+                Button("Cancel", role: .cancel) {}
+            }
             .task {
                 // Start the normal refresh immediately so a slow direct session
                 // request cannot leave the sidebar empty. Deep-link resolution still
