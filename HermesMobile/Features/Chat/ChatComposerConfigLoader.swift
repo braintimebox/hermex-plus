@@ -60,26 +60,27 @@ struct ChatComposerConfigLoadResult: Sendable {
 
 struct ChatComposerConfigLoader {
     private let client: APIClient
-    private static var memoryCache: (result: ChatComposerConfigLoadResult, timestamp: Date) = (
-        ChatComposerConfigLoadResult(state: ChatComposerConfigState(), configurationError: nil),
-        .distantPast
-    )
-    private static let cacheTTL: TimeInterval = 300 // 5 minutes
+    /// In-memory cache survives background/foreground transitions (iOS keeps the process alive).
+    /// TTL = 24 hours because models, profiles, and workspaces rarely change.
+    private static var memoryCache: (state: ChatComposerConfigState, timestamp: Date)?
+    private static let cacheTTL: TimeInterval = 86_400
 
     init(client: APIClient) {
         self.client = client
     }
 
     func loadConfiguration(from initialState: ChatComposerConfigState) async -> ChatComposerConfigLoadResult {
-        // Return cached result if still fresh (eliminates 5 network calls on repeat visits)
-        if Self.memoryCache.timestamp.timeIntervalSinceNow > -Self.cacheTTL,
-           Self.memoryCache.result.configurationError == nil {
-            var cachedState = Self.memoryCache.result.state
-            cachedState.currentProfile = initialState.currentProfile
-            cachedState.currentWorkspace = initialState.currentWorkspace
-            cachedState.currentModel = initialState.currentModel
-            cachedState.currentModelProvider = initialState.currentModelProvider
-            return ChatComposerConfigLoadResult(state: cachedState, configurationError: nil)
+        // Return cached state if fresh. iOS keeps the process alive across
+        // background/foreground transitions, so this cache typically survives all day.
+        if let (cachedState, ts) = memoryCache,
+           ts.timeIntervalSinceNow > -Self.cacheTTL,
+           !cachedState.modelCatalogGroups.isEmpty {
+            var result = cachedState
+            result.currentProfile = initialState.currentProfile
+            result.currentWorkspace = initialState.currentWorkspace
+            result.currentModel = initialState.currentModel
+            result.currentModelProvider = initialState.currentModelProvider
+            return ChatComposerConfigLoadResult(state: result, configurationError: nil)
         }
         var state = initialState
         var configurationError: Error?
@@ -162,13 +163,13 @@ struct ChatComposerConfigLoader {
             configurationError: configurationError
         )
         if configurationError == nil {
-            updateCache(result)
+            updateCache(state)
         }
         return result
     }
 
-    private func updateCache(_ result: ChatComposerConfigLoadResult) {
-        Self.memoryCache = (result, Date())
+    private func updateCache(_ state: ChatComposerConfigState) {
+        memoryCache = (state, Date())
     }
 
     private static func profileSummary(
