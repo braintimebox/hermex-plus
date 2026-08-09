@@ -527,7 +527,8 @@ struct ChatView: View {
         "\(server.absoluteString)|\(transcriptMediaSessionID ?? "local:\(session.id)")"
     }
 
-    var body: some View {
+    @ViewBuilder
+    private var chatContent: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
                 if viewModel.isViewingCachedData {
@@ -537,8 +538,6 @@ struct ChatView: View {
                 listenPlaybackBar
 
                 messageContent
-                    // Scope RTL to the chat transcript only (#259): the offline
-                    // banner above stays in the app's default direction.
                     .environment(\.layoutDirection, chatLayoutDirection)
             }
             .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: viewModel.showsListenPlaybackBar)
@@ -574,7 +573,11 @@ struct ChatView: View {
                 .zIndex(10)
             }
         }
-        .overlay(alignment: .top) {
+    }
+
+    var body: some View {
+        chatContent
+            .overlay(alignment: .top) {
             GitActionToastOverlay(state: gitToastState)
         }
         .navigationTitle(displayTitle)
@@ -1195,11 +1198,28 @@ struct ChatView: View {
             },
             onRegenerate: beginRegenerateResponse,
             onEdit: beginEditMessage,
-            onFork: { context in Task { await forkFromMessage(context) } },
-            onCopy: { context in UIPasteboard.general.string = context.copyText },
-            onReply: { replyToMessage($0) },
-            onForward: { forwardFromMessage($0) },
-            onSave: { saveMessage($0) },
+            onFork: { context in
+                Task { await forkFromMessage(context) }
+            },
+            onCopy: { context in
+                UIPasteboard.general.string = context.copyText
+            },
+            onReply: { viewModel.quotedMessage = (
+                messageId: $0.messageID,
+                author: $0.role == .user ? "You" : "Hermes",
+                text: String($0.copyText.prefix(200))
+            ) },
+            onForward: {
+                forwardMessageContent = (
+                    text: $0.copyText,
+                    author: $0.role == .user ? "You" : "Hermes",
+                    sessionTitle: "Chat"
+                )
+                showingForwardPicker = true
+            },
+            onSave: { context in
+                saveMessage(context)
+            },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
                 Task { await performQuickCommit(push: true) }
@@ -2194,23 +2214,6 @@ struct ChatView: View {
                 isReadingOlderTranscript = false
             }
         }
-    }
-
-    private func replyToMessage(_ ctx: MessageActionContext) {
-        viewModel.quotedMessage = (
-            messageId: ctx.messageID,
-            author: ctx.role == .user ? "You" : "Hermes",
-            text: String(ctx.copyText.prefix(200))
-        )
-    }
-
-    private func forwardFromMessage(_ ctx: MessageActionContext) {
-        forwardMessageContent = (
-            text: ctx.copyText,
-            author: ctx.role == .user ? "You" : "Hermes",
-            sessionTitle: "Chat"
-        )
-        showingForwardPicker = true
     }
 
     private func saveMessage(_ context: MessageActionContext) {
