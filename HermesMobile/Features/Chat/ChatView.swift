@@ -575,7 +575,7 @@ struct ChatView: View {
         }
     }
 
-    var body: some View {
+    private var chatViewContent: some View {
         chatContent
             .overlay(alignment: .top) {
             GitActionToastOverlay(state: gitToastState)
@@ -676,6 +676,10 @@ struct ChatView: View {
             .fullScreenCover(item: $selectableResponseText) { selectableText in
                 SelectableResponseTextView(selection: selectableText)
             }
+    }
+
+    var body: some View {
+        chatViewContent
             .sheet(item: $attachmentPreviewItem) { item in
                 ChatAttachmentPreviewView(
                     session: session,
