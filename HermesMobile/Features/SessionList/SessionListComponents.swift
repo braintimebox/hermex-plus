@@ -209,9 +209,26 @@ struct SessionSidebarUtilityRows: View {
                 }
             }
 
-            SidebarNavButton(title: String(localized: "Saved"), assetImage: "bookmark.fill") {
-                openDestination(.saved)
+            HapticButton(action: { openDestination(.saved) }) {
+                HStack(spacing: 18) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .frame(width: 28)
+                        .accessibilityHidden(true)
+
+                    Text("Saved")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Saved")
         }
         .padding(.horizontal, 24)
     }

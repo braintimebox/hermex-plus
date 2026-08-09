@@ -384,7 +384,7 @@ struct SessionListView: View {
                 )
             case .saved:
                 SavedMessagesView { sessionId, messageId in
-                    navigationState.createChatAndScroll(to: sessionId, messageId: messageId)
+                    navigationState.selectedSessionID = sessionId
                 }
             }
         }
