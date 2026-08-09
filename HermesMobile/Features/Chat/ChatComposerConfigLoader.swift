@@ -60,12 +60,27 @@ struct ChatComposerConfigLoadResult: Sendable {
 
 struct ChatComposerConfigLoader {
     private let client: APIClient
+    private static var memoryCache: (result: ChatComposerConfigLoadResult, timestamp: Date) = (
+        ChatComposerConfigLoadResult(state: ChatComposerConfigState(), configurationError: nil),
+        .distantPast
+    )
+    private static let cacheTTL: TimeInterval = 300 // 5 minutes
 
     init(client: APIClient) {
         self.client = client
     }
 
     func loadConfiguration(from initialState: ChatComposerConfigState) async -> ChatComposerConfigLoadResult {
+        // Return cached result if still fresh (eliminates 5 network calls on repeat visits)
+        if Self.memoryCache.timestamp.timeIntervalSinceNow > -Self.cacheTTL,
+           Self.memoryCache.result.configurationError == nil {
+            var cachedState = Self.memoryCache.result.state
+            cachedState.currentProfile = initialState.currentProfile
+            cachedState.currentWorkspace = initialState.currentWorkspace
+            cachedState.currentModel = initialState.currentModel
+            cachedState.currentModelProvider = initialState.currentModelProvider
+            return ChatComposerConfigLoadResult(state: cachedState, configurationError: nil)
+        }
         var state = initialState
         var configurationError: Error?
 
@@ -142,10 +157,18 @@ struct ChatComposerConfigLoader {
             state.agentCommands = []
         }
 
-        return ChatComposerConfigLoadResult(
+        let result = ChatComposerConfigLoadResult(
             state: state,
             configurationError: configurationError
         )
+        if configurationError == nil {
+            updateCache(result)
+        }
+        return result
+    }
+
+    private func updateCache(_ result: ChatComposerConfigLoadResult) {
+        Self.memoryCache = (result, Date())
     }
 
     private static func profileSummary(

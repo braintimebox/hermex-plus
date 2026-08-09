@@ -2,7 +2,7 @@
 
 <img src="docs/assets/readme/hermex-icon.png" alt="Hermes Plus icon" width="96" />
 
-# Hermes Plus v2.0
+# Hermes Plus v1.4 (on Hermex v1.5)
 
 **Native iPhone client for self-hosted Hermes Agent.** Forked from [Hermex](https://github.com/uzairansaruzi/hermex) v1.5.
 
@@ -14,7 +14,7 @@ Your server. Your iPhone. No middleman.
 
 </div>
 
-## 🚀 Why Hermes Plus v2.0
+## 🚀 Why Hermes Plus v1.4
 
 Upstream Hermex is excellent. Hermes Plus adds the power-user features that matter:
 
