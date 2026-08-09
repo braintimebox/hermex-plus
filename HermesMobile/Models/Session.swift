@@ -330,6 +330,43 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
             matchType: matchType
         )
     }
+
+    /// Convenience init for navigation from Saved/Scheduled — constructs a minimal
+    /// SessionSummary that navigates to the right chat by sessionId.
+    init(sessionId: String, title: String) {
+        self.sessionId = sessionId
+        self.title = title
+        self.workspace = nil
+        self.model = nil
+        self.modelProvider = nil
+        self.messageCount = nil
+        self.createdAt = nil
+        self.updatedAt = nil
+        self.lastMessageAt = nil
+        self.pinned = nil
+        self.archived = nil
+        self.projectId = nil
+        self.profile = nil
+        self.inputTokens = nil
+        self.outputTokens = nil
+        self.estimatedCost = nil
+        self.activeStreamId = nil
+        self.isStreaming = nil
+        self.isCliSession = nil
+        self.userMessageCount = nil
+        self.hasPendingUserMessage = nil
+        self.pendingStartedAt = nil
+        self.worktreePath = nil
+        self.sourceTag = nil
+        self.rawSource = nil
+        self.sessionSource = nil
+        self.sourceLabel = nil
+        self.parentSessionId = nil
+        self.relationshipType = nil
+        self.readOnly = nil
+        self.isReadOnly = nil
+        self.matchType = nil
+    }
 }
 
 extension SessionSummary {

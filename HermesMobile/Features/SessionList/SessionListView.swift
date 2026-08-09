@@ -36,6 +36,9 @@ struct SessionListView: View {
     @State private var sidebarScrollPosition: String?
     @State private var didCompleteInitialLoad = false
     @State private var returnRefreshID: UUID?
+    @State private var pendingSharedDraft: String?
+    @State private var pendingSharedAttachments: [SharedAttachmentImport] = []
+    @State private var showSharedDestinationPicker = false
     @FocusState private var searchFieldIsFocused: Bool
     @AppStorage(SessionSidebarDisclosureSettings.profilesAreExpandedKey)
     private var profilesAreExpanded = SessionSidebarDisclosureSettings.defaultProfilesAreExpanded
@@ -356,7 +359,10 @@ struct SessionListView: View {
 
     @ViewBuilder
     private var savedMessagesDestination: some View {
-        SavedMessagesView { _, _ in }
+        SavedMessagesView { sessionId, _ in
+            let summary = SessionSummary(sessionId: sessionId, title: "Chat")
+            selectSession(summary)
+        }
     }
 
     @ViewBuilder
@@ -377,6 +383,8 @@ struct SessionListView: View {
                 InsightsView(server: server, onAPIError: authManager.handleAPIError)
             case .archived:
                 ArchivedSessionsView(server: server, onAPIError: authManager.handleAPIError)
+            case .scheduledMessages:
+                ScheduledMessagesView(sessionId: "") { _ in }
             case .scheduled:
                 ScheduledSessionsView(
                     viewModel: viewModel,
@@ -677,6 +685,13 @@ struct SessionListView: View {
             )
         }
         .buttonStyle(SessionListFloatingChatButtonStyle())
+        .contextMenu {
+            Button {
+                navigationState.select(.scheduledMessages)
+            } label: {
+                Label("Scheduled Messages", systemImage: "calendar.badge.clock")
+            }
+        }
         .disabled(viewModel.isViewingCachedData || navigationState.isCreatingNewChat)
         .opacity(viewModel.isViewingCachedData ? 0.45 : 1)
         .accessibilityLabel("New Session")
@@ -1153,12 +1168,10 @@ struct SessionListView: View {
             return
         }
 
-        navigationState.select(
-            PendingNewChatRoute(
-                initialDraft: draft,
-                initialAttachments: sharedImport.attachments
-            )
-        )
+        // Store for destination picker
+        pendingSharedDraft = draft
+        pendingSharedAttachments = sharedImport.attachments
+        showSharedDestinationPicker = true
     }
 
     /// Awaited (not fire-and-forget) so the cold-start `.task` can resolve it before
@@ -1376,6 +1389,7 @@ enum SessionListUtilityDestination: Hashable, Identifiable {
     /// Archived sessions screen (issue #17), also reachable from Settings.
     case archived
     case scheduled
+    case scheduledMessages
     case saved
 
     var id: Self { self }
