@@ -14,39 +14,38 @@ Your server. Your iPhone. No middleman.
 
 </div>
 
-## 🚀 Why Hermes Plus v1.4
+## 🔗 Download
 
-Upstream Hermex is excellent. Hermes Plus adds the power-user features that matter:
+**Latest IPA (direct):** https://github.com/braintimebox/hermex-plus/actions — click the latest green build → scroll to Artifacts → download `HermesPlus-unsigned`
+
+Then install with SideStore / AltStore → connect to your Hermes server.
+
+## 🚀 Features (what we added on top of Hermex v1.5)
 
 | Feature | Description |
 |---------|-------------|
-| **Reply** | Long-press any message → Reply with quote banner |
+| **Reply** | Long-press → Reply with quote banner |
 | **Forward** | Long-press → Forward to any session |
-| **Saved Messages** | Bookmark messages, reorder them, jump back to chat |
-| **Scheduled Messages** | Long-press Send → pick date/time. Clock badge on Send button |
-| **Performance** | Parallel async loading — 33% faster composer load |
+| **Saved Messages** | Bookmark, reorder, jump back to chat |
+| **Scheduled Messages** | Long-press Send → pick date/time. Clock badge on Send |
+| **Chat long-press** | Hold "Chat" button → Schedule message |
+| **Share** | Message context menu → Share (system sheet) |
+| **Background refresh** | BGTaskScheduler every 4h. ~0.5% battery/day |
+| **Config cache** | 24h memory cache — 0 network on repeat visits |
+| **Performance** | `async let` parallel loading. No type-check timeouts |
 | **No swipes** | Pin/archive/delete via long-press menu only |
 
-## 📦 Install
+## 🔧 Key differences from upstream
 
-1. Download the latest IPA from [Actions](https://github.com/braintimebox/hermex-plus/actions)
-2. Install via SideStore / AltStore
-3. Connect to your Hermes server — done
-
-## 🔧 Key differences from upstream (Hermex v1.5)
-
-- App name: "Hermes Plus" — `APP_DISPLAY_NAME` in project settings
-- No swipe actions — contextMenu only (Pin/Archive/Delete)
-- Reply, Forward, Save, Schedule — all via contextMenu
+- App name: "Hermes Plus"
+- No swipe actions — contextMenu only
+- Reply, Forward, Save, Schedule, Share — all via contextMenu
 - Saved messages with drag-to-reorder + chat navigation
 - Scheduled messages with count badge + Tasks integration
-- Share sheet → choose destination chat
-- Unsigned IPA CI (`CODE_SIGNING_ALLOWED=NO`)
+- Share sheet → choose destination
+- BGTaskScheduler background refresh
 - Settings → Main Page → Saved toggle
-
-## 📝 Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
+- Unsigned IPA CI
 
 ## 🤝 Credits
 
