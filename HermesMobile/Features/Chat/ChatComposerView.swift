@@ -117,6 +117,7 @@ struct MessageComposerView: View {
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
     let scheduledCount: Int
+    let onOpenScheduledList: (() -> Void)?
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -360,26 +361,39 @@ struct MessageComposerView: View {
                         )
 
                         Button(action: actionButtonTapped) {
-                            ZStack {
-                                actionButtonLabel
-                                    .frame(width: actionButtonSize, height: actionButtonSize)
-                                    .background(actionButtonBackground)
-                                    .foregroundStyle(actionButtonForeground)
-                                    .clipShape(Circle())
-                                    .chatMinimumHitTarget(in: Circle())
-                                
-                                if !showsStopButton && scheduledCount > 0 {
-                                    Image(systemName: "\\(scheduledCount).circle.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.white)
-                                        .background(Circle().fill(.orange).frame(width: 16, height: 16))
-                                        .offset(x: 12, y: -12)
-                                }
-                            }
+                            actionButtonLabel
+                                .frame(width: actionButtonSize, height: actionButtonSize)
+                                .background(actionButtonBackground)
+                                .foregroundStyle(actionButtonForeground)
+                                .clipShape(Circle())
+                                .chatMinimumHitTarget(in: Circle())
                         }
                         .buttonStyle(.chatTactile(.icon))
                         .disabled(isActionButtonDisabled)
                         .accessibilityLabel(showsStopButton ? "Stop response" : "Send")
+
+                        if !showsStopButton, let onOpenScheduledList {
+                            Button {
+                                onOpenScheduledList()
+                            } label: {
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.title3)
+                                    .foregroundStyle(scheduledCount > 0 ? .orange : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .topTrailing) {
+                                if scheduledCount > 0 {
+                                    Text("\(scheduledCount)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(3)
+                                        .background(Circle().fill(.orange))
+                                        .offset(x: 6, y: -4)
+                                }
+                            }
+                        }
+
+                        Spacer().frame(width: 2)
                         .contextMenu {
                             if !showsStopButton && !isActionButtonDisabled {
                                 Button {

@@ -307,6 +307,8 @@ struct ChatView: View {
     @State private var showingForwardPicker = false
     @State private var showingSchedulePicker = false
     @State private var showingScheduledList = false
+    @State private var showShareSheet = false
+    @State private var shareText = ""
     @State private var showProfileNewSessionConfirmation = false
     @State private var goalDraft = ""
     @State private var showsGoalSheet = false
@@ -417,6 +419,7 @@ struct ChatView: View {
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
             scheduledCount: scheduledMessageCount,
+            onOpenScheduledList: { showingScheduledList = true },
             onCancel: {
                 Task { await cancelStream() }
             },
@@ -753,6 +756,9 @@ struct ChatView: View {
                         showingScheduledList = false
                     }
                 )
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: [shareText])
             }
             .alert(
                 "Discard Later Messages?",
@@ -1236,6 +1242,10 @@ struct ChatView: View {
             },
             onSave: { context in
                 saveMessage(context)
+            },
+            onShare: { context in
+                shareText = context.copyText
+                showShareSheet = true
             },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
@@ -2236,11 +2246,11 @@ struct ChatView: View {
     private func saveMessage(_ context: MessageActionContext) {
         let saved = SavedMessage(
             messageId: context.messageID,
-            sessionId: "",
-            sessionTitle: "Chat",
+            sessionId: sessionID,
+            sessionTitle: session?.title ?? "Chat",
             content: context.copyText,
             author: context.role == .user ? "You" : "Hermes",
-            serverURLString: ""
+            serverURLString: server.absoluteString
         )
         modelContext.insert(saved)
     }

@@ -16,6 +16,13 @@ struct ScheduledMessagesView: View {
         _messages = Query(filter: predicate, sort: \.scheduledAt)
     }
 
+    /// Show ALL scheduled messages (no sessionId filter). Used from Tasks / Chat button.
+    init(onSendNow: @escaping (String) -> Void) {
+        self.sessionId = ""
+        self.onSendNow = onSendNow
+        _messages = Query(sort: \.scheduledAt)
+    }
+
     var body: some View {
         NavigationStack {
             Group {

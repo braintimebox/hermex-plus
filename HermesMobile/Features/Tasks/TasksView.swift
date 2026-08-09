@@ -86,7 +86,7 @@ struct TasksView: View {
                 if !scheduledMessages.isEmpty {
                     Section {
                         NavigationLink {
-                            ScheduledMessagesView(sessionId: "") { _ in }
+                            ScheduledMessagesView { _ in }
                         } label: {
                             HStack {
                                 Label("Scheduled Messages", systemImage: "calendar.badge.clock")

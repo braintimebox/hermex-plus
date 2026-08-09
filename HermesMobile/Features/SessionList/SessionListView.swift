@@ -424,7 +424,7 @@ struct SessionListView: View {
             case .archived:
                 ArchivedSessionsView(server: server, onAPIError: authManager.handleAPIError)
             case .scheduledMessages:
-                ScheduledMessagesView(sessionId: "") { _ in }
+                ScheduledMessagesView { _ in }
             case .scheduled:
                 ScheduledSessionsView(
                     viewModel: viewModel,
