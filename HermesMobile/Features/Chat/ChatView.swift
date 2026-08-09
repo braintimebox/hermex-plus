@@ -2470,3 +2470,73 @@ private extension SlashCommandExecutionResult {
         }
     }
 }
+
+// MARK: - Sheet Views (no new files needed)
+
+fileprivate struct ScheduleMessageSheet: View {
+    let draftMessage: String
+    let onSchedule: (Date) -> Void
+    let onCancel: () -> Void
+
+    @State private var scheduledDate = Date().addingTimeInterval(3600)
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                DatePicker(
+                    "Send at",
+                    selection: $scheduledDate,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .padding()
+
+                Text(draftMessage)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+                    .padding(.horizontal)
+            }
+            .navigationTitle("Schedule Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Schedule") { onSchedule(scheduledDate) }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+fileprivate struct ForwardMessageSheet: View {
+    let content: (text: String, author: String, sessionTitle: String)?
+    let onForward: (String, String, String, String) -> Void
+    let client: APIClient
+
+    @State private var sessions: [SessionSummary] = []
+
+    var body: some View {
+        SessionPickerForForward(
+            sessions: sessions.map {
+                SessionListItem(id: $0.id ?? $0.sessionId, displayTitle: $0.title ?? "Chat", lastMessagePreview: nil)
+            }
+        ) { session in
+            guard let content else { return }
+            onForward(content.text, content.author, content.sessionTitle, session.id)
+        }
+        .task {
+            do {
+                let response = try await client.sessions()
+                sessions = response.sessions ?? []
+            } catch {
+                sessions = []
+            }
+        }
+    }
+}
