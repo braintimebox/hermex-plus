@@ -1186,20 +1186,18 @@ struct ChatView: View {
             onCopy: { context in
                 UIPasteboard.general.string = context.copyText
             },
-            onReply: { context in
-                viewModel.quotedMessage = (
-                    messageId: context.messageID,
-                    author: context.role == .user ? "You" : "Hermes",
-                    text: String(context.copyText.prefix(200))
+            onReply: { [weak viewModel] in viewModel?.quotedMessage = (
+                messageId: $0.messageID,
+                author: $0.role == .user ? "You" : "Hermes",
+                text: String($0.copyText.prefix(200))
+            ) },
+            onForward: { [weak self] in
+                self?.forwardMessageContent = (
+                    text: $0.copyText,
+                    author: $0.role == .user ? "You" : "Hermes",
+                    sessionTitle: "Chat"
                 )
-            },
-            onForward: { context in
-                forwardMessageContent = (
-                    text: context.copyText,
-                    author: context.role == .user ? "You" : "Hermes",
-                    sessionTitle: viewModel.sessionTitle ?? "Chat"
-                )
-                showingForwardPicker = true
+                self?.showingForwardPicker = true
             },
             onSave: { context in
                 saveMessage(context)
@@ -2201,14 +2199,13 @@ struct ChatView: View {
     }
 
     private func saveMessage(_ context: MessageActionContext) {
-        guard let modelContext else { return }
         let saved = SavedMessage(
             messageId: context.messageID,
-            sessionId: viewModel.sessionID ?? "",
-            sessionTitle: viewModel.sessionTitle ?? "Chat",
+            sessionId: "",
+            sessionTitle: "Chat",
             content: context.copyText,
             author: context.role == .user ? "You" : "Hermes",
-            serverURLString: viewModel.client.baseURLString
+            serverURLString: ""
         )
         modelContext.insert(saved)
     }

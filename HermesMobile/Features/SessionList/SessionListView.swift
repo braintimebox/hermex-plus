@@ -383,12 +383,7 @@ struct SessionListView: View {
                     actions: sessionRowActions
                 )
             case .saved:
-                SavedMessagesView { sessionId, _ in
-                    selectSession(CachedSession(
-                        serverURLString: server.urlString,
-                        session: SessionSummary(sessionId: sessionId, id: sessionId, title: "Chat")
-                    ))
-                }
+                SavedMessagesView { _, _ in }
             }
         }
         .adaptiveSecondaryNavigationTitle()
