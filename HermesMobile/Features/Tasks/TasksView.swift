@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct TasksView: View {
     let server: URL
@@ -6,6 +7,7 @@ struct TasksView: View {
 
     @State private var viewModel: TasksViewModel
     @State private var isPresentingCreateTask = false
+    @Query(filter: #Predicate<PendingScheduledMessage> { _ in true }) private var scheduledMessages: [PendingScheduledMessage]
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -81,6 +83,21 @@ struct TasksView: View {
             }
         } else {
             List {
+                if !scheduledMessages.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ScheduledMessagesView(sessionId: "") { _ in }
+                        } label: {
+                            HStack {
+                                Label("Scheduled Messages", systemImage: "calendar.badge.clock")
+                                Spacer()
+                                Text("\(scheduledMessages.count)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
                 Section {
                     HStack {
                         Label("Running now", systemImage: "bolt.fill")

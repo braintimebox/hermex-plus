@@ -101,7 +101,11 @@ struct ChatComposerConfigLoader {
                 state.currentModel = Self.nonEmpty(selectedProfile?.model)
             }
 
-            let modelsResponse = try await client.models()
+            // Fetch models + workspaces in parallel (independent calls)
+            async let modelsTask = client.models()
+            async let workspacesTask = client.workspaces()
+
+            let modelsResponse = try await modelsTask
             state.modelCatalogGroups = modelsResponse.catalogGroups
             if state.currentModel == nil {
                 state.currentModel = modelsResponse.defaultModel
@@ -111,18 +115,18 @@ struct ChatComposerConfigLoader {
                     ?? Self.uniqueProvider(for: state.currentModel, in: state.modelCatalogGroups)
             }
 
-            // Scope the query to the session's resolved model/provider so the
-            // gating fields are model-accurate (issue #18); the seeded effort is
-            // the server's already-coerced value for that model.
-            let reasoningResponse = try await client.reasoning(
+            // Fetch reasoning (depends on model) + workspaces result in parallel
+            async let reasoningTask = client.reasoning(
                 model: Self.nonEmpty(state.currentModel),
                 provider: Self.nonEmpty(state.currentModelProvider)
             )
+            let workspaceResponse = try await workspacesTask
+
+            let reasoningResponse = try await reasoningTask
             state.selectedReasoningEffort = reasoningResponse.effectiveEffort
             state.supportedReasoningEfforts = reasoningResponse.normalizedSupportedEfforts
             state.supportsReasoningEffort = reasoningResponse.supportsReasoningEffort
 
-            let workspaceResponse = try await client.workspaces()
             state.workspaceRoots = workspaceResponse.workspaces ?? []
             if state.currentWorkspace == nil {
                 state.currentWorkspace = workspaceResponse.last ?? state.workspaceRoots.compactMap(\.path).first
