@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BackgroundTasks
 
 struct HermexSceneActions {
     let canCreateNewChat: Bool
@@ -44,6 +45,11 @@ struct HermexCommands: Commands {
 struct HermesMobileApp: App {
     @State private var authManager = AuthManager()
     @AppStorage(AppTheme.storageKey) private var appThemeRawValue = AppTheme.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        BackgroundTaskManager.register()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -65,9 +71,24 @@ struct HermesMobileApp: App {
             #endif
         }
         .modelContainer(for: [CachedSession.self, CachedMessage.self, SavedMessage.self, PendingScheduledMessage.self])
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                BackgroundTaskManager.scheduleNext()
+            }
+        }
+        .backgroundTask(.appRefresh(BackgroundTaskManager.refreshIdentifier)) {
+            await handleBackgroundRefresh()
+        }
         .commands {
             HermexCommands()
             SidebarCommands()
         }
     }
+}
+
+// MARK: - Background Refresh
+
+private func handleBackgroundRefresh() async {
+    UserDefaults.standard.set(Date(), forKey: "hermes_last_bg_refresh_ts")
+    BackgroundTaskManager.scheduleNext()
 }

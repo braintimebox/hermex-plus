@@ -39,6 +39,7 @@ struct SessionListView: View {
     @State private var pendingSharedDraft: String?
     @State private var pendingSharedAttachments: [SharedAttachmentImport] = []
     @State private var showSharedDestinationPicker = false
+    @State private var showingChatSchedulePicker = false
     @FocusState private var searchFieldIsFocused: Bool
     @AppStorage(SessionSidebarDisclosureSettings.profilesAreExpandedKey)
     private var profilesAreExpanded = SessionSidebarDisclosureSettings.defaultProfilesAreExpanded
@@ -201,6 +202,21 @@ struct SessionListView: View {
                 // On success `addServer` switches the active server, which
                 // rebuilds this stack via ContentView's `.id(server)` (#283).
                 AddServerView(authManager: authManager)
+            }
+            .sheet(isPresented: $showingChatSchedulePicker) {
+                ScheduleMessageSheet { date in
+                    modelContext.insert(
+                        PendingScheduledMessage(
+                            sessionId: "",
+                            draftText: "",
+                            scheduledAt: date,
+                            serverURLString: server.absoluteString
+                        )
+                    )
+                    showingChatSchedulePicker = false
+                } onCancel: {
+                    showingChatSchedulePicker = false
+                }
             }
             .confirmationDialog(
                 "Send shared content to…",
@@ -710,6 +726,11 @@ struct SessionListView: View {
         }
         .buttonStyle(SessionListFloatingChatButtonStyle())
         .contextMenu {
+            Button {
+                showingChatSchedulePicker = true
+            } label: {
+                Label("Schedule Message", systemImage: "clock.badge")
+            }
             Button {
                 navigationState.select(.scheduledMessages)
             } label: {

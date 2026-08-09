@@ -2493,7 +2493,7 @@ private extension SlashCommandExecutionResult {
 
 // MARK: - Sheet Views (no new files needed)
 
-fileprivate struct ScheduleMessageSheet: View {
+struct ScheduleMessageSheet: View {
     let draftMessage: String
     let onSchedule: (Date) -> Void
     let onCancel: () -> Void
