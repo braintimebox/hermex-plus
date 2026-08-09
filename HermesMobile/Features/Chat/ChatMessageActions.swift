@@ -25,6 +25,9 @@ struct ChatMessageActionMenu: View {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
 
     var body: some View {
         if context.role == .assistant {
@@ -71,6 +74,24 @@ struct ChatMessageActionMenu: View {
             onCopy(context)
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
+        }
+
+        Button {
+            onReply(context)
+        } label: {
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
+        }
+
+        Button {
+            onForward(context)
+        } label: {
+            Label("Forward", systemImage: "arrowshape.turn.up.right")
+        }
+
+        Button {
+            onSave(context)
+        } label: {
+            Label("Save", systemImage: "bookmark")
         }
     }
 

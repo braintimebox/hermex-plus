@@ -113,6 +113,8 @@ struct MessageComposerView: View {
     let uploadAttachmentErrorMessage: String?
     let onSend: () -> Void
     let onSendVoiceNote: (Data, String) -> Void
+    let quotedMessage: (messageId: String, author: String, text: String)?
+    let onDismissQuote: () -> Void
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -240,6 +242,14 @@ struct MessageComposerView: View {
     var body: some View {
         AdaptiveGlassContainer(spacing: 6) {
             VStack(spacing: 6) {
+                if let quote = quotedMessage {
+                    QuoteReplyBanner(
+                        author: quote.author,
+                        text: quote.text,
+                        onDismiss: onDismissQuote
+                    )
+                }
+
                 if voiceNoteRecorder.isRecording {
                     ComposerVoiceRecordingBar(
                         elapsed: voiceNoteRecorder.elapsed,

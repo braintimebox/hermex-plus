@@ -68,6 +68,9 @@ struct ChatTranscriptView: View {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
     /// Non-nil shows the inline "Commit & Push" button under the latest assistant turn
     /// (issue #315, Slice C, surface B). Nil hides it (non-git chats, no changes, etc.).
     var inlineCommitContext: ChatInlineCommitContext? = nil
@@ -255,7 +258,10 @@ struct ChatTranscriptView: View {
                     onRegenerate: onRegenerate,
                     onEdit: onEdit,
                     onFork: onFork,
-                    onCopy: onCopy
+                    onCopy: onCopy,
+                    onReply: onReply,
+                    onForward: onForward,
+                    onSave: onSave
                 )
                 .equatable()
                 .id(transcriptMessage.renderID)
@@ -478,6 +484,9 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
 
     // Equality over the value inputs only. The closures are pure functions of
     // these values (e.g. `actionContext` is fully determined by
@@ -544,7 +553,10 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
                     onRegenerate: onRegenerate,
                     onEdit: onEdit,
                     onFork: onFork,
-                    onCopy: onCopy
+                    onCopy: onCopy,
+                    onReply: onReply,
+                    onForward: onForward,
+                    onSave: onSave
                 )
             }
         }
@@ -628,6 +640,9 @@ private struct ChatTranscriptMessageRow: View {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
 
     var body: some View {
         // Compaction marker messages render as collapsible cards (matching the
@@ -651,7 +666,10 @@ private struct ChatTranscriptMessageRow: View {
                         onRegenerate: onRegenerate,
                         onEdit: onEdit,
                         onFork: onFork,
-                        onCopy: onCopy
+                        onCopy: onCopy,
+                        onReply: onReply,
+                        onForward: onForward,
+                        onSave: onSave
                     )
                 }
         } else {

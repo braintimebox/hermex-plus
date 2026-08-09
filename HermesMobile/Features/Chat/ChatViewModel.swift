@@ -224,6 +224,11 @@ final class ChatViewModel {
     private(set) var isCompressingSession = false
     private(set) var isCancellingStream = false
     private(set) var isViewingCachedData = false
+
+    // MARK: - Quote reply
+    /// When non-nil, a QuoteReplyBanner is shown above the composer. Sending
+    /// prepends the quoted text as a markdown blockquote to the user message.
+    var quotedMessage: (messageId: String, author: String, text: String)? = nil
     var activeStreamID: String? { streamCoordinator.activeStreamID }
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
@@ -2002,11 +2007,24 @@ final class ChatViewModel {
         let localMessageID = "local-\(UUID().uuidString)"
         let attachmentPreparation = attachmentCoordinator.prepareForSend(localMessageID: localMessageID)
 
+        // Prepend quoted text as blockquote when replying
+        let finalContent: String
+        if let quote = quotedMessage {
+            let quotedBlock = quote.text
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map { "> \($0)" }
+                .joined(separator: "\n")
+            finalContent = "\(quotedBlock)\n\n\(message)"
+            quotedMessage = nil
+        } else {
+            finalContent = message
+        }
+
         return await performChatSend(
             sessionID: sessionID,
             localMessageID: localMessageID,
-            displayContent: message,
-            messageForAPI: attachmentPreparation.chatMessageText(draft: message),
+            displayContent: finalContent,
+            messageForAPI: attachmentPreparation.chatMessageText(draft: finalContent),
             messageAttachments: attachmentPreparation.messageAttachments,
             apiPayloads: attachmentPreparation.apiPayloads,
             attachmentsToRestoreOnFailure: attachmentPreparation.attachments,
@@ -5805,5 +5823,26 @@ private final class SpeechSynthesizerDelegate: NSObject, AVSpeechSynthesizerDele
         Task { @MainActor [onFinished] in
             onFinished(utteranceID)
         }
+    }
+
+    // MARK: - Forward
+
+    func forwardMessage(content: String, author: String, fromSessionTitle: String, toSessionId: String) async {
+        guard !isViewingCachedData else { return }
+        guard !content.isEmpty else { return }
+
+        let header = "🔄 Forwarded from «\(fromSessionTitle)» (\(author)):\n\n"
+        let forwarded = header + content
+
+        _ = await performChatSend(
+            sessionID: toSessionId,
+            localMessageID: "forward-\(UUID().uuidString)",
+            displayContent: forwarded,
+            messageForAPI: forwarded,
+            messageAttachments: [],
+            apiPayloads: [],
+            attachmentsToRestoreOnFailure: [],
+            modelContext: nil
+        )
     }
 }

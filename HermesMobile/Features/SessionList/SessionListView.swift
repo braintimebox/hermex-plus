@@ -382,6 +382,10 @@ struct SessionListView: View {
                         : nil,
                     actions: sessionRowActions
                 )
+            case .saved:
+                SavedMessagesView { sessionId, messageId in
+                    navigationState.createChatAndScroll(to: sessionId, messageId: messageId)
+                }
             }
         }
         .adaptiveSecondaryNavigationTitle()
@@ -1367,6 +1371,7 @@ enum SessionListUtilityDestination: Hashable, Identifiable {
     /// Archived sessions screen (issue #17), also reachable from Settings.
     case archived
     case scheduled
+    case saved
 
     var id: Self { self }
 }

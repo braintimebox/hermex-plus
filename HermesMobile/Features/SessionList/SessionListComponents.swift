@@ -208,6 +208,10 @@ struct SessionSidebarUtilityRows: View {
                     openDestination(.insights)
                 }
             }
+
+            SidebarNavButton(title: String(localized: "Saved"), assetImage: "bookmark.fill") {
+                openDestination(.saved)
+            }
         }
         .padding(.horizontal, 24)
     }

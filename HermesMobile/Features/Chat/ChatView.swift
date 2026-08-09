@@ -303,6 +303,8 @@ struct ChatView: View {
     @State private var attachmentPreviewItem: ChatAttachmentPreviewItem?
     @State private var transcriptMediaPreviewItem: TranscriptMediaPreviewItem?
     @State private var pendingProfileSelection: ProfileSummary?
+    @State private var forwardMessageContent: (text: String, author: String, sessionTitle: String)?
+    @State private var showingForwardPicker = false
     @State private var showProfileNewSessionConfirmation = false
     @State private var goalDraft = ""
     @State private var showsGoalSheet = false
@@ -404,6 +406,8 @@ struct ChatView: View {
             onSendVoiceNote: { data, filename in
                 Task { await sendVoiceNote(audioData: data, filename: filename) }
             },
+            quotedMessage: viewModel.quotedMessage,
+            onDismissQuote: { viewModel.quotedMessage = nil },
             onCancel: {
                 Task { await cancelStream() }
             },
@@ -692,6 +696,19 @@ struct ChatView: View {
                         Task { await submitGoalDraft(submittedGoal) }
                     }
                 )
+            }
+            .sheet(isPresented: $showingForwardPicker) {
+                SessionPickerForForward(sessions: []) { session in
+                    guard let content = forwardMessageContent else { return }
+                    Task {
+                        await viewModel.forwardMessage(
+                            content: content.text,
+                            author: content.author,
+                            fromSessionTitle: content.sessionTitle,
+                            toSessionId: session.id
+                        )
+                    }
+                }
             }
             .sheet(isPresented: $showEditSheet) {
                 EditMessageSheet(
@@ -1170,6 +1187,34 @@ struct ChatView: View {
             },
             onCopy: { context in
                 UIPasteboard.general.string = context.copyText
+            },
+            onReply: { context in
+                viewModel.quotedMessage = (
+                    messageId: context.messageID,
+                    author: context.role == .user ? "You" : "Hermes",
+                    text: String(context.copyText.prefix(200))
+                )
+            },
+            onForward: { context in
+                forwardMessageContent = (
+                    text: context.copyText,
+                    author: context.role == .user ? "You" : "Hermes",
+                    sessionTitle: viewModel.sessionTitle ?? "Chat"
+                )
+                showingForwardPicker = true
+            },
+            onSave: { context in
+                if let modelContext {
+                    let saved = SavedMessage(
+                        messageId: context.messageID,
+                        sessionId: viewModel.sessionID ?? "",
+                        sessionTitle: viewModel.sessionTitle ?? "Chat",
+                        content: context.copyText,
+                        author: context.role == .user ? "You" : "Hermes",
+                        serverURLString: viewModel.client.baseURLString
+                    )
+                    modelContext.insert(saved)
+                }
             },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
