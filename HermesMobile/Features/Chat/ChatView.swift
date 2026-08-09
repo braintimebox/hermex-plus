@@ -700,13 +700,11 @@ struct ChatView: View {
             .sheet(isPresented: $showingForwardPicker) {
                 SessionPickerForForward(sessions: []) { session in
                     guard let content = forwardMessageContent else { return }
+                    let header = "🔄 Forwarded from «\(content.sessionTitle)» (\(content.author)):\n\n"
+                    let forwarded = header + content.text
                     Task {
-                        await viewModel.forwardMessage(
-                            content: content.text,
-                            author: content.author,
-                            fromSessionTitle: content.sessionTitle,
-                            toSessionId: session.id
-                        )
+                        draftMessage = forwarded
+                        await sendDraftMessage()
                     }
                 }
             }
