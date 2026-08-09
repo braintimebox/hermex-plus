@@ -72,7 +72,7 @@ struct ChatComposerConfigLoader {
     func loadConfiguration(from initialState: ChatComposerConfigState) async -> ChatComposerConfigLoadResult {
         // Return cached state if fresh. iOS keeps the process alive across
         // background/foreground transitions, so this cache typically survives all day.
-        if let (cachedState, ts) = memoryCache,
+        if let (cachedState, ts) = Self.memoryCache,
            ts.timeIntervalSinceNow > -Self.cacheTTL,
            !cachedState.modelCatalogGroups.isEmpty {
             var result = cachedState
@@ -169,7 +169,7 @@ struct ChatComposerConfigLoader {
     }
 
     private func updateCache(_ state: ChatComposerConfigState) {
-        memoryCache = (state, Date())
+        Self.memoryCache = (state, Date())
     }
 
     private static func profileSummary(
