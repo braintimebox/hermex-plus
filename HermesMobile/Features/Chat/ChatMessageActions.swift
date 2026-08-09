@@ -28,7 +28,6 @@ struct ChatMessageActionMenu: View {
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
-    let onShare: (MessageActionContext) -> Void
 
     var body: some View {
         if context.role == .assistant {
@@ -93,12 +92,6 @@ struct ChatMessageActionMenu: View {
             onSave(context)
         } label: {
             Label("Save", systemImage: "bookmark")
-        }
-
-        Button {
-            onShare(context)
-        } label: {
-            Label("Share", systemImage: "square.and.arrow.up")
         }
     }
 
