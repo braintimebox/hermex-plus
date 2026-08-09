@@ -320,9 +320,8 @@
 		FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */; };
 		D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */; };
 
-		AD3219F55D7245AABDA40840 /* ScheduleMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0D56AAE6D54CFB87EE1EA6 /* ScheduleMessageSheet.swift */; };
-
-		141BD5225986447C930FC68F /* ForwardMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */; };
+		4FD3CABA749A40F395230ABC /* ForwardMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AFAB3838B5F4FCB8DA13463 /* ForwardMessageSheet.swift */; };
+		478DD56488334415BE4D2759 /* ScheduleMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 321C985F67514A788B5168B4 /* ScheduleMessageSheet.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -675,9 +674,8 @@
 		661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledMessagesView.swift"; sourceTree = "<group>"; };
 		FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionPickerForForward.swift"; sourceTree = "<group>"; };
 
-		FF0D56AAE6D54CFB87EE1EA6 /* ScheduleMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduleMessageSheet.swift"; sourceTree = "<group>"; };
-
-		58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ForwardMessageSheet.swift"; sourceTree = "<group>"; };
+		8AFAB3838B5F4FCB8DA13463 /* ForwardMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ForwardMessageSheet.swift"; sourceTree = "<group>"; };
+		321C985F67514A788B5168B4 /* ScheduleMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduleMessageSheet.swift"; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -1023,7 +1021,8 @@
 		};
 		1A2B3C4D5E6F7000000000C6 /* Chat */ = {
 			isa = PBXGroup;
-				58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */,
+				8AFAB3838B5F4FCB8DA13463 /* ForwardMessageSheet.swift */,
+				321C985F67514A788B5168B4 /* ScheduleMessageSheet.swift */,
 
 			children = (
 				1A2B3C4D5E6F7000000000BF /* ChatView.swift */,
@@ -1091,8 +1090,6 @@
 				2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */,
 				661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */,
 				FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */,
-
-				FF0D56AAE6D54CFB87EE1EA6 /* ScheduleMessageSheet.swift */,
 
 			);
 			path = Chat;
@@ -1455,8 +1452,6 @@
 		1A2B3C4D5E6F700000000050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-				141BD5225986447C930FC68F /* ForwardMessageSheet.swift in Sources */,
-
 			files = (
 				1A2B3C4D5E6F700000000001 /* HermesMobileApp.swift in Sources */,
 				1A2B3C4D5E6F700000000002 /* ContentView.swift in Sources */,
@@ -1657,7 +1652,8 @@
 				FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */,
 				D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */,
 
-				AD3219F55D7245AABDA40840 /* ScheduleMessageSheet.swift in Sources */,
+				4FD3CABA749A40F395230ABC /* ForwardMessageSheet.swift in Sources */,
+				478DD56488334415BE4D2759 /* ScheduleMessageSheet.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;
