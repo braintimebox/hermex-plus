@@ -714,9 +714,6 @@ struct ChatView: View {
                         draftMessage = header + text
                         Task { await sendDraftMessage() }
                     },
-                    onDismiss: {
-                        forwardMessageContent = nil
-                    },
                     client: viewModel.client
                 )
             }
