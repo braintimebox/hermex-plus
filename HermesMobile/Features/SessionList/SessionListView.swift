@@ -355,6 +355,19 @@ struct SessionListView: View {
     }
 
     @ViewBuilder
+    private var savedMessagesDestination: some View {
+        SavedMessagesView { sessionId, messageId in
+            let summary = SessionSummary(
+                id: sessionId,
+                sessionId: sessionId,
+                title: "Saved",
+                serverURLString: server.urlString
+            )
+            selectSession(summary)
+        }
+    }
+
+    @ViewBuilder
     private func utilityDestination(_ destination: SessionListUtilityDestination) -> some View {
         Group {
             switch destination {
@@ -384,15 +397,7 @@ struct SessionListView: View {
                     actions: sessionRowActions
                 )
             case .saved:
-                SavedMessagesView { sessionId, messageId in
-                    let summary = SessionSummary(
-                        id: sessionId,
-                        sessionId: sessionId,
-                        title: "Saved",
-                        serverURLString: server.urlString
-                    )
-                    selectSession(summary)
-                }
+                savedMessagesDestination
             }
         }
         .adaptiveSecondaryNavigationTitle()

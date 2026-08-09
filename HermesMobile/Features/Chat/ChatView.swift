@@ -361,7 +361,6 @@ struct ChatView: View {
     // call alongside the rest of the screen in one expression (#316 pushed it over the
     // "unable to type-check in reasonable time" limit).
     private var scheduledMessageCount: Int {
-        guard let modelContext else { return 0 }
         let fetch = FetchDescriptor<PendingScheduledMessage>()
         return (try? modelContext.fetchCount(fetch)) ?? 0
     }
