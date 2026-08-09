@@ -1186,18 +1186,18 @@ struct ChatView: View {
             onCopy: { context in
                 UIPasteboard.general.string = context.copyText
             },
-            onReply: { [weak viewModel] in viewModel?.quotedMessage = (
+            onReply: { viewModel.quotedMessage = (
                 messageId: $0.messageID,
                 author: $0.role == .user ? "You" : "Hermes",
                 text: String($0.copyText.prefix(200))
             ) },
-            onForward: { [weak self] in
-                self?.forwardMessageContent = (
+            onForward: {
+                forwardMessageContent = (
                     text: $0.copyText,
                     author: $0.role == .user ? "You" : "Hermes",
                     sessionTitle: "Chat"
                 )
-                self?.showingForwardPicker = true
+                showingForwardPicker = true
             },
             onSave: { context in
                 saveMessage(context)
