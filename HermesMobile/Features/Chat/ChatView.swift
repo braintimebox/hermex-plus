@@ -305,8 +305,6 @@ struct ChatView: View {
     @State private var pendingProfileSelection: ProfileSummary?
     @State private var forwardMessageContent: (text: String, author: String, sessionTitle: String)?
     @State private var showingForwardPicker = false
-    @State private var forwardSessions: [SessionSummary] = []
-    @State private var isLoadingForwardSessions = false
     @State private var showingSchedulePicker = false
     @State private var showProfileNewSessionConfirmation = false
     @State private var goalDraft = ""
@@ -702,27 +700,18 @@ struct ChatView: View {
                 )
             }
             .sheet(isPresented: $showingForwardPicker) {
-                SessionPickerForForward(
-                    sessions: forwardSessions.map {
-                        SessionListItem(id: $0.id ?? $0.sessionId, displayTitle: $0.title ?? "Chat", lastMessagePreview: nil)
-                    }
-                ) { session in
-                    guard let content = forwardMessageContent else { return }
-                    let header = "🔄 Forwarded from «\(content.sessionTitle)» (\(content.author)):\n\n"
-                    let forwarded = header + content.text
-                    draftMessage = forwarded
-                    Task { await sendDraftMessage() }
-                }
-                .task {
-                    isLoadingForwardSessions = true
-                    defer { isLoadingForwardSessions = false }
-                    do {
-                        let response = try await viewModel.client.sessions()
-                        forwardSessions = response.sessions ?? []
-                    } catch {
-                        forwardSessions = []
-                    }
-                }
+                ForwardMessageSheet(
+                    content: forwardMessageContent,
+                    onForward: { text, author, fromTitle, toSessionId in
+                        let header = "🔄 Forwarded from «\(fromTitle)» (\(author)):\n\n"
+                        draftMessage = header + text
+                        Task { await sendDraftMessage() }
+                    },
+                    onDismiss: {
+                        forwardMessageContent = nil
+                    },
+                    client: viewModel.client
+                )
             }
             .sheet(isPresented: $showEditSheet) {
                 EditMessageSheet(
@@ -2239,7 +2228,6 @@ struct ChatView: View {
     private func saveScheduledMessage(at date: Date) {
         guard !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let scheduled = PendingScheduledMessage(
-            scheduleKey: UUID().uuidString,
             sessionId: "",
             draftText: draftMessage,
             scheduledAt: date,

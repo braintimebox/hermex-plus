@@ -322,6 +322,8 @@
 
 		AD3219F55D7245AABDA40840 /* ScheduleMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0D56AAE6D54CFB87EE1EA6 /* ScheduleMessageSheet.swift */; };
 
+		141BD5225986447C930FC68F /* ForwardMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */; };
+
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -675,6 +677,8 @@
 
 		FF0D56AAE6D54CFB87EE1EA6 /* ScheduleMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduleMessageSheet.swift"; sourceTree = "<group>"; };
 
+		58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ForwardMessageSheet.swift"; sourceTree = "<group>"; };
+
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1019,6 +1023,8 @@
 		};
 		1A2B3C4D5E6F7000000000C6 /* Chat */ = {
 			isa = PBXGroup;
+				58C5795665FB47688D8607E7 /* ForwardMessageSheet.swift */,
+
 			children = (
 				1A2B3C4D5E6F7000000000BF /* ChatView.swift */,
 				C05100000000000000000011 /* ChatTranscriptView.swift */,
@@ -1449,6 +1455,8 @@
 		1A2B3C4D5E6F700000000050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
+				141BD5225986447C930FC68F /* ForwardMessageSheet.swift in Sources */,
+
 			files = (
 				1A2B3C4D5E6F700000000001 /* HermesMobileApp.swift in Sources */,
 				1A2B3C4D5E6F700000000002 /* ContentView.swift in Sources */,
