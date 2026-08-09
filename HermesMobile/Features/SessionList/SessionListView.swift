@@ -383,8 +383,11 @@ struct SessionListView: View {
                     actions: sessionRowActions
                 )
             case .saved:
-                SavedMessagesView { sessionId, messageId in
-                    navigationState.selectedSessionID = sessionId
+                SavedMessagesView { sessionId, _ in
+                    selectSession(CachedSession(
+                        serverURLString: server.urlString,
+                        session: SessionSummary(sessionId: sessionId, id: sessionId, title: "Chat")
+                    ))
                 }
             }
         }

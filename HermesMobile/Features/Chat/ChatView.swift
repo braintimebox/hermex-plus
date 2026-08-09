@@ -1202,17 +1202,7 @@ struct ChatView: View {
                 showingForwardPicker = true
             },
             onSave: { context in
-                if let modelContext {
-                    let saved = SavedMessage(
-                        messageId: context.messageID,
-                        sessionId: viewModel.sessionID ?? "",
-                        sessionTitle: viewModel.sessionTitle ?? "Chat",
-                        content: context.copyText,
-                        author: context.role == .user ? "You" : "Hermes",
-                        serverURLString: viewModel.client.baseURLString
-                    )
-                    modelContext.insert(saved)
-                }
+                saveMessage(context)
             },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
@@ -2208,6 +2198,19 @@ struct ChatView: View {
                 isReadingOlderTranscript = false
             }
         }
+    }
+
+    private func saveMessage(_ context: MessageActionContext) {
+        guard let modelContext else { return }
+        let saved = SavedMessage(
+            messageId: context.messageID,
+            sessionId: viewModel.sessionID ?? "",
+            sessionTitle: viewModel.sessionTitle ?? "Chat",
+            content: context.copyText,
+            author: context.role == .user ? "You" : "Hermes",
+            serverURLString: viewModel.client.baseURLString
+        )
+        modelContext.insert(saved)
     }
 
     private func beginEditMessage(_ context: MessageActionContext) {
