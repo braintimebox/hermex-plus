@@ -90,6 +90,7 @@ struct SettingsView: View {
     @AppStorage(SectionVisibilitySettings.insightsKey) private var showsInsightsSection = true
     @AppStorage(SectionVisibilitySettings.activeProfileKey) private var showsActiveProfileSection = true
     @AppStorage(SectionVisibilitySettings.projectsKey) private var showsProjectsSection = true
+    @AppStorage("sidebar_shows_saved_section") private var showsSavedSection = true
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsChatFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsChatGitControls = true
     @Environment(\.modelContext) private var modelContext
@@ -362,6 +363,14 @@ struct SettingsView: View {
                         title: String(localized: "Projects"),
                         systemImage: "folder.badge.gearshape",
                         isOn: $showsProjectsSection
+                    )
+
+                    SettingsDivider()
+
+                    SettingsToggleRow(
+                        title: String(localized: "Saved Messages"),
+                        systemImage: "bookmark.fill",
+                        isOn: $showsSavedSection
                     )
 
                     SettingsFootnote(String(localized: "Turn off the entries you never use to shorten the top of the session list. Each one is the only way into its screen, so turn it back on here when you need it again."))

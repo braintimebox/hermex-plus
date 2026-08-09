@@ -306,6 +306,7 @@ struct ChatView: View {
     @State private var forwardMessageContent: (text: String, author: String, sessionTitle: String)?
     @State private var showingForwardPicker = false
     @State private var showingSchedulePicker = false
+    @State private var showingScheduledList = false
     @State private var showProfileNewSessionConfirmation = false
     @State private var goalDraft = ""
     @State private var showsGoalSheet = false
@@ -359,6 +360,12 @@ struct ChatView: View {
     // Extracted from `body` so the type-checker doesn't have to solve the whole composer
     // call alongside the rest of the screen in one expression (#316 pushed it over the
     // "unable to type-check in reasonable time" limit).
+    private var scheduledMessageCount: Int {
+        guard let modelContext else { return 0 }
+        let fetch = FetchDescriptor<PendingScheduledMessage>()
+        return (try? modelContext.fetchCount(fetch)) ?? 0
+    }
+
     private var messageComposer: some View {
         MessageComposerView(
             draftMessage: $draftMessage,
@@ -410,6 +417,7 @@ struct ChatView: View {
             quotedMessage: viewModel.quotedMessage,
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
+            scheduledCount: scheduledMessageCount,
             onCancel: {
                 Task { await cancelStream() }
             },
@@ -736,6 +744,15 @@ struct ChatView: View {
                         showingSchedulePicker = false
                     },
                     onCancel: { showingSchedulePicker = false }
+                )
+            }
+            .sheet(isPresented: $showingScheduledList) {
+                ScheduledMessagesView(
+                    sessionId: "",
+                    onSendNow: { text in
+                        draftMessage = text
+                        showingScheduledList = false
+                    }
                 )
             }
             .alert(

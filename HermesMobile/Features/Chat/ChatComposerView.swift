@@ -116,6 +116,7 @@ struct MessageComposerView: View {
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
+    let scheduledCount: Int
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -359,12 +360,22 @@ struct MessageComposerView: View {
                         )
 
                         Button(action: actionButtonTapped) {
-                            actionButtonLabel
-                                .frame(width: actionButtonSize, height: actionButtonSize)
-                                .background(actionButtonBackground)
-                                .foregroundStyle(actionButtonForeground)
-                                .clipShape(Circle())
-                                .chatMinimumHitTarget(in: Circle())
+                            ZStack {
+                                actionButtonLabel
+                                    .frame(width: actionButtonSize, height: actionButtonSize)
+                                    .background(actionButtonBackground)
+                                    .foregroundStyle(actionButtonForeground)
+                                    .clipShape(Circle())
+                                    .chatMinimumHitTarget(in: Circle())
+                                
+                                if !showsStopButton && scheduledCount > 0 {
+                                    Image(systemName: "\\(scheduledCount).circle.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.white)
+                                        .background(Circle().fill(.orange).frame(width: 16, height: 16))
+                                        .offset(x: 12, y: -12)
+                                }
+                            }
                         }
                         .buttonStyle(.chatTactile(.icon))
                         .disabled(isActionButtonDisabled)

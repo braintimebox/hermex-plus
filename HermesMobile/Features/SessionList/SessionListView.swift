@@ -384,7 +384,15 @@ struct SessionListView: View {
                     actions: sessionRowActions
                 )
             case .saved:
-                SavedMessagesView { _, _ in }
+                SavedMessagesView { sessionId, messageId in
+                    let summary = SessionSummary(
+                        id: sessionId,
+                        sessionId: sessionId,
+                        title: "Saved",
+                        serverURLString: server.urlString
+                    )
+                    selectSession(summary)
+                }
             }
         }
         .adaptiveSecondaryNavigationTitle()
