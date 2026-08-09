@@ -313,12 +313,6 @@
 		C5A0D8F5502048B6B9258B01 /* InsightsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A0D8F5502048B6B9258B00 /* InsightsViewModelTests.swift */; };
 		105050000000000000000001 /* ComposerModelPickerSectionExpansionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */; };
 		105050000000000000000003 /* ComposerModelPickerSectionExpansionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */; };
-		7E221E8C41FC410F92F4AADF /* SavedMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36AD47AB5EC4C6DABE5E92D /* SavedMessage.swift */; };
-		848DB42E861C4D5A837E8824 /* PendingScheduledMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D63888059FEE47208FDF1D7E /* PendingScheduledMessage.swift */; };
-		C3BBC45135F8466FBACA469D /* QuoteReplyBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A804FFB1B7F4436284E3C398 /* QuoteReplyBanner.swift */; };
-		DA186DD7C45B47359E45C7F6 /* SavedMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3139A89814884153A2079EB0 /* SavedMessagesView.swift */; };
-		B61BB746AE8A4D2B93515869 /* ScheduledMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBD3A53A704349349AE50636 /* ScheduledMessagesView.swift */; };
-		2798AD4C0D164045BAB8D2A0 /* SessionPickerForForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78FEDAECA974023A22FAFAF /* SessionPickerForForward.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -663,12 +657,6 @@
 		FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandAutocompleteView.swift; sourceTree = "<group>"; };
 		105050000000000000000002 /* ComposerModelPickerSectionExpansionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionState.swift; sourceTree = "<group>"; };
 		105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionStateTests.swift; sourceTree = "<group>"; };
-		C36AD47AB5EC4C6DABE5E92D /* SavedMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessage.swift"; sourceTree = "<group>"; };
-		D63888059FEE47208FDF1D7E /* PendingScheduledMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PendingScheduledMessage.swift"; sourceTree = "<group>"; };
-		A804FFB1B7F4436284E3C398 /* QuoteReplyBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QuoteReplyBanner.swift"; sourceTree = "<group>"; };
-		3139A89814884153A2079EB0 /* SavedMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessagesView.swift"; sourceTree = "<group>"; };
-		DBD3A53A704349349AE50636 /* ScheduledMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledMessagesView.swift"; sourceTree = "<group>"; };
-		B78FEDAECA974023A22FAFAF /* SessionPickerForForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionPickerForForward.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -928,8 +916,6 @@
 				1A2B3C4D5E6F70000000201 /* Memory.swift */,
 				1A2B3C4D5E6F70000000211 /* Skills.swift */,
 				C14900000000000000000002 /* Kanban.swift */,
-				C36AD47AB5EC4C6DABE5E92D /* SavedMessage.swift */,
-				D63888059FEE47208FDF1D7E /* PendingScheduledMessage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1074,10 +1060,6 @@
 				1AB43F55AB4F4262963E6A6E /* SlashCommandCatalog.swift */,
 				0D1CE5F12B9E4D4D9E5A01C1 /* SlashCommandExecutor.swift */,
 				FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */,
-				A804FFB1B7F4436284E3C398 /* QuoteReplyBanner.swift */,
-				3139A89814884153A2079EB0 /* SavedMessagesView.swift */,
-				DBD3A53A704349349AE50636 /* ScheduledMessagesView.swift */,
-				B78FEDAECA974023A22FAFAF /* SessionPickerForForward.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -1259,12 +1241,6 @@
 				1A2B3C4D5E6F700000000060 /* Resources */,
 				1A2B3C4D5E6F700000000020 /* Frameworks */,
 				B5A100000000000000000023 /* Embed App Extensions */,
-				7E221E8C41FC410F92F4AADF /* SavedMessage.swift in Sources */,
-				848DB42E861C4D5A837E8824 /* PendingScheduledMessage.swift in Sources */,
-				C3BBC45135F8466FBACA469D /* QuoteReplyBanner.swift in Sources */,
-				DA186DD7C45B47359E45C7F6 /* SavedMessagesView.swift in Sources */,
-				B61BB746AE8A4D2B93515869 /* ScheduledMessagesView.swift in Sources */,
-				2798AD4C0D164045BAB8D2A0 /* SessionPickerForForward.swift in Sources */,
 			);
 			buildRules = (
 			);
