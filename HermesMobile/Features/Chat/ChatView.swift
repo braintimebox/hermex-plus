@@ -2524,7 +2524,7 @@ fileprivate struct ForwardMessageSheet: View {
     var body: some View {
         SessionPickerForForward(
             sessions: sessions.map {
-                SessionListItem(id: $0.id ?? $0.sessionId, displayTitle: $0.title ?? "Chat", lastMessagePreview: nil)
+                SessionListItem(id: ($0.id ?? $0.sessionId) ?? "", displayTitle: $0.title ?? "Chat", lastMessagePreview: nil)
             }
         ) { session in
             guard let content else { return }
