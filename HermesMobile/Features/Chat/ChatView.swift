@@ -2247,7 +2247,7 @@ struct ChatView: View {
         let saved = SavedMessage(
             messageId: context.messageID,
             sessionId: sessionID,
-            sessionTitle: session.title,
+            sessionTitle: session.title ?? "Chat",
             content: context.copyText,
             author: context.role == .user ? "You" : "Hermes",
             serverURLString: server.absoluteString
