@@ -761,7 +761,7 @@ struct ChatView: View {
                 )
             }
             .sheet(isPresented: $showShareSheet) {
-                ShareSheet(items: [shareText])
+                ActivityViewController(activityItems: [shareText])
             }
             .alert(
                 "Discard Later Messages?",
