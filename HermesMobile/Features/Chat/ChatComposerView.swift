@@ -394,14 +394,16 @@ struct MessageComposerView: View {
                         }
 
                         Spacer().frame(width: 2)
-                        .contextMenu {
-                            if !showsStopButton && !isActionButtonDisabled {
-                                Button {
-                                    onSchedule()
-                                } label: {
-                                    Label("Schedule Message", systemImage: "calendar.badge.clock")
-                                }
+                        if !showsStopButton && !isActionButtonDisabled {
+                            Button {
+                                onSchedule()
+                            } label: {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Schedule Message")
                         }
                     }
                     .padding(.horizontal, 16)
