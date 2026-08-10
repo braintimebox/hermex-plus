@@ -71,6 +71,8 @@ struct ChatTranscriptView: View {
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
+    let onPin: ((MessageActionContext) -> Void)?
+    let isMessagePinned: (String) -> Bool
     /// Non-nil shows the inline "Commit & Push" button under the latest assistant turn
     /// (issue #315, Slice C, surface B). Nil hides it (non-git chats, no changes, etc.).
     var inlineCommitContext: ChatInlineCommitContext? = nil
@@ -261,7 +263,9 @@ struct ChatTranscriptView: View {
                     onCopy: onCopy,
                     onReply: onReply,
                     onForward: onForward,
-                    onSave: onSave
+                    onSave: onSave,
+                    onPin: onPin,
+                    isPinned: message.role == .user ? false : isMessagePinned(message.id)
                 )
                 .equatable()
                 .id(transcriptMessage.renderID)
@@ -487,6 +491,8 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
+    let onPin: ((MessageActionContext) -> Void)?
+    let isMessagePinned: (String) -> Bool
 
     // Equality over the value inputs only. The closures are pure functions of
     // these values (e.g. `actionContext` is fully determined by
@@ -556,7 +562,9 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
                     onCopy: onCopy,
                     onReply: onReply,
                     onForward: onForward,
-                    onSave: onSave
+                    onSave: onSave,
+                    onPin: onPin,
+                    isPinned: message.role == .user ? false : isMessagePinned(message.id)
                 )
             }
         }
@@ -643,6 +651,8 @@ private struct ChatTranscriptMessageRow: View {
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
+    let onPin: ((MessageActionContext) -> Void)?
+    let isMessagePinned: (String) -> Bool
 
     var body: some View {
         // Compaction marker messages render as collapsible cards (matching the

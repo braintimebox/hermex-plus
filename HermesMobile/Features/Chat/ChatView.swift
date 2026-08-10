@@ -1125,7 +1125,36 @@ struct ChatView: View {
 
     @ViewBuilder
     private var messageContent: some View {
-        ChatTranscriptView(
+        VStack(spacing: 0) {
+            if let pinnedID = pinnedMessageID,
+               let pinnedMsg = viewModel.messages.first(where: { $0.id == pinnedID }) {
+                Button {
+                    // Scroll to pinned message
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pin.fill")
+                            .font(.caption)
+                        Text(pinnedMsg.content.prefix(80))
+                            .font(.caption)
+                            .lineLimit(1)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button {
+                            pinnedMessageID = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            ChatTranscriptView(
             isLoading: viewModel.isLoading,
             errorMessage: viewModel.errorMessage,
             messages: viewModel.messages,
@@ -1246,6 +1275,16 @@ struct ChatView: View {
             onSave: { context in
                 saveMessage(context)
             },
+            onPin: { context in
+                if pinnedMessageID == context.messageID {
+                    pinnedMessageID = nil
+                } else {
+                    pinnedMessageID = context.messageID
+                }
+            },
+            isMessagePinned: { messageID in
+                pinnedMessageID == messageID
+            },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
                 Task { await performQuickCommit(push: true) }
@@ -1258,6 +1297,7 @@ struct ChatView: View {
                 turnDiffPresentation = .file(file)
             }
         )
+        }
     }
 
     /// The chat-canvas layout direction. Driven by the manual Settings → Chat
