@@ -55,7 +55,7 @@ final class ShareViewController: UIViewController {
 
         HermesShareDraft.saveToPasteboard(draft: draft, attachments: input.attachments)
 
-        openHermes()
+        openHermes(withDraft: draft)
     }
 
     private func showStatus(_ text: String) {
@@ -63,8 +63,8 @@ final class ShareViewController: UIViewController {
         statusLabel.isHidden = false
     }
 
-    private func openHermes() {
-        let url = HermesShareDraft.openURL
+    private func openHermes(withDraft draft: String) {
+        let url = HermesShareDraft.openURL(withDraft: draft)
 
         extensionContext?.open(url, completionHandler: { [weak self] success in
             Task { @MainActor [weak self] in

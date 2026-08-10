@@ -130,14 +130,43 @@ enum HermesShareDraft {
 
     // MARK: - URL
 
-    static var openURL: URL {
+    static func openURL(withDraft draftText: String?) -> URL {
         var components = URLComponents()
         components.scheme = urlScheme
         components.host = shareURLHost
+        
+        if let draft = draftText, !draft.isEmpty {
+            let encoded = draft.data(using: .utf8)?
+                .base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            if let encoded {
+                components.queryItems = [URLQueryItem(name: "d", value: encoded)]
+            }
+        }
+        
         guard let url = components.url else {
             preconditionFailure("Invalid share open URL configuration")
         }
         return url
+    }
+    
+    static func draftFromURL(_ url: URL) -> String? {
+        guard isShareOpenURL(url),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItem = components.queryItems?.first(where: { $0.name == "d" }),
+              let base64url = queryItem.value else { return nil }
+        
+        var base64 = base64url
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64 += "=" }
+        
+        guard let data = Data(base64Encoded: base64),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        
+        return text.isEmpty ? nil : text
     }
 
     static func isShareOpenURL(_ url: URL) -> Bool {

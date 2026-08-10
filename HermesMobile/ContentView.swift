@@ -16,7 +16,6 @@ struct ContentView: View {
             .task {
                 guard !didCheckInitialPendingShare else { return }
                 didCheckInitialPendingShare = true
-                importPendingSharedDraftIfAvailable()
                 // Cold launch: an App Intent may have queued a deep link before this
                 // view appeared (e.g. Action button "New Chat"). Drain it now (#337).
                 drainPendingIntentDeepLink()
@@ -34,7 +33,6 @@ struct ContentView: View {
             }
             .onChange(of: scenePhase) {
                 guard scenePhase == .active else { return }
-                importPendingSharedDraftIfAvailable()
                 // #248: the foreground pass stays silent — the in-session completion
                 // paths own notifications while the app is alive.
                 Task { await reconcileOrphanedLiveActivities(notifiesOnCompletion: false) }
@@ -107,7 +105,14 @@ struct ContentView: View {
             return
         }
 
-        importPendingSharedDraftIfAvailable()
+        // Priority 1: decode draft from URL query parameter (instant, no race)
+        if let urlDraft = HermesShareDraft.draftFromURL(url) {
+            pendingSharedImport = SharedImport(draft: urlDraft, attachments: [])
+            return
+        }
+        
+        // Priority 2: fall back to pasteboard (handles attachments, may need retry)
+        importPendingSharedDraftWithRetry()
     }
 
     /// Routes a deep link queued by an App Intent through the same `handleOpenURL` parser
@@ -122,6 +127,22 @@ struct ContentView: View {
         guard let sharedImport = HermesShareDraft.loadFromPasteboard() else { return }
         HermesShareDraft.clearPasteboard()
         pendingSharedImport = sharedImport
+    }
+    
+    /// Retries pasteboard import with backoff to handle IPC timing gap between
+    /// share extension write and main app read (pasted daemon flushing delay).
+    private func importPendingSharedDraftWithRetry() {
+        Task {
+            let delays: [UInt64] = [50_000_000, 150_000_000, 400_000_000] // 50ms, 150ms, 400ms
+            for delay in delays {
+                if let sharedImport = HermesShareDraft.loadFromPasteboard() {
+                    HermesShareDraft.clearPasteboard()
+                    await MainActor.run { pendingSharedImport = sharedImport }
+                    return
+                }
+                try? await Task.sleep(nanoseconds: delay)
+            }
+        }
     }
 }
 
