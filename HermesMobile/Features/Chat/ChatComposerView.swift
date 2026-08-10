@@ -371,6 +371,26 @@ struct MessageComposerView: View {
                         .buttonStyle(.chatTactile(.icon))
                         .disabled(isActionButtonDisabled)
                         .accessibilityLabel(showsStopButton ? "Stop response" : "Send")
+                        .contextMenu {
+                            if !showsStopButton && !isActionButtonDisabled {
+                                Button {
+                                    actionButtonTapped()
+                                } label: {
+                                    Label("Send", systemImage: "arrow.up.circle.fill")
+                                }
+                                Button {
+                                    onSchedule()
+                                } label: {
+                                    Label("Schedule Message", systemImage: "calendar.badge.plus")
+                                }
+                            } else if showsStopButton {
+                                Button {
+                                    actionButtonTapped()
+                                } label: {
+                                    Label("Stop", systemImage: "stop.circle.fill")
+                                }
+                            }
+                        }
 
                         if !showsStopButton, let onOpenScheduledList {
                             Button {
@@ -391,19 +411,6 @@ struct MessageComposerView: View {
                                         .offset(x: 6, y: -4)
                                 }
                             }
-                        }
-
-                        Spacer().frame(width: 2)
-                        if !showsStopButton && !isActionButtonDisabled {
-                            Button {
-                                onSchedule()
-                            } label: {
-                                Image(systemName: "calendar.badge.plus")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Schedule Message")
                         }
                     }
                     .padding(.horizontal, 16)
