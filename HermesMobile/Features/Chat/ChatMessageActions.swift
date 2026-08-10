@@ -28,8 +28,6 @@ struct ChatMessageActionMenu: View {
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
-    let onPin: ((MessageActionContext) -> Void)?
-    let isPinned: Bool
 
     var body: some View {
         if context.role == .assistant {
@@ -94,14 +92,6 @@ struct ChatMessageActionMenu: View {
             onSave(context)
         } label: {
             Label("Save", systemImage: "bookmark")
-        }
-        
-        if let onPin {
-            Button {
-                onPin(context)
-            } label: {
-                Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
-            }
         }
     }
 

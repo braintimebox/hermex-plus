@@ -325,10 +325,6 @@ struct ChatView: View {
     @State private var didApplyInitialComposerFocusPolicy = false
     @State private var shouldRestoreComposerFocusAfterPreview = false
     @State private var responseCompletionNotificationTracker = ResponseCompletionNotificationTracker()
-    
-    // MARK: - Pin
-    @State private var pinnedMessageID: String?
-    @AppStorage("pinnedMessages") private var pinnedMessagesData: Data = Data()
     @State private var responseCompletionBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     @State private var activeStreamStatusRefreshTask: Task<Void, Never>?
     @State private var initialAttachments: [SharedAttachmentImport]
