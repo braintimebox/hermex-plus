@@ -2258,7 +2258,7 @@ struct ChatView: View {
     private func saveScheduledMessage(text: String, at date: Date) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let scheduled = PendingScheduledMessage(
-            sessionId: session?.sessionId ?? sessionID ?? "",
+            sessionId: session.sessionId ?? "",
             draftText: text,
             scheduledAt: date,
             serverURLString: ""
