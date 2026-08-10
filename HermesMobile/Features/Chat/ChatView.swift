@@ -1246,10 +1246,6 @@ struct ChatView: View {
             onSave: { context in
                 saveMessage(context)
             },
-            onShare: { context in
-                shareText = context.copyText
-                showShareSheet = true
-            },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
                 Task { await performQuickCommit(push: true) }
@@ -2247,10 +2243,11 @@ struct ChatView: View {
     }
 
     private func saveMessage(_ context: MessageActionContext) {
+        let sessionID = session.sessionId ?? ""
         let saved = SavedMessage(
             messageId: context.messageID,
             sessionId: sessionID,
-            sessionTitle: session?.title ?? "Chat",
+            sessionTitle: session.title,
             content: context.copyText,
             author: context.role == .user ? "You" : "Hermes",
             serverURLString: server.absoluteString
@@ -2572,4 +2569,17 @@ fileprivate struct ForwardMessageSheet: View {
             }
         }
     }
+}
+
+
+// MARK: - System Share Sheet (inlined — fileprivate to avoid pbxproj changes)
+
+private struct ActivityViewController: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
