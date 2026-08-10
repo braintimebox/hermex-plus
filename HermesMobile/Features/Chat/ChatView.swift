@@ -744,8 +744,8 @@ struct ChatView: View {
             .sheet(isPresented: $showingSchedulePicker) {
                 ScheduleMessageSheet(
                     draftMessage: draftMessage,
-                    onSchedule: { date in
-                        saveScheduledMessage(at: date)
+                    onSchedule: { date, text in
+                        saveScheduledMessage(text: text, at: date)
                         showingSchedulePicker = false
                     },
                     onCancel: { showingSchedulePicker = false }
@@ -2255,11 +2255,11 @@ struct ChatView: View {
         modelContext.insert(saved)
     }
 
-    private func saveScheduledMessage(at date: Date) {
-        guard !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    private func saveScheduledMessage(text: String, at date: Date) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let scheduled = PendingScheduledMessage(
-            sessionId: "",
-            draftText: draftMessage,
+            sessionId: session?.sessionId ?? sessionID ?? "",
+            draftText: text,
             scheduledAt: date,
             serverURLString: ""
         )
@@ -2505,14 +2505,25 @@ private extension SlashCommandExecutionResult {
 
 struct ScheduleMessageSheet: View {
     let draftMessage: String
-    let onSchedule: (Date) -> Void
+    let onSchedule: (Date, String) -> Void
     let onCancel: () -> Void
 
+    @State private var messageText: String = ""
     @State private var scheduledDate = Date().addingTimeInterval(3600)
+    @State private var showEmptyAlert = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
+                TextEditor(text: $messageText)
+                    .font(.body)
+                    .frame(minHeight: 80)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal)
+
                 DatePicker(
                     "Send at",
                     selection: $scheduledDate,
@@ -2521,13 +2532,7 @@ struct ScheduleMessageSheet: View {
                 )
                 .datePickerStyle(.wheel)
                 .labelsHidden()
-                .padding()
-
-                Text(draftMessage)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .lineLimit(3)
-                    .padding(.horizontal)
+                .padding(.horizontal)
             }
             .navigationTitle("Schedule Message")
             .navigationBarTitleDisplayMode(.inline)
@@ -2536,9 +2541,21 @@ struct ScheduleMessageSheet: View {
                     Button("Cancel") { onCancel() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Schedule") { onSchedule(scheduledDate) }
+                    Button("Schedule") {
+                        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                            showEmptyAlert = true
+                            return
+                        }
+                        onSchedule(scheduledDate, messageText)
+                    }
                 }
             }
+            .alert("Message text cannot be empty", isPresented: $showEmptyAlert) {
+                Button("OK", role: .cancel) {}
+            }
+        }
+        .onAppear {
+            messageText = draftMessage
         }
         .presentationDetents([.medium])
     }
