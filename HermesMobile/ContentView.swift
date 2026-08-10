@@ -119,17 +119,9 @@ struct ContentView: View {
     }
 
     private func importPendingSharedDraftIfAvailable() {
-        guard let directory = HermesShareDraft.containerURL() else {
-            return
-        }
-
-        do {
-            if let sharedImport = try HermesShareDraft.loadPendingImport(from: directory) {
-                pendingSharedImport = sharedImport
-            }
-        } catch {
-            pendingSharedImport = nil
-        }
+        guard let sharedImport = HermesShareDraft.loadFromPasteboard() else { return }
+        HermesShareDraft.clearPasteboard()
+        pendingSharedImport = sharedImport
     }
 }
 

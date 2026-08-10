@@ -623,9 +623,12 @@ struct ChatView: View {
             .onDisappear {
                 activeStreamStatusRefreshTask?.cancel()
                 activeStreamStatusRefreshTask = nil
-                viewModel.stopListening()
                 viewModel.suspendStreamForNavigation()
                 viewModel.cleanupPollingTasks()
+                // Defer audio teardown off the dismiss animation path — avoids
+                // blocking the navigation pop for ~0.5s while AVAudioPlayer /
+                // AVSpeechSynthesizer release their resources.
+                Task { viewModel.stopListening() }
             }
             .onAppear {
                 Task {

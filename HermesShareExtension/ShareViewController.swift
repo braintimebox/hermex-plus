@@ -53,19 +53,7 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        guard let directory = HermesShareDraft.containerURL() else {
-            showStatus("Could not access Hermex storage.")
-            completeRequest(after: 0.8)
-            return
-        }
-
-        do {
-            try HermesShareDraft.savePendingImport(draft: draft, attachments: input.attachments, in: directory)
-        } catch {
-            showStatus("Could not save shared content.")
-            completeRequest(after: 0.8)
-            return
-        }
+        HermesShareDraft.saveToPasteboard(draft: draft, attachments: input.attachments)
 
         openHermes()
     }

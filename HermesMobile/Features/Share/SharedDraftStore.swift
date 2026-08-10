@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct SharedDraftPayload: Codable, Equatable {
     let draft: String
@@ -54,6 +55,79 @@ enum HermesShareDraft {
     static let shareURLHost = "share"
     static let maximumSharedAttachmentBytes = 20 * 1_024 * 1_024
     static let maximumSharedAttachmentCount = 10
+
+    // MARK: - Pasteboard Sharing (no App Groups entitlement required)
+
+    /// Named pasteboard for share-extension-to-app communication.
+    /// Named pasteboards do NOT trigger the iOS 14+ privacy banner (only `.general` does).
+    private static let sharePasteboardName = "com.uzairansar.hermesmobile.share.inbox"
+
+    /// Saves draft text and attachments to a named pasteboard.
+    /// Item 0 = draft text ("public.utf8-plain-text"), items 1+ = attachment data ("public.data").
+    static func saveToPasteboard(draft: String, attachments: [SharedAttachmentImport]) {
+        guard let pb = UIPasteboard(name: .init(sharePasteboardName), create: true) else { return }
+
+        let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cappedAttachments = attachments
+            .filter { !$0.data.isEmpty && $0.data.count <= maximumSharedAttachmentBytes }
+            .prefix(maximumSharedAttachmentCount)
+
+        guard !trimmedDraft.isEmpty || !cappedAttachments.isEmpty else { return }
+
+        var items: [[String: Any]] = []
+
+        // Item 0: draft text
+        if !trimmedDraft.isEmpty {
+            items.append(["public.utf8-plain-text": trimmedDraft])
+        }
+
+        // Items 1...N: attachment data + filename
+        for attachment in cappedAttachments {
+            let safeFilename = sanitizedFilename(attachment.filename)
+            items.append([
+                "public.data": attachment.data,
+                "public.filename": safeFilename
+            ])
+        }
+
+        pb.setItems(items, options: [:])
+    }
+
+    /// Reads a pending shared draft from the pasteboard. Returns nil if the pasteboard
+    /// doesn't exist or contains no items.
+    static func loadFromPasteboard() -> SharedImport? {
+        guard let pb = UIPasteboard(name: .init(sharePasteboardName), create: false),
+              let items = pb.items, !items.isEmpty else {
+            return nil
+        }
+
+        var draft = ""
+        var attachments: [SharedAttachmentImport] = []
+
+        for item in items {
+            if let text = item["public.utf8-plain-text"] as? String, draft.isEmpty {
+                draft = text
+            } else if let data = item["public.data"] as? Data {
+                let filename = item["public.filename"] as? String ?? "shared-file"
+                attachments.append(SharedAttachmentImport(
+                    filename: sanitizedFilename(filename),
+                    typeIdentifier: nil,
+                    data: data
+                ))
+            }
+        }
+
+        let shared = SharedImport(draft: draft, attachments: attachments)
+        return shared.isEmpty ? nil : shared
+    }
+
+    /// Clears the share pasteboard after the main app has consumed its contents.
+    static func clearPasteboard() {
+        guard let pb = UIPasteboard(name: .init(sharePasteboardName), create: false) else { return }
+        pb.items = []
+    }
+
+    // MARK: - URL
 
     static var openURL: URL {
         var components = URLComponents()
