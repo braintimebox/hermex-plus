@@ -97,9 +97,10 @@ enum HermesShareDraft {
     /// doesn't exist or contains no items.
     static func loadFromPasteboard() -> SharedImport? {
         guard let pb = UIPasteboard(name: .init(sharePasteboardName), create: false),
-              let items = pb.items, !items.isEmpty else {
+              !pb.items.isEmpty else {
             return nil
         }
+        let items = pb.items
 
         var draft = ""
         var attachments: [SharedAttachmentImport] = []
