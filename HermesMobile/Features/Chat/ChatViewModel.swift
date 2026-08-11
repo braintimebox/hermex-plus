@@ -232,11 +232,6 @@ final class ChatViewModel {
     var activeStreamID: String? { streamCoordinator.activeStreamID }
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
-    private(set) var errorMessage: String?
-    private(set) var sendErrorMessage: String?
-    private(set) var messageActionErrorMessage: String?
-    private(set) var cacheErrorMessage: String?
-    private(set) var lastError: Error?
     private(set) var displayTitle: String
     private(set) var listeningMessageID: String?
     private(set) var streamingScrollTrigger = 0
@@ -395,18 +390,6 @@ final class ChatViewModel {
     var attachmentUploadGeneration: Int { attachmentCoordinator.uploadStartGeneration }
     var uploadAttachmentErrorMessage: String? { attachmentCoordinator.uploadAttachmentErrorMessage }
     var localAttachmentPreviews: [String: [String: Data]] { attachmentCoordinator.localAttachmentPreviews }
-    private(set) var pinnedLocalNotices: [String] = []
-    var approvalPrompt: ApprovalPromptState? { pendingActionCoordinator.approvalPrompt }
-    var isRespondingToApproval: Bool { pendingActionCoordinator.isRespondingToApproval }
-    var approvalErrorMessage: String? { pendingActionCoordinator.approvalErrorMessage }
-    var isSessionApprovalBypassEnabled: Bool { pendingActionCoordinator.isSessionApprovalBypassEnabled }
-    var clarificationPrompt: ClarificationPromptState? { pendingActionCoordinator.clarificationPrompt }
-    var isRespondingToClarification: Bool { pendingActionCoordinator.isRespondingToClarification }
-    var clarificationErrorMessage: String? { pendingActionCoordinator.clarificationErrorMessage }
-    private(set) var currentGoal: SubmittedGoal?
-    private(set) var isSubmittingGoal = false
-    private(set) var goalErrorMessage: String?
-    private(set) var hasActivatedGoalCommand = false
 
     private let sessionID: String?
     private var currentWorkspace: String?
@@ -427,6 +410,7 @@ final class ChatViewModel {
     /// Extracted into a separate @Observable so streaming message updates don't invalidate
     /// the composer UI (which reads modelCatalogGroups, profileOptions, etc.).
     let composer = ChatComposerState()
+    let actions = ChatActionsState()
 
     // MARK: - Composer delegates (backward-compat during migration)
 
@@ -495,6 +479,57 @@ final class ChatViewModel {
         set { composer.composerConfigurationErrorMessage = newValue }
     }
     var showsReasoningEffortControl: Bool { composer.showsReasoningEffortControl }
+
+    // MARK: - Actions delegates
+
+    var errorMessage: String? {
+        get { actions.errorMessage }
+        set { actions.errorMessage = newValue }
+    }
+    var sendErrorMessage: String? {
+        get { actions.sendErrorMessage }
+        set { actions.sendErrorMessage = newValue }
+    }
+    var messageActionErrorMessage: String? {
+        get { actions.messageActionErrorMessage }
+        set { actions.messageActionErrorMessage = newValue }
+    }
+    var cacheErrorMessage: String? {
+        get { actions.cacheErrorMessage }
+        set { actions.cacheErrorMessage = newValue }
+    }
+    var lastError: Error? {
+        get { actions.lastError }
+        set { actions.lastError = newValue }
+    }
+    var currentGoal: SubmittedGoal? {
+        get { actions.currentGoal }
+        set { actions.currentGoal = newValue }
+    }
+    var isSubmittingGoal: Bool {
+        get { actions.isSubmittingGoal }
+        set { actions.isSubmittingGoal = newValue }
+    }
+    var goalErrorMessage: String? {
+        get { actions.goalErrorMessage }
+        set { actions.goalErrorMessage = newValue }
+    }
+    var hasActivatedGoalCommand: Bool {
+        get { actions.hasActivatedGoalCommand }
+        set { actions.hasActivatedGoalCommand = newValue }
+    }
+    var pinnedLocalNotices: [String] {
+        get { actions.pinnedLocalNotices }
+        set { actions.pinnedLocalNotices = newValue }
+    }
+    var approvalPrompt: ApprovalPromptState? { actions.approvalPrompt }
+    var isRespondingToApproval: Bool { actions.isRespondingToApproval }
+    var approvalErrorMessage: String? { actions.approvalErrorMessage }
+    var isSessionApprovalBypassEnabled: Bool { actions.isSessionApprovalBypassEnabled }
+    var clarificationPrompt: ClarificationPromptState? { actions.clarificationPrompt }
+    var isRespondingToClarification: Bool { actions.isRespondingToClarification }
+    var clarificationErrorMessage: String? { actions.clarificationErrorMessage }
+
     private let listenAudioSession: any ListenAudioSessionControlling
     private let listenRemoteControlCenter: any ListenRemoteControlControlling
     private let userDefaults: UserDefaults
@@ -610,6 +645,7 @@ final class ChatViewModel {
             clarifyStreamClient: clarifyStreamClient ?? SSEClient(),
             pollingIntervals: pollingIntervals
         )
+        actions.pendingActionCoordinator = pendingActionCoordinator
         self.attachmentCoordinator = ChatAttachmentCoordinator(client: resolvedClient)
         self.btwStreamClient = btwStreamClient ?? SSEClient()
         self.liveActivityManager = resolvedLiveActivityManager
@@ -5900,4 +5936,61 @@ private final class SpeechSynthesizerDelegate: NSObject, AVSpeechSynthesizerDele
             onFinished(utteranceID)
         }
     }
+}
+
+// MARK: - ChatComposerState
+
+/// Composer state extracted from ChatViewModel.
+@Observable
+final class ChatComposerState {
+    var quotedMessage: (messageId: String, author: String, text: String)? = nil
+    var modelCatalogGroups: [ModelCatalogGroup] = []
+    var isLoadingComposerConfiguration = false
+    var isUpdatingComposerConfiguration = false
+    var composerConfigurationErrorMessage: String?
+    var profileOptions: [ProfileSummary] = []
+    var isSingleProfileMode = false
+    var selectedProfileName: String?
+    var selectedReasoningEffort: String?
+    var supportedReasoningEfforts: [String]?
+    var supportsReasoningEffort: Bool?
+    var workspaceRoots: [WorkspaceRoot] = []
+    var workspaceSuggestions: [String] = []
+    var agentCommands: [AgentCommand] = []
+    var personalitySuggestions: [String] = ["none"]
+    var skillSlashSuggestions: [SkillSlashSuggestion] = []
+
+    var showsReasoningEffortControl: Bool {
+        ReasoningEffortOption.showsEffortControl(
+            supportsReasoningEffort: supportsReasoningEffort,
+            supportedEfforts: supportedReasoningEfforts
+        )
+    }
+}
+
+// MARK: - ChatActionsState
+
+/// Actions state extracted from ChatViewModel.
+@Observable
+final class ChatActionsState {
+    var errorMessage: String?
+    var sendErrorMessage: String?
+    var messageActionErrorMessage: String?
+    var cacheErrorMessage: String?
+    var lastError: Error?
+    var currentGoal: SubmittedGoal?
+    var isSubmittingGoal = false
+    var goalErrorMessage: String?
+    var hasActivatedGoalCommand = false
+    var pinnedLocalNotices: [String] = []
+
+    weak var pendingActionCoordinator: ChatPendingActionCoordinator?
+
+    var approvalPrompt: ApprovalPromptState? { pendingActionCoordinator?.approvalPrompt }
+    var isRespondingToApproval: Bool { pendingActionCoordinator?.isRespondingToApproval ?? false }
+    var approvalErrorMessage: String? { pendingActionCoordinator?.approvalErrorMessage }
+    var isSessionApprovalBypassEnabled: Bool { pendingActionCoordinator?.isSessionApprovalBypassEnabled ?? false }
+    var clarificationPrompt: ClarificationPromptState? { pendingActionCoordinator?.clarificationPrompt }
+    var isRespondingToClarification: Bool { pendingActionCoordinator?.isRespondingToClarification ?? false }
+    var clarificationErrorMessage: String? { pendingActionCoordinator?.clarificationErrorMessage }
 }
