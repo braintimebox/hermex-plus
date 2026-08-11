@@ -1137,13 +1137,10 @@ final class SessionListViewModel {
     /// Called on app foreground and periodically.
     func dispatchDueScheduledMessages(modelContext: ModelContext) async {
         let now = Date()
-        let descriptor = FetchDescriptor<PendingScheduledMessage>(
-            predicate: #Predicate { $0.scheduledAt <= now }
-        )
-
-        guard let dueMessages = try? modelContext.fetch(descriptor), !dueMessages.isEmpty else {
-            return
-        }
+        let descriptor = FetchDescriptor<PendingScheduledMessage>()
+        let allMessages = (try? modelContext.fetch(descriptor)) ?? []
+        let dueMessages = allMessages.filter { $0.scheduledAt <= now }
+        guard !dueMessages.isEmpty else { return }
 
         for message in dueMessages {
             let serverURLString = message.serverURLString
