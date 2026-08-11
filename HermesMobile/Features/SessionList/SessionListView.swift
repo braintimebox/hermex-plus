@@ -206,7 +206,7 @@ struct SessionListView: View {
                 AddServerView(authManager: authManager)
             }
             .sheet(isPresented: $showingChatSchedulePicker) {
-                ScheduleMessageSheet(draftMessage: "") { date, text in
+                ScheduleMessageSheet(draftMessage: "") { date, text, _ in
                     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                     modelContext.insert(
                         PendingScheduledMessage(

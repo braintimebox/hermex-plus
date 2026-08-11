@@ -364,7 +364,10 @@ struct ChatView: View {
     // call alongside the rest of the screen in one expression (#316 pushed it over the
     // "unable to type-check in reasonable time" limit).
     private var scheduledMessageCount: Int {
-        let fetch = FetchDescriptor<PendingScheduledMessage>()
+        let sessionID = session.sessionId ?? ""
+        guard !sessionID.isEmpty else { return 0 }
+        var fetch = FetchDescriptor<PendingScheduledMessage>()
+        fetch.predicate = #Predicate { $0.sessionId == sessionID }
         return (try? modelContext.fetchCount(fetch)) ?? 0
     }
 
@@ -745,8 +748,9 @@ struct ChatView: View {
             .sheet(isPresented: $showingSchedulePicker) {
                 ScheduleMessageSheet(
                     draftMessage: draftMessage,
-                    onSchedule: { date, text in
-                        saveScheduledMessage(text: text, at: date)
+                    chatTitle: displayTitle,
+                    onSchedule: { date, text, attachToChat in
+                        saveScheduledMessage(text: text, at: date, attachToChat: attachToChat)
                         showingSchedulePicker = false
                     },
                     onCancel: { showingSchedulePicker = false }
@@ -1426,6 +1430,9 @@ struct ChatView: View {
     }
 
     private func handleInitialAppearanceTask() async {
+        // Let the navigation push animation complete before touching
+        // synchronous SwiftData / CacheStore reads.
+        await Task.yield()
         prepareInitialAppearance()
 
         guard ChatInitialAppearancePolicy.shouldBeginAsyncWork(
@@ -1971,6 +1978,7 @@ struct ChatView: View {
             endResponseCompletionBackgroundTask()
             Task {
                 await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)
+                await viewModel.refreshApprovalBypassState()
 
                 if let lastError = viewModel.lastError {
                     onAPIError(lastError)
@@ -1994,12 +2002,13 @@ struct ChatView: View {
                 endResponseCompletionBackgroundTask()
             }
 
-            // The agent may have edited files this turn, so refresh git state (status,
-            // ahead/behind, branch) once the response finishes — keeps the toolbar badge,
-            // Changes row, and commit surfaces in sync without re-entering the chat.
-            // Run unconditionally: refreshAfterExternalMutation re-checks /api/git-info first,
-            // so it also detects a repo the agent just created (git init/clone) mid-turn.
-            Task { await gitAvailabilityViewModel.refreshAfterExternalMutation() }
+            // Stream ended while user was away — reload transcript + approvals
+            // so the chat is up-to-date when they return.
+            Task {
+                await loadMessages()
+                await gitAvailabilityViewModel.refreshAfterExternalMutation()
+                await viewModel.refreshApprovalBypassState()
+            }
             return
         }
 
@@ -2295,16 +2304,46 @@ struct ChatView: View {
         modelContext.insert(saved)
     }
 
-    private func saveScheduledMessage(text: String, at date: Date) {
+    private func saveScheduledMessage(text: String, at date: Date, attachToChat: Bool = true) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let scheduled = PendingScheduledMessage(
-            sessionId: session.sessionId ?? "",
+            sessionId: attachToChat ? (session.sessionId ?? "") : "",
+            sessionTitle: attachToChat ? displayTitle : nil,
             draftText: text,
             scheduledAt: date,
             serverURLString: server.absoluteString
         )
-        modelContext.insert(scheduled)
+        modelContext.insert(saved)
         draftMessage = ""
+        // Sync to server for autonomous dispatch
+        Task.detached(priority: .background) { [payload = scheduled] in
+            await syncScheduledMessageToServer(payload)
+        }
+    }
+
+    private func syncScheduledMessageToServer(_ msg: PendingScheduledMessage) async {
+        guard let serverURL = URL(string: msg.serverURLString) else { return }
+        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
+        let body: [String: Any] = [
+            "scheduleKey": msg.scheduleKey,
+            "sessionId": msg.sessionId,
+            "sessionTitle": msg.sessionTitle as Any,
+            "text": msg.draftText,
+            "scheduledAt": msg.scheduledAt.timeIntervalSince1970,
+        ]
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 10
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                print("[ScheduledMessage] sync failed: HTTP \(httpResponse.statusCode)")
+            }
+        } catch {
+            print("[ScheduledMessage] sync error: \(error.localizedDescription)")
+        }
     }
 
     private func beginEditMessage(_ context: MessageActionContext) {
@@ -2545,12 +2584,27 @@ private extension SlashCommandExecutionResult {
 
 struct ScheduleMessageSheet: View {
     let draftMessage: String
-    let onSchedule: (Date, String) -> Void
+    let chatTitle: String?
+    let onSchedule: (Date, String, Bool) -> Void
     let onCancel: () -> Void
 
     @State private var messageText: String = ""
     @State private var scheduledDate = Date().addingTimeInterval(3600)
+    @State private var attachToChat: Bool
     @State private var showEmptyAlert = false
+
+    init(
+        draftMessage: String,
+        chatTitle: String? = nil,
+        onSchedule: @escaping (Date, String, Bool) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.draftMessage = draftMessage
+        self.chatTitle = chatTitle
+        self.onSchedule = onSchedule
+        self.onCancel = onCancel
+        _attachToChat = State(initialValue: chatTitle != nil)
+    }
 
     var body: some View {
         NavigationStack {
@@ -2573,6 +2627,12 @@ struct ScheduleMessageSheet: View {
                 .datePickerStyle(.wheel)
                 .labelsHidden()
                 .padding(.horizontal)
+
+                if let title = chatTitle {
+                    Toggle("Attach to \u{201C}\(title)\u{201D}", isOn: $attachToChat)
+                        .font(.subheadline)
+                        .padding(.horizontal)
+                }
             }
             .navigationTitle("Schedule Message")
             .navigationBarTitleDisplayMode(.inline)
@@ -2586,7 +2646,7 @@ struct ScheduleMessageSheet: View {
                             showEmptyAlert = true
                             return
                         }
-                        onSchedule(scheduledDate, messageText)
+                        onSchedule(scheduledDate, messageText, attachToChat)
                     }
                 }
             }

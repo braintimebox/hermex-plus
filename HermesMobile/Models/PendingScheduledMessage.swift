@@ -5,6 +5,7 @@ import SwiftData
 final class PendingScheduledMessage {
     @Attribute(.unique) var scheduleKey: String
     var sessionId: String
+    var sessionTitle: String?
     var draftText: String
     var scheduledAt: Date
     var createdAt: Date
@@ -12,6 +13,7 @@ final class PendingScheduledMessage {
 
     init(
         sessionId: String,
+        sessionTitle: String? = nil,
         draftText: String,
         scheduledAt: Date,
         serverURLString: String,
@@ -19,6 +21,7 @@ final class PendingScheduledMessage {
     ) {
         self.scheduleKey = "\(sessionId)|\(scheduledAt.timeIntervalSince1970)"
         self.sessionId = sessionId
+        self.sessionTitle = sessionTitle
         self.draftText = draftText
         self.scheduledAt = scheduledAt
         self.createdAt = createdAt

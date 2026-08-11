@@ -37,9 +37,21 @@ struct ScheduledMessagesView: View {
                         ForEach(messages) { msg in
                             ScheduledMessageRow(
                                 text: msg.draftText,
+                                sessionTitle: msg.sessionTitle,
+                                sessionId: msg.sessionId,
+                                scheduleKey: msg.scheduleKey,
+                                serverURLString: msg.serverURLString,
                                 scheduledAt: msg.scheduledAt,
                                 onSendNow: { onSendNow(msg.draftText) },
-                                onDelete: { modelContext.delete(msg) }
+                                onDelete: {
+                                    modelContext.delete(msg)
+                                    Task.detached(priority: .background) {
+                                        await deleteScheduledFromServer(
+                                            scheduleKey: msg.scheduleKey,
+                                            serverURLString: msg.serverURLString
+                                        )
+                                    }
+                                }
                             )
                         }
                     }
@@ -49,19 +61,49 @@ struct ScheduledMessagesView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
     }
+
+    private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {
+        guard !serverURLString.isEmpty,
+              let serverURL = URL(string: serverURLString) else { return }
+        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
+        let body = ["scheduleKey": scheduleKey]
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 10
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                print("[ScheduledMessage] deleted from server: \(scheduleKey)")
+            }
+        } catch {
+            print("[ScheduledMessage] delete sync error: \(error.localizedDescription)")
+        }
+    }
 }
 
 private struct ScheduledMessageRow: View {
     let text: String
+    let sessionTitle: String?
+    let sessionId: String
+    let scheduleKey: String
+    let serverURLString: String
     let scheduledAt: Date
     let onSendNow: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let title = sessionTitle, !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.accentColor)
+            }
+
             Text(text)
                 .font(.subheadline)
-                .lineLimit(2)
+                .lineLimit(3)
 
             Text("Scheduled for \(scheduledAt, style: .date) at \(scheduledAt, style: .time)")
                 .font(.caption)

@@ -360,6 +360,25 @@ struct MessageComposerView: View {
                             }
                         )
 
+                        if !showsStopButton, let onOpenScheduledList, scheduledCount > 0 {
+                            Button {
+                                onOpenScheduledList()
+                            } label: {
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.title3)
+                                    .foregroundStyle(.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .topTrailing) {
+                                Text("\(scheduledCount)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(3)
+                                    .background(Circle().fill(.orange))
+                                    .offset(x: 6, y: -4)
+                            }
+                        }
+
                         Button(action: actionButtonTapped) {
                             actionButtonLabel
                                 .frame(width: actionButtonSize, height: actionButtonSize)
@@ -388,27 +407,6 @@ struct MessageComposerView: View {
                                     actionButtonTapped()
                                 } label: {
                                     Label("Stop", systemImage: "stop.circle.fill")
-                                }
-                            }
-                        }
-
-                        if !showsStopButton, let onOpenScheduledList {
-                            Button {
-                                onOpenScheduledList()
-                            } label: {
-                                Image(systemName: "calendar.badge.clock")
-                                    .font(.title3)
-                                    .foregroundStyle(scheduledCount > 0 ? .orange : .secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .overlay(alignment: .topTrailing) {
-                                if scheduledCount > 0 {
-                                    Text("\(scheduledCount)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(3)
-                                        .background(Circle().fill(.orange))
-                                        .offset(x: 6, y: -4)
                                 }
                             }
                         }

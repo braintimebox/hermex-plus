@@ -253,9 +253,12 @@ final class ChatViewModel {
     @ObservationIgnored private var pendingStreamingContentFlushTask: Task<Void, Never>?
     private(set) var completedToolCallGroups: [ToolCallGroup] = []
     private var completedToolCallGroupLookup = ToolCallGroupAnchorLookup()
-    private(set) var completedReasoningGroups: [ReasoningGroup] = []
-    var displayedReasoningGroups: [ReasoningGroup] {
-        Self.reasoningDisplayGroups(
+    private(set) var completedReasoningGroups: [ReasoningGroup] = [] {
+        didSet { recomputeDisplayedReasoningGroups() }
+    }
+    private(set) var displayedReasoningGroups: [ReasoningGroup] = []
+    private func recomputeDisplayedReasoningGroups() {
+        displayedReasoningGroups = Self.reasoningDisplayGroups(
             messages: messages,
             messageOffset: messagesOffset,
             archivedGroups: completedReasoningGroups
