@@ -2313,7 +2313,7 @@ struct ChatView: View {
             scheduledAt: date,
             serverURLString: server.absoluteString
         )
-        modelContext.insert(saved)
+        modelContext.insert(scheduled)
         draftMessage = ""
         // Sync to server for autonomous dispatch
         Task.detached(priority: .background) { [payload = scheduled] in
