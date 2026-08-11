@@ -338,6 +338,15 @@ final class ChatViewModel {
     }
     private(set) var hasOlderMessages = false
     private(set) var contextWindowSnapshot: ContextWindowSnapshot?
+    /// Drops out-of-order reasoning response after model switches.
+    private var reasoningGatingFetchToken = 0
+
+    // Internal streaming state — kept on ChatViewModel for actor isolation
+    @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
+    @ObservationIgnored var pendingAssistantTokenChunks: [String] = []
+    @ObservationIgnored var pendingReasoningChunks: [String] = []
+    @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
+    var hasPrimedInitialCachedMessages = false
     var pendingAttachments: [PendingAttachment] { attachmentCoordinator.pendingAttachments }
     var isUploadingAttachment: Bool { attachmentCoordinator.isUploadingAttachment }
     var attachmentUploadCount: Int { attachmentCoordinator.uploadInFlightCount }
@@ -522,27 +531,6 @@ final class ChatViewModel {
     var responseCompletionNeedsTranscriptRefresh: Bool {
         get { stream.responseCompletionNeedsTranscriptRefresh }
         set { stream.responseCompletionNeedsTranscriptRefresh = newValue }
-    }
-    // Internal streaming state — not observed by views
-    @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>? {
-        get { stream.pendingStreamingScrollTriggerTask }
-        set { stream.pendingStreamingScrollTriggerTask = newValue }
-    }
-    @ObservationIgnored var pendingAssistantTokenChunks: [String] {
-        get { stream.pendingAssistantTokenChunks }
-        set { stream.pendingAssistantTokenChunks = newValue }
-    }
-    @ObservationIgnored var pendingReasoningChunks: [String] {
-        get { stream.pendingReasoningChunks }
-        set { stream.pendingReasoningChunks = newValue }
-    }
-    @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>? {
-        get { stream.pendingStreamingContentFlushTask }
-        set { stream.pendingStreamingContentFlushTask = newValue }
-    }
-    @ObservationIgnored var hasPrimedInitialCachedMessages: Bool {
-        get { stream.hasPrimedInitialCachedMessages }
-        set { stream.hasPrimedInitialCachedMessages = newValue }
     }
 
     private let listenAudioSession: any ListenAudioSessionControlling
@@ -6025,10 +6013,4 @@ final class ChatStreamState {
     var cacheFirstReconcileScrollToken = 0
     var responseCompletionHapticTrigger = 0
     var responseCompletionNeedsTranscriptRefresh = false
-
-    @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
-    @ObservationIgnored var pendingAssistantTokenChunks: [String] = []
-    @ObservationIgnored var pendingReasoningChunks: [String] = []
-    @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
-    @ObservationIgnored var hasPrimedInitialCachedMessages = false
 }
