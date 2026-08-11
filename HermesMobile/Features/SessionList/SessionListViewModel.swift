@@ -1131,4 +1131,58 @@ final class SessionListViewModel {
         return urlError.code == .cancelled
     }
 
+    // MARK: - Scheduled Message Dispatch
+
+    /// Checks SwiftData for due scheduled messages and sends them via the API.
+    /// Called on app foreground and periodically.
+    func dispatchDueScheduledMessages(modelContext: ModelContext) async {
+        let now = Date()
+        let descriptor = FetchDescriptor<PendingScheduledMessage>(
+            predicate: #Predicate { $0.scheduledAt <= now }
+        )
+
+        guard let dueMessages = try? modelContext.fetch(descriptor), !dueMessages.isEmpty else {
+            return
+        }
+
+        for message in dueMessages {
+            let serverURLString = message.serverURLString
+            guard !serverURLString.isEmpty,
+                  let serverURL = URL(string: serverURLString) else {
+                // Can't send without server URL — delete stale entry
+                modelContext.delete(message)
+                continue
+            }
+
+            let apiClient = APIClient(baseURL: serverURL)
+
+            // If no sessionId, create a new session first
+            var targetSessionId = message.sessionId
+            if targetSessionId.isEmpty {
+                do {
+                    let response = try await apiClient.createSession(
+                        workspace: nil, model: nil, modelProvider: nil, profile: nil
+                    )
+                    targetSessionId = response.sessionId
+                } catch {
+                    // Skip this message, will retry next cycle
+                    continue
+                }
+            }
+
+            do {
+                _ = try await apiClient.startChat(
+                    sessionID: targetSessionId,
+                    message: message.draftText,
+                    workspace: nil,
+                    model: nil
+                )
+                modelContext.delete(message)
+            } catch {
+                // Skip, retry next cycle
+                continue
+            }
+        }
+    }
+
 }

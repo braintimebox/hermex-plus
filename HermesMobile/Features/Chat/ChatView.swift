@@ -314,6 +314,7 @@ struct ChatView: View {
     @State private var showsGoalSheet = false
     @State private var activeGitSheet: ActiveGitSheet?
     @State private var turnDiffPresentation: TurnDiffPresentation?
+    @State private var pinnedMessageID: String?
     @State private var viewModel: ChatViewModel
     @State private var gitAvailabilityViewModel: GitWorkspaceAvailabilityViewModel
     @State private var gitToastState = GitActionToastState()
@@ -753,7 +754,6 @@ struct ChatView: View {
             }
             .sheet(isPresented: $showingScheduledList) {
                 ScheduledMessagesView(
-                    sessionId: "",
                     onSendNow: { text in
                         draftMessage = text
                         showingScheduledList = false
@@ -2301,7 +2301,7 @@ struct ChatView: View {
             sessionId: session.sessionId ?? "",
             draftText: text,
             scheduledAt: date,
-            serverURLString: ""
+            serverURLString: server.absoluteString
         )
         modelContext.insert(scheduled)
         draftMessage = ""

@@ -39,6 +39,8 @@ struct SessionListView: View {
     @State private var pendingSharedDraft: String?
     @State private var pendingSharedAttachments: [SharedAttachmentImport] = []
     @State private var showSharedDestinationPicker = false
+    @State private var showExistingSessionPicker = false
+    @State private var sharedDraftForExistingSession: (draft: String, attachments: [SharedAttachmentImport])?
     @State private var showingChatSchedulePicker = false
     @FocusState private var searchFieldIsFocused: Bool
     @AppStorage(SessionSidebarDisclosureSettings.profilesAreExpandedKey)
@@ -233,15 +235,26 @@ struct SessionListView: View {
                     )
                 }
                 Button("Choose existing…") {
-                    // Opens session picker — simplified for now
-                    navigationState.select(
-                        PendingNewChatRoute(
-                            initialDraft: pendingSharedDraft ?? "",
-                            initialAttachments: pendingSharedAttachments
-                        )
-                    )
+                    showExistingSessionPicker = true
                 }
                 Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showExistingSessionPicker) {
+                ExistingSessionPicker(
+                    sessions: viewModel.sections.flatMap(\.sessions),
+                    onSelect: { session in
+                        sharedDraftForExistingSession = (
+                            draft: pendingSharedDraft ?? "",
+                            attachments: pendingSharedAttachments
+                        )
+                        pendingSharedDraft = nil
+                        pendingSharedAttachments = []
+                        showExistingSessionPicker = false
+                        navigationState.select(session)
+                        persistLastSelectedSession()
+                    },
+                    onCancel: { showExistingSessionPicker = false }
+                )
             }
             .task {
                 // Start the normal refresh immediately so a slow direct session
@@ -261,6 +274,8 @@ struct SessionListView: View {
                 // Ordered after the deep link so restoreIfNeeded() sees the explicit
                 // destination and leaves the stored selection alone.
                 restoreLastSelectedSessionIfNeeded()
+                // Dispatch any due scheduled messages
+                await viewModel.dispatchDueScheduledMessages(modelContext: modelContext)
             }
             .task(id: remoteSearchTaskID) {
                 await viewModel.searchSessions(query: searchText, content: true, depth: 5)
@@ -271,6 +286,13 @@ struct SessionListView: View {
             .task(id: returnRefreshID) {
                 guard returnRefreshID != nil else { return }
                 await refreshSessionsAndActiveProfile()
+            }
+            .task {
+                // Periodic dispatch of due scheduled messages (every 30s)
+                while !Task.isCancelled {
+                    await viewModel.dispatchDueScheduledMessages(modelContext: modelContext)
+                    try? await Task.sleep(for: .seconds(30))
+                }
             }
             .onAppear {
                 openPendingSharedImportIfNeeded()
@@ -379,7 +401,15 @@ struct SessionListView: View {
     private func navigationDestination(_ destination: SessionNavigationDestination) -> some View {
         switch destination {
         case .session(let session):
-            ChatView(session: session, server: server, onAPIError: authManager.handleAPIError)
+            let draft = sharedDraftForExistingSession
+            sharedDraftForExistingSession = nil
+            ChatView(
+                session: session,
+                server: server,
+                onAPIError: authManager.handleAPIError,
+                initialDraft: draft?.draft ?? "",
+                initialAttachments: draft?.attachments ?? []
+            )
                 .id(session.id)
         case .newChat(let route):
             PendingNewChatView(
@@ -1650,4 +1680,53 @@ private struct PendingNewChatView: View {
     .padding(24)
     .background(Color.black)
     .preferredColorScheme(.dark)
+}
+
+// MARK: - Existing Session Picker (Share Sheet "Choose existing…")
+
+private struct ExistingSessionPicker: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let sessions: [SessionSummary]
+    let onSelect: (SessionSummary) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if sessions.isEmpty {
+                    ContentUnavailableView(
+                        "No Chats",
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text("Create a chat first, then share to it.")
+                    )
+                } else {
+                    List(sessions) { session in
+                        Button {
+                            onSelect(session)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(SessionRowView.displayTitle(for: session))
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                if let lastMessage = session.lastMessagePreview {
+                                    Text(lastMessage)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Choose Chat")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+            }
+        }
+    }
 }

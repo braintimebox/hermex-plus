@@ -265,7 +265,7 @@ struct ChatTranscriptView: View {
                     onForward: onForward,
                     onSave: onSave,
                     onPin: onPin,
-                    isPinned: message.role == .user ? false : isMessagePinned(message.id)
+                    isMessagePinned: isMessagePinned
                 )
                 .equatable()
                 .id(transcriptMessage.renderID)
@@ -564,7 +564,7 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
                     onForward: onForward,
                     onSave: onSave,
                     onPin: onPin,
-                    isPinned: message.role == .user ? false : isMessagePinned(message.id)
+                    isMessagePinned: isMessagePinned
                 )
             }
         }
