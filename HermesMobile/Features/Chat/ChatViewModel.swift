@@ -338,28 +338,6 @@ final class ChatViewModel {
     }
     private(set) var hasOlderMessages = false
     private(set) var contextWindowSnapshot: ContextWindowSnapshot?
-    private(set) var skillSlashSuggestions: [SkillSlashSuggestion] = []
-    private(set) var profileOptions: [ProfileSummary] = []
-    private(set) var isSingleProfileMode = false
-    private(set) var selectedProfileName: String?
-    private(set) var selectedReasoningEffort: String?
-    /// Model-aware effort vocabulary (`supported_efforts` from `GET /api/reasoning`).
-    /// `nil` on older servers → the composer falls back to the static list (issue #18).
-    private(set) var supportedReasoningEfforts: [String]?
-    /// `supports_reasoning_effort`; `false` hides the composer effort control.
-    private(set) var supportsReasoningEffort: Bool?
-    /// Drops out-of-order `GET /api/reasoning` responses after rapid model switches
-    /// so the gating never reflects a stale model (upstream #3750 class of bug).
-    private var reasoningGatingFetchToken = 0
-    var showsReasoningEffortControl: Bool {
-        ReasoningEffortOption.showsEffortControl(
-            supportsReasoningEffort: supportsReasoningEffort,
-            supportedEfforts: supportedReasoningEfforts
-        )
-    }
-    private(set) var isLoadingComposerConfiguration = false
-    private(set) var isUpdatingComposerConfiguration = false
-    private(set) var composerConfigurationErrorMessage: String?
     var pendingAttachments: [PendingAttachment] { attachmentCoordinator.pendingAttachments }
     var isUploadingAttachment: Bool { attachmentCoordinator.isUploadingAttachment }
     var attachmentUploadCount: Int { attachmentCoordinator.uploadInFlightCount }
