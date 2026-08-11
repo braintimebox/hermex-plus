@@ -5974,6 +5974,7 @@ final class ChatComposerState {
 // MARK: - ChatActionsState
 
 /// Actions state extracted from ChatViewModel.
+@MainActor
 @Observable
 final class ChatActionsState {
     var errorMessage: String?
