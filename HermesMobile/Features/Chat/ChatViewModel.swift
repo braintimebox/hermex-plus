@@ -422,6 +422,79 @@ final class ChatViewModel {
     private let btwStreamClient: SSEStreamingClient
     private let liveActivityManager: any AgentLiveActivityManaging
     private let speechSynthesizerFactory: () -> any ChatSpeechSynthesizing
+
+    /// Composer state (model selection, slash commands, profiles, workspace, reasoning effort).
+    /// Extracted into a separate @Observable so streaming message updates don't invalidate
+    /// the composer UI (which reads modelCatalogGroups, profileOptions, etc.).
+    let composer = ChatComposerState()
+
+    // MARK: - Composer delegates (backward-compat during migration)
+
+    var quotedMessage: (messageId: String, author: String, text: String)? {
+        get { composer.quotedMessage }
+        set { composer.quotedMessage = newValue }
+    }
+    var modelCatalogGroups: [ModelCatalogGroup] {
+        get { composer.modelCatalogGroups }
+        set { composer.modelCatalogGroups = newValue }
+    }
+    var agentCommands: [AgentCommand] {
+        get { composer.agentCommands }
+        set { composer.agentCommands = newValue }
+    }
+    var workspaceRoots: [WorkspaceRoot] {
+        get { composer.workspaceRoots }
+        set { composer.workspaceRoots = newValue }
+    }
+    var workspaceSuggestions: [String] {
+        get { composer.workspaceSuggestions }
+        set { composer.workspaceSuggestions = newValue }
+    }
+    var personalitySuggestions: [String] {
+        get { composer.personalitySuggestions }
+        set { composer.personalitySuggestions = newValue }
+    }
+    var skillSlashSuggestions: [SkillSlashSuggestion] {
+        get { composer.skillSlashSuggestions }
+        set { composer.skillSlashSuggestions = newValue }
+    }
+    var profileOptions: [ProfileSummary] {
+        get { composer.profileOptions }
+        set { composer.profileOptions = newValue }
+    }
+    var isSingleProfileMode: Bool {
+        get { composer.isSingleProfileMode }
+        set { composer.isSingleProfileMode = newValue }
+    }
+    var selectedProfileName: String? {
+        get { composer.selectedProfileName }
+        set { composer.selectedProfileName = newValue }
+    }
+    var selectedReasoningEffort: String? {
+        get { composer.selectedReasoningEffort }
+        set { composer.selectedReasoningEffort = newValue }
+    }
+    var supportedReasoningEfforts: [String]? {
+        get { composer.supportedReasoningEfforts }
+        set { composer.supportedReasoningEfforts = newValue }
+    }
+    var supportsReasoningEffort: Bool? {
+        get { composer.supportsReasoningEffort }
+        set { composer.supportsReasoningEffort = newValue }
+    }
+    var isLoadingComposerConfiguration: Bool {
+        get { composer.isLoadingComposerConfiguration }
+        set { composer.isLoadingComposerConfiguration = newValue }
+    }
+    var isUpdatingComposerConfiguration: Bool {
+        get { composer.isUpdatingComposerConfiguration }
+        set { composer.isUpdatingComposerConfiguration = newValue }
+    }
+    var composerConfigurationErrorMessage: String? {
+        get { composer.composerConfigurationErrorMessage }
+        set { composer.composerConfigurationErrorMessage = newValue }
+    }
+    var showsReasoningEffortControl: Bool { composer.showsReasoningEffortControl }
     private let listenAudioSession: any ListenAudioSessionControlling
     private let listenRemoteControlCenter: any ListenRemoteControlControlling
     private let userDefaults: UserDefaults
