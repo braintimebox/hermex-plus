@@ -1163,7 +1163,7 @@ final class SessionListViewModel {
                     let response = try await apiClient.createSession(
                         workspace: nil, model: nil, modelProvider: nil, profile: nil
                     )
-                    targetSessionId = response.sessionId
+                    targetSessionId = response.session?.sessionId ?? ""
                 } catch {
                     // Skip this message, will retry next cycle
                     continue

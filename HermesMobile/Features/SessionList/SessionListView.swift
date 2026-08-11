@@ -401,14 +401,14 @@ struct SessionListView: View {
     private func navigationDestination(_ destination: SessionNavigationDestination) -> some View {
         switch destination {
         case .session(let session):
-            let draft = sharedDraftForExistingSession
-            sharedDraftForExistingSession = nil
+            let initialDraft = sharedDraftForExistingSession?.draft ?? ""
+            let initialAttachments = sharedDraftForExistingSession?.attachments ?? []
             ChatView(
                 session: session,
                 server: server,
                 onAPIError: authManager.handleAPIError,
-                initialDraft: draft?.draft ?? "",
-                initialAttachments: draft?.attachments ?? []
+                initialDraft: initialDraft,
+                initialAttachments: initialAttachments
             )
                 .id(session.id)
         case .newChat(let route):
@@ -1709,12 +1709,6 @@ private struct ExistingSessionPicker: View {
                                 Text(SessionRowView.displayTitle(for: session))
                                     .font(.body)
                                     .foregroundColor(.primary)
-                                if let lastMessage = session.lastMessagePreview {
-                                    Text(lastMessage)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
                             }
                         }
                     }

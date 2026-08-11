@@ -1134,7 +1134,7 @@ struct ChatView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "pin.fill")
                             .font(.caption)
-                        Text(pinnedMsg.content.prefix(80))
+                        Text((pinnedMsg.content ?? "").prefix(80))
                             .font(.caption)
                             .lineLimit(1)
                             .foregroundColor(.primary)

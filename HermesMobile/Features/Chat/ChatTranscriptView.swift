@@ -679,7 +679,9 @@ private struct ChatTranscriptMessageRow: View {
                         onCopy: onCopy,
                         onReply: onReply,
                         onForward: onForward,
-                        onSave: onSave
+                        onSave: onSave,
+                        onPin: nil,
+                        isPinned: false
                     )
                 }
         } else {
