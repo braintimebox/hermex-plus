@@ -228,7 +228,7 @@ final class ChatViewModel {
     // MARK: - Quote reply
     /// When non-nil, a QuoteReplyBanner is shown above the composer. Sending
     /// prepends the quoted text as a markdown blockquote to the user message.
-    var quotedMessage: (messageId: String, author: String, text: String)? = nil
+    /// Delegated to composer state (see ChatComposerState).
     var activeStreamID: String? { streamCoordinator.activeStreamID }
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
