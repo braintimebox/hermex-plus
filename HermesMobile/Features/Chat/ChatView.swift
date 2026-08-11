@@ -431,7 +431,7 @@ struct ChatView: View {
                 Task {
                     let didSelect = await viewModel.selectComposerModel(option)
                     if didSelect {
-                        ChatHaptics.configurationSelected(isEnabled: isHapticsEnabled)
+                        let _: Void = ChatHaptics.configurationSelected(isEnabled: isHapticsEnabled)
                     }
                 }
             },
@@ -463,7 +463,7 @@ struct ChatView: View {
                 Task {
                     let didSelect = await viewModel.selectReasoningEffort(effort)
                     if didSelect {
-                        ChatHaptics.configurationSelected(isEnabled: isHapticsEnabled)
+                        let _: Void = ChatHaptics.configurationSelected(isEnabled: isHapticsEnabled)
                     }
                 }
             },

@@ -234,18 +234,6 @@ final class ChatViewModel {
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
     private(set) var displayTitle: String
     private(set) var listeningMessageID: String?
-    private(set) var streamingScrollTrigger = 0
-    /// Bumped when a cache-first cold open (#289) finishes reconciling the network
-    /// transcript over the instantly-rendered cached one. The richer server content
-    /// (tool-call / reasoning cards, content parts) is taller than the lighter cached
-    /// render, so the view re-pins to the bottom on this token *without* animation —
-    /// otherwise the height growth produces a visible scroll jump.
-    private(set) var cacheFirstReconcileScrollToken = 0
-    private var hasPrimedInitialCachedMessages = false
-    @ObservationIgnored private var pendingStreamingScrollTriggerTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingAssistantTokenChunks: [String] = []
-    @ObservationIgnored private var pendingReasoningChunks: [String] = []
-    @ObservationIgnored private var pendingStreamingContentFlushTask: Task<Void, Never>?
     private(set) var completedToolCallGroups: [ToolCallGroup] = []
     private var completedToolCallGroupLookup = ToolCallGroupAnchorLookup()
     private(set) var completedReasoningGroups: [ReasoningGroup] = [] {
@@ -345,23 +333,11 @@ final class ChatViewModel {
 
         compressionReferenceCard = card
     }
-    private(set) var liveToolCalls: [ToolCall] = []
-    private(set) var liveReasoningText = ""
-    private(set) var streamingAssistantMessageID: String?
-    private(set) var toolCallAnchorMessageID: String?
-    private(set) var reasoningAnchorMessageID: String?
     private(set) var messagesOffset = 0 {
         didSet { recomputeDisplayedTranscriptMessages() }
     }
     private(set) var hasOlderMessages = false
     private(set) var contextWindowSnapshot: ContextWindowSnapshot?
-    private(set) var responseCompletionHapticTrigger = 0
-    private(set) var responseCompletionNeedsTranscriptRefresh = false
-    private(set) var modelCatalogGroups: [ModelCatalogGroup] = []
-    private(set) var agentCommands: [AgentCommand] = []
-    private(set) var workspaceRoots: [WorkspaceRoot] = []
-    private(set) var workspaceSuggestions: [String] = []
-    private(set) var personalitySuggestions: [String] = ["none"]
     private(set) var skillSlashSuggestions: [SkillSlashSuggestion] = []
     private(set) var profileOptions: [ProfileSummary] = []
     private(set) var isSingleProfileMode = false
@@ -411,6 +387,7 @@ final class ChatViewModel {
     /// the composer UI (which reads modelCatalogGroups, profileOptions, etc.).
     let composer = ChatComposerState()
     let actions = ChatActionsState()
+    let stream = ChatStreamState()
 
     // MARK: - Composer delegates (backward-compat during migration)
 
@@ -529,6 +506,66 @@ final class ChatViewModel {
     var clarificationPrompt: ClarificationPromptState? { actions.clarificationPrompt }
     var isRespondingToClarification: Bool { actions.isRespondingToClarification }
     var clarificationErrorMessage: String? { actions.clarificationErrorMessage }
+
+    // MARK: - Stream delegates
+
+    var streamingAssistantMessageID: String? {
+        get { stream.streamingAssistantMessageID }
+        set { stream.streamingAssistantMessageID = newValue }
+    }
+    var toolCallAnchorMessageID: String? {
+        get { stream.toolCallAnchorMessageID }
+        set { stream.toolCallAnchorMessageID = newValue }
+    }
+    var reasoningAnchorMessageID: String? {
+        get { stream.reasoningAnchorMessageID }
+        set { stream.reasoningAnchorMessageID = newValue }
+    }
+    var liveToolCalls: [ToolCall] {
+        get { stream.liveToolCalls }
+        set { stream.liveToolCalls = newValue }
+    }
+    var liveReasoningText: String {
+        get { stream.liveReasoningText }
+        set { stream.liveReasoningText = newValue }
+    }
+    var streamingScrollTrigger: Int {
+        get { stream.streamingScrollTrigger }
+        set { stream.streamingScrollTrigger = newValue }
+    }
+    var cacheFirstReconcileScrollToken: Int {
+        get { stream.cacheFirstReconcileScrollToken }
+        set { stream.cacheFirstReconcileScrollToken = newValue }
+    }
+    var responseCompletionHapticTrigger: Int {
+        get { stream.responseCompletionHapticTrigger }
+        set { stream.responseCompletionHapticTrigger = newValue }
+    }
+    var responseCompletionNeedsTranscriptRefresh: Bool {
+        get { stream.responseCompletionNeedsTranscriptRefresh }
+        set { stream.responseCompletionNeedsTranscriptRefresh = newValue }
+    }
+    // Internal streaming state — not observed by views
+    @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>? {
+        get { stream.pendingStreamingScrollTriggerTask }
+        set { stream.pendingStreamingScrollTriggerTask = newValue }
+    }
+    @ObservationIgnored var pendingAssistantTokenChunks: [String] {
+        get { stream.pendingAssistantTokenChunks }
+        set { stream.pendingAssistantTokenChunks = newValue }
+    }
+    @ObservationIgnored var pendingReasoningChunks: [String] {
+        get { stream.pendingReasoningChunks }
+        set { stream.pendingReasoningChunks = newValue }
+    }
+    @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>? {
+        get { stream.pendingStreamingContentFlushTask }
+        set { stream.pendingStreamingContentFlushTask = newValue }
+    }
+    @ObservationIgnored var hasPrimedInitialCachedMessages: Bool {
+        get { stream.hasPrimedInitialCachedMessages }
+        set { stream.hasPrimedInitialCachedMessages = newValue }
+    }
 
     private let listenAudioSession: any ListenAudioSessionControlling
     private let listenRemoteControlCenter: any ListenRemoteControlControlling
@@ -5993,4 +6030,27 @@ final class ChatActionsState {
     var clarificationPrompt: ClarificationPromptState? { pendingActionCoordinator?.clarificationPrompt }
     var isRespondingToClarification: Bool { pendingActionCoordinator?.isRespondingToClarification ?? false }
     var clarificationErrorMessage: String? { pendingActionCoordinator?.clarificationErrorMessage }
+}
+
+// MARK: - ChatStreamState
+
+/// Streaming UI state extracted from ChatViewModel — live tokens,
+/// assistant message IDs, scroll triggers, and completion flags.
+@Observable
+final class ChatStreamState {
+    var streamingAssistantMessageID: String?
+    var toolCallAnchorMessageID: String?
+    var reasoningAnchorMessageID: String?
+    var liveToolCalls: [ToolCall] = []
+    var liveReasoningText = ""
+    var streamingScrollTrigger = 0
+    var cacheFirstReconcileScrollToken = 0
+    var responseCompletionHapticTrigger = 0
+    var responseCompletionNeedsTranscriptRefresh = false
+
+    @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
+    @ObservationIgnored var pendingAssistantTokenChunks: [String] = []
+    @ObservationIgnored var pendingReasoningChunks: [String] = []
+    @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
+    @ObservationIgnored var hasPrimedInitialCachedMessages = false
 }
