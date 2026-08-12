@@ -86,17 +86,19 @@ struct TasksView: View {
             }
         } else {
             List {
-                Section {
-                    NavigationLink {
-                        ScheduledMessagesView { msg in
-                            Task { await sendScheduledNow(msg) }
-                        }
-                    } label: {
-                        HStack {
-                            Label("Scheduled Messages", systemImage: "calendar.badge.clock")
-                            Spacer()
-                            Text("\(scheduledMessages.count)")
-                                .foregroundStyle(.secondary)
+                if !scheduledMessages.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ScheduledMessagesView { msg in
+                                Task { await sendScheduledNow(msg) }
+                            }
+                        } label: {
+                            HStack {
+                                Label("Scheduled Messages", systemImage: "calendar.badge.clock")
+                                Spacer()
+                                Text("\(scheduledMessages.count)")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

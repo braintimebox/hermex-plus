@@ -24,45 +24,43 @@ struct ScheduledMessagesView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if messages.isEmpty {
-                    ContentUnavailableView(
-                        "No Scheduled Messages",
-                        systemImage: "clock.badge.questionmark",
-                        description: Text("Long-press the send button and pick a delivery time.")
-                    )
-                } else {
-                    List {
-                        ForEach(messages) { msg in
-                            ScheduledMessageRow(
-                                text: msg.draftText,
-                                sessionTitle: msg.sessionTitle,
-                                sessionId: msg.sessionId,
-                                scheduleKey: msg.scheduleKey,
-                                serverURLString: msg.serverURLString,
-                                scheduledAt: msg.scheduledAt,
-                                onSendNow: { onSendNow(msg) },
-                                onDelete: {
-                                    modelContext.delete(msg)
-                                    Task.detached(priority: .background) {
-                                        await deleteScheduledFromServer(
-                                            scheduleKey: msg.scheduleKey,
-                                            serverURLString: msg.serverURLString
-                                        )
-                                    }
+        Group {
+            if messages.isEmpty {
+                ContentUnavailableView(
+                    "No Scheduled Messages",
+                    systemImage: "clock.badge.questionmark",
+                    description: Text("Long-press the send button and pick a delivery time.")
+                )
+            } else {
+                List {
+                    ForEach(messages) { msg in
+                        ScheduledMessageRow(
+                            text: msg.draftText,
+                            sessionTitle: msg.sessionTitle,
+                            sessionId: msg.sessionId,
+                            scheduleKey: msg.scheduleKey,
+                            serverURLString: msg.serverURLString,
+                            scheduledAt: msg.scheduledAt,
+                            onSendNow: { onSendNow(msg) },
+                            onDelete: {
+                                modelContext.delete(msg)
+                                Task.detached(priority: .background) {
+                                    await deleteScheduledFromServer(
+                                        scheduleKey: msg.scheduleKey,
+                                        serverURLString: msg.serverURLString
+                                    )
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
                 }
             }
-            .navigationTitle("Scheduled")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                MainThreadWatchdog.shared.setScreen("ScheduledMessages")
-                HermexLogger.shared.log(type: "event", screen: "ScheduledMessages", message: "scheduled list opened")
-            }
+        }
+        .navigationTitle("Scheduled")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            MainThreadWatchdog.shared.setScreen("ScheduledMessages")
+            HermexLogger.shared.log(type: "event", screen: "ScheduledMessages", message: "scheduled list opened")
         }
     }
 

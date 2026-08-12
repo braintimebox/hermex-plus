@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.4 — 2026-08-12
+
+### Fixed
+- **"Tasks > Scheduled" page did not open:** `ScheduledMessagesView` wrapped itself in a `NavigationStack` while being pushed inside a `NavigationLink` — a nested navigation stack that breaks the push. Removed the inner stack (sheet presentation wraps it externally instead).
+- **Scheduled Messages row visibility:** the row now shows only when there are pending messages (was always visible since 1.4.2 — hidden again per request).
+
+### Changed
+- **Explicit destination when scheduling:** `ScheduleMessageSheet` now requires a visible choice before scheduling when the message is not attached to the current chat — a segmented picker "New Chat / Existing Chat" with a session picker for the latter. No silent default to a new chat; the user always sees where the message will go.
+
 ## 1.4.3 — 2026-08-12
 
 ### Added

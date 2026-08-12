@@ -764,12 +764,14 @@ struct ChatView: View {
                 )
             }
             .sheet(isPresented: $showingScheduledList) {
-                ScheduledMessagesView(
-                    onSendNow: { msg in
-                        draftMessage = msg.draftText
-                        showingScheduledList = false
-                    }
-                )
+                NavigationStack {
+                    ScheduledMessagesView(
+                        onSendNow: { msg in
+                            draftMessage = msg.draftText
+                            showingScheduledList = false
+                        }
+                    )
+                }
             }
             .sheet(isPresented: $showShareSheet) {
                 ActivityViewController(activityItems: [shareText])
@@ -2620,6 +2622,15 @@ enum ScheduledMessageTarget {
     case existing(sessionId: String, title: String?)
 }
 
+/// Explicit destination choice shown when the message is NOT attached to the
+/// current chat — so the user always sees where the message will go.
+private enum ScheduledChatChoice: String, CaseIterable, Identifiable {
+    case newChat = "New Chat"
+    case existingChat = "Existing Chat"
+
+    var id: String { rawValue }
+}
+
 struct ScheduleMessageSheet: View {
     let draftMessage: String
     let chatTitle: String?
@@ -2634,6 +2645,7 @@ struct ScheduleMessageSheet: View {
     @State private var sessions: [SessionListItem] = []
     @State private var pickedExistingSession: SessionListItem?
     @State private var showSessionPicker = false
+    @State private var chatChoice: ScheduledChatChoice = .newChat
 
     init(
         draftMessage: String,
@@ -2678,26 +2690,36 @@ struct ScheduleMessageSheet: View {
                         .padding(.horizontal)
                 }
 
+                // When not attached to the current chat, the destination MUST
+                // be explicit: a brand-new chat or one picked from the list.
                 if !attachToChat {
-                    if let picked = pickedExistingSession {
-                        HStack {
-                            Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
-                            Spacer()
-                            Button("Change") { showSessionPicker = true }
+                    Picker("Destination", selection: $chatChoice) {
+                        ForEach(ScheduledChatChoice.allCases) { choice in
+                            Text(choice.rawValue).tag(choice)
                         }
-                        .font(.subheadline)
-                        .padding(.horizontal)
-                    } else {
-                        HStack(spacing: 16) {
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+
+                    if chatChoice == .existingChat {
+                        if let picked = pickedExistingSession {
+                            HStack {
+                                Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
+                                Spacer()
+                                Button("Change") { showSessionPicker = true }
+                            }
+                            .font(.subheadline)
+                            .padding(.horizontal)
+                        } else {
                             Button {
                                 showSessionPicker = true
                             } label: {
-                                Label("Choose Existing Chat", systemImage: "bubble.left.and.bubble.right")
+                                Label("Choose Chat", systemImage: "bubble.left.and.bubble.right")
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
                 }
             }
@@ -2713,12 +2735,17 @@ struct ScheduleMessageSheet: View {
                             showEmptyAlert = true
                             return
                         }
+                        // Require an explicit destination before scheduling.
+                        guard target != nil else {
+                            showSessionPicker = true
+                            return
+                        }
                         HermexLogger.shared.log(
                             type: "event",
                             screen: "ScheduleSheet",
-                            message: "schedule confirmed target=\(target)"
+                            message: "schedule confirmed target=\(target!)"
                         )
-                        onSchedule(scheduledDate, messageText, target)
+                        onSchedule(scheduledDate, messageText, target!)
                     }
                 }
             }
@@ -2728,6 +2755,7 @@ struct ScheduleMessageSheet: View {
             .sheet(isPresented: $showSessionPicker) {
                 SessionPickerForForward(sessions: sessions) { session in
                     pickedExistingSession = session
+                    chatChoice = .existingChat
                 }
             }
             .task {
@@ -2752,14 +2780,19 @@ struct ScheduleMessageSheet: View {
         .presentationDetents([.medium, .large])
     }
 
-    private var target: ScheduledMessageTarget {
+    /// Explicit destination, or nil when the user picked "Existing Chat" but
+    /// hasn't chosen one yet.
+    private var target: ScheduledMessageTarget? {
         if attachToChat {
             return .currentChat
         }
-        if let picked = pickedExistingSession, !picked.id.isEmpty {
+        switch chatChoice {
+        case .newChat:
+            return .newChat
+        case .existingChat:
+            guard let picked = pickedExistingSession, !picked.id.isEmpty else { return nil }
             return .existing(sessionId: picked.id, title: picked.displayTitle)
         }
-        return .newChat
     }
 }
 
