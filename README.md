@@ -2,9 +2,9 @@
 
 <img src="docs/assets/readme/hermex-icon.png" alt="Hermes Plus icon" width="96" />
 
-# Hermes Plus v1.4.4 (on Hermex v1.5)
+# Hermes Plus
 
-**Native iPhone client for self-hosted Hermes Agent.** Forked from [Hermex](https://github.com/uzairansaruzi/hermex) v1.5.
+**Native iPhone client for self-hosted Hermes Agent.** Forked from [Hermex](https://github.com/uzairansaruzi/hermex).
 
 Your server. Your iPhone. No middleman.
 
@@ -18,11 +18,11 @@ Your server. Your iPhone. No middleman.
 
 **Latest IPA (direct):** https://github.com/braintimebox/hermex-plus/actions — click the latest green build → scroll to Artifacts → download `HermesPlus-unsigned`
 
-**Current build (v1.4.3, 2026-08-12):** https://github.com/braintimebox/hermex-plus/actions/runs/31632087255/artifacts/9155629650
+**Current build:** https://github.com/braintimebox/hermex-plus/actions/runs/31638561915/artifacts/9158057585
 
 Then install with SideStore / AltStore → connect to your Hermes server.
 
-## 🚀 Features (what we added on top of Hermex v1.5)
+## 🚀 Features (what we added on top of Hermex)
 
 | Feature | Description |
 |---------|-------------|
@@ -51,7 +51,7 @@ Then install with SideStore / AltStore → connect to your Hermes server.
 
 ## 🤝 Credits
 
-- [Hermex](https://github.com/uzairansaruzi/hermex) v1.5 by Uzair Ansar — the base
+- [Hermex](https://github.com/uzairansaruzi/hermex) by Uzair Ansar — the base
 - [Hermes Agent](https://github.com/nesquena/hermes-webui) — the server
 
 ## 📄 License
