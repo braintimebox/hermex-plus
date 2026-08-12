@@ -319,6 +319,8 @@
 		650107E30716447F9D8CE941 /* SavedMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */; };
 		FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */; };
 		D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */; };
+		C0DE000000000000000000F1 /* HermexLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE000000000000000000F3 /* HermexLogger.swift */; };
+		C0DE000000000000000000F2 /* MainThreadWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE000000000000000000F4 /* MainThreadWatchdog.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -670,6 +672,8 @@
 		2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessagesView.swift"; sourceTree = "<group>"; };
 		661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledMessagesView.swift"; sourceTree = "<group>"; };
 		FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionPickerForForward.swift"; sourceTree = "<group>"; };
+		C0DE000000000000000000F3 /* HermexLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HermexLogger.swift"; sourceTree = "<group>"; };
+		C0DE000000000000000000F4 /* MainThreadWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainThreadWatchdog.swift"; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -729,6 +733,8 @@
 			children = (
 				1A2B3C4D5E6F700000000011 /* HermesMobileApp.swift */,
 				1A2B3C4D5E6F700000000012 /* ContentView.swift */,
+				C0DE000000000000000000F3 /* HermexLogger.swift */,
+				C0DE000000000000000000F4 /* MainThreadWatchdog.swift */,
 				1A2B3C4D5E6F7000000000FA /* Config */,
 				1A2B3C4D5E6F700000000339 /* AppIntents */,
 				A04500000000000000000020 /* LiveActivities */,
@@ -1445,6 +1451,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F700000000001 /* HermesMobileApp.swift in Sources */,
+				C0DE000000000000000000F1 /* HermexLogger.swift in Sources */,
+				C0DE000000000000000000F2 /* MainThreadWatchdog.swift in Sources */,
 				1A2B3C4D5E6F700000000002 /* ContentView.swift in Sources */,
 				1A2B3C4D5E6F700000000338 /* HermexAppIntents.swift in Sources */,
 				1A2B3C4D5E6F700000000343 /* ProfileEntity.swift in Sources */,

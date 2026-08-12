@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1 — 2026-08-12
+
+### Added
+- **Diagnostics channel (24/7 freeze detection):** `HermexLogger` ships app events (freeze/error/recovered) to the server's `/webhook/hermex-logs` ingest endpoint; `MainThreadWatchdog` detects main-thread hangs in real time and reports them from a background queue — the agent is notified within a minute of any freeze
+- Files: `HermesMobile/HermexLogger.swift`, `HermesMobile/MainThreadWatchdog.swift`, watchdog starts in `HermesMobileApp.init()`
+
 ## 1.3.1 — 2026-08-09
 
 ### Fixed
