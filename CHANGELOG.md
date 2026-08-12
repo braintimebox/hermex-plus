@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.3 — 2026-08-12
+
+### Added
+- **Freeze diagnostics context:** HermexLogger now attaches a ring buffer of the last 20 events to every `freeze` report — the server sees what the user was doing (screen, button, action) right before the main-thread hang, plus app version and foreground/background state
+- Screen tracking: ChatView / SessionList / TasksView / ScheduledMessages / ScheduleSheet set the watchdog's active screen on appear
+- Action markers: schedule button tapped, schedule confirmed (with target), scheduled message saved, send-now tapped, scene foreground/background
+
+### Changed
+- Files: `HermexLogger.swift`, `MainThreadWatchdog.swift`, `ChatView.swift`, `ChatComposerView.swift`, `TasksView.swift`, `SessionListView.swift`, `ScheduledMessagesView.swift`, `HermesMobileApp.swift`
+
 ## 1.4.2 — 2026-08-12
 
 ### Fixed

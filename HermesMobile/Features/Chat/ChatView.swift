@@ -422,6 +422,10 @@ struct ChatView: View {
             quotedMessage: viewModel.quotedMessage,
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
+            // track the action that happens right before the freeze
+            onScheduleTapped: {
+                HermexLogger.shared.log(type: "event", screen: "ChatView", message: "schedule button tapped")
+            },
             scheduledCount: scheduledMessageCount,
             onOpenScheduledList: { showingScheduledList = true },
             onCancel: {
@@ -635,6 +639,8 @@ struct ChatView: View {
                 Task { viewModel.stopListening() }
             }
             .onAppear {
+                MainThreadWatchdog.shared.setScreen("ChatView")
+                HermexLogger.shared.log(type: "event", screen: "ChatView", message: "chat opened")
                 Task {
                     await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)
 
@@ -2322,6 +2328,12 @@ struct ChatView: View {
             sessionTitle = pickedTitle
         }
 
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ChatView",
+            message: "saving scheduled msg session=\(sessionId) target=\(target)"
+        )
+
         let scheduled = PendingScheduledMessage(
             sessionId: sessionId,
             sessionTitle: sessionTitle,
@@ -2701,6 +2713,11 @@ struct ScheduleMessageSheet: View {
                             showEmptyAlert = true
                             return
                         }
+                        HermexLogger.shared.log(
+                            type: "event",
+                            screen: "ScheduleSheet",
+                            message: "schedule confirmed target=\(target)"
+                        )
                         onSchedule(scheduledDate, messageText, target)
                     }
                 }

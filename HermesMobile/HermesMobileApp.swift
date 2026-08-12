@@ -90,8 +90,16 @@ struct HermesMobileApp: App {
         }
         .modelContainer(for: [CachedSession.self, CachedMessage.self, SavedMessage.self, PendingScheduledMessage.self])
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .background {
+            switch newPhase {
+            case .active:
+                HermexLogger.shared.log(type: "event", message: "scene active")
+            case .background:
+                HermexLogger.shared.log(type: "event", message: "scene background")
                 BGTask.scheduleNext()
+            case .inactive:
+                break
+            @unknown default:
+                break
             }
         }
         .backgroundTask(.appRefresh(BGTask.refreshID)) {

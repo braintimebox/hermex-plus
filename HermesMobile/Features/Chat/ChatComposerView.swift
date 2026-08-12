@@ -116,6 +116,9 @@ struct MessageComposerView: View {
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
+    /// Extra hook fired when the Schedule menu item is tapped — used by the
+    /// diagnostics logger to capture context right before a potential freeze.
+    let onScheduleTapped: (() -> Void)?
     let scheduledCount: Int
     let onOpenScheduledList: (() -> Void)?
     let onCancel: () -> Void
@@ -398,6 +401,7 @@ struct MessageComposerView: View {
                                     Label("Send", systemImage: "arrow.up.circle.fill")
                                 }
                                 Button {
+                                    onScheduleTapped?()
                                     onSchedule()
                                 } label: {
                                     Label("Schedule Message", systemImage: "calendar.badge.plus")

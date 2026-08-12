@@ -59,6 +59,10 @@ struct ScheduledMessagesView: View {
             }
             .navigationTitle("Scheduled")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                MainThreadWatchdog.shared.setScreen("ScheduledMessages")
+                HermexLogger.shared.log(type: "event", screen: "ScheduledMessages", message: "scheduled list opened")
+            }
         }
     }
 

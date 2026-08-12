@@ -311,6 +311,8 @@ struct SessionListView: View {
                 }
             }
             .onAppear {
+                MainThreadWatchdog.shared.setScreen("SessionList")
+                HermexLogger.shared.log(type: "event", screen: "SessionList", message: "session list appeared")
                 openPendingSharedImportIfNeeded()
                 openRequestedNewChatIfNeeded()
                 refreshAfterReturningIfNeeded()
@@ -1257,6 +1259,12 @@ struct SessionListView: View {
     private func sendScheduledNow(_ msg: PendingScheduledMessage) async {
         guard !msg.draftText.isEmpty,
               let serverURL = URL(string: msg.serverURLString) else { return }
+
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "SessionList",
+            message: "send now tapped session=\(msg.sessionId)"
+        )
 
         let apiClient = APIClient(baseURL: serverURL)
         var targetSessionId = msg.sessionId

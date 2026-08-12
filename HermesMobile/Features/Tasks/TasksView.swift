@@ -58,6 +58,8 @@ struct TasksView: View {
                 }
             }
             .task {
+                MainThreadWatchdog.shared.setScreen("TasksView")
+                HermexLogger.shared.log(type: "event", screen: "TasksView", message: "tasks opened")
                 await loadTasks()
             }
     }
@@ -150,6 +152,12 @@ struct TasksView: View {
     private func sendScheduledNow(_ msg: PendingScheduledMessage) async {
         guard !msg.draftText.isEmpty,
               let serverURL = URL(string: msg.serverURLString) else { return }
+
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "TasksView",
+            message: "send now tapped session=\(msg.sessionId)"
+        )
 
         let apiClient = APIClient(baseURL: serverURL)
         var targetSessionId = msg.sessionId
