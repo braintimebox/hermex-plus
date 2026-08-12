@@ -206,11 +206,27 @@ struct SessionListView: View {
                 AddServerView(authManager: authManager)
             }
             .sheet(isPresented: $showingChatSchedulePicker) {
-                ScheduleMessageSheet(draftMessage: "") { date, text, _ in
+                ScheduleMessageSheet(
+                    draftMessage: "",
+                    client: APIClient(baseURL: server)
+                ) { date, text, target in
                     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+                    let sessionId: String
+                    let sessionTitle: String?
+                    switch target {
+                    case .currentChat, .newChat:
+                        sessionId = ""
+                        sessionTitle = nil
+                    case .existing(let pickedID, let pickedTitle):
+                        sessionId = pickedID
+                        sessionTitle = pickedTitle
+                    }
+
                     modelContext.insert(
                         PendingScheduledMessage(
-                            sessionId: "",
+                            sessionId: sessionId,
+                            sessionTitle: sessionTitle,
                             draftText: text,
                             scheduledAt: date,
                             serverURLString: server.absoluteString
@@ -455,7 +471,9 @@ struct SessionListView: View {
             case .archived:
                 ArchivedSessionsView(server: server, onAPIError: authManager.handleAPIError)
             case .scheduledMessages:
-                ScheduledMessagesView { _ in }
+                ScheduledMessagesView { msg in
+                    Task { await sendScheduledNow(msg) }
+                }
             case .scheduled:
                 ScheduledSessionsView(
                     viewModel: viewModel,
@@ -1230,6 +1248,41 @@ struct SessionListView: View {
     private func handleLastError() {
         if let lastError = viewModel.lastError {
             authManager.handleAPIError(lastError)
+        }
+    }
+
+    /// Send a scheduled message immediately (the "Send Now" button).
+    /// Same flow as `dispatchDueScheduledMessages`: create a session when the
+    /// message has none, send via startChat, then drop the pending row.
+    private func sendScheduledNow(_ msg: PendingScheduledMessage) async {
+        guard !msg.draftText.isEmpty,
+              let serverURL = URL(string: msg.serverURLString) else { return }
+
+        let apiClient = APIClient(baseURL: serverURL)
+        var targetSessionId = msg.sessionId
+        if targetSessionId.isEmpty {
+            do {
+                let response = try await apiClient.createSession(
+                    workspace: nil, model: nil, modelProvider: nil, profile: nil
+                )
+                targetSessionId = response.session?.sessionId ?? ""
+            } catch {
+                authManager.handleAPIError(error)
+                return
+            }
+        }
+        guard !targetSessionId.isEmpty else { return }
+
+        do {
+            _ = try await apiClient.startChat(
+                sessionID: targetSessionId,
+                message: msg.draftText,
+                workspace: nil,
+                model: nil
+            )
+            modelContext.delete(msg)
+        } catch {
+            authManager.handleAPIError(error)
         }
     }
 

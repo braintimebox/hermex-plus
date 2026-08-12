@@ -5,6 +5,7 @@ struct TasksView: View {
     let server: URL
     let onAPIError: (Error) -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: TasksViewModel
     @State private var isPresentingCreateTask = false
     @Query(filter: #Predicate<PendingScheduledMessage> { _ in true }) private var scheduledMessages: [PendingScheduledMessage]
@@ -83,17 +84,17 @@ struct TasksView: View {
             }
         } else {
             List {
-                if !scheduledMessages.isEmpty {
-                    Section {
-                        NavigationLink {
-                            ScheduledMessagesView { _ in }
-                        } label: {
-                            HStack {
-                                Label("Scheduled Messages", systemImage: "calendar.badge.clock")
-                                Spacer()
-                                Text("\(scheduledMessages.count)")
-                                    .foregroundStyle(.secondary)
-                            }
+                Section {
+                    NavigationLink {
+                        ScheduledMessagesView { msg in
+                            Task { await sendScheduledNow(msg) }
+                        }
+                    } label: {
+                        HStack {
+                            Label("Scheduled Messages", systemImage: "calendar.badge.clock")
+                            Spacer()
+                            Text("\(scheduledMessages.count)")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -139,6 +140,42 @@ struct TasksView: View {
 
         if let lastError = viewModel.lastError {
             onAPIError(lastError)
+        }
+    }
+
+    /// Send a scheduled message immediately (the "Send Now" button).
+    /// Mirrors `dispatchDueScheduledMessages` in SessionListViewModel: creates
+    /// a session when the message has no sessionId, sends via startChat, then
+    /// removes the pending row.
+    private func sendScheduledNow(_ msg: PendingScheduledMessage) async {
+        guard !msg.draftText.isEmpty,
+              let serverURL = URL(string: msg.serverURLString) else { return }
+
+        let apiClient = APIClient(baseURL: serverURL)
+        var targetSessionId = msg.sessionId
+        if targetSessionId.isEmpty {
+            do {
+                let response = try await apiClient.createSession(
+                    workspace: nil, model: nil, modelProvider: nil, profile: nil
+                )
+                targetSessionId = response.session?.sessionId ?? ""
+            } catch {
+                onAPIError(error)
+                return
+            }
+        }
+        guard !targetSessionId.isEmpty else { return }
+
+        do {
+            _ = try await apiClient.startChat(
+                sessionID: targetSessionId,
+                message: msg.draftText,
+                workspace: nil,
+                model: nil
+            )
+            modelContext.delete(msg)
+        } catch {
+            onAPIError(error)
         }
     }
 }

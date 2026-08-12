@@ -5,11 +5,11 @@ struct ScheduledMessagesView: View {
     @Environment(\.modelContext) private var modelContext
 
     let sessionId: String
-    let onSendNow: (String) -> Void
+    let onSendNow: (PendingScheduledMessage) -> Void
 
     @Query private var messages: [PendingScheduledMessage]
 
-    init(sessionId: String, onSendNow: @escaping (String) -> Void) {
+    init(sessionId: String, onSendNow: @escaping (PendingScheduledMessage) -> Void) {
         self.sessionId = sessionId
         self.onSendNow = onSendNow
         let predicate = #Predicate<PendingScheduledMessage> { $0.sessionId == sessionId }
@@ -17,7 +17,7 @@ struct ScheduledMessagesView: View {
     }
 
     /// Show ALL scheduled messages (no sessionId filter). Used from Tasks / Chat button.
-    init(onSendNow: @escaping (String) -> Void) {
+    init(onSendNow: @escaping (PendingScheduledMessage) -> Void) {
         self.sessionId = ""
         self.onSendNow = onSendNow
         _messages = Query(sort: \.scheduledAt)
@@ -42,7 +42,7 @@ struct ScheduledMessagesView: View {
                                 scheduleKey: msg.scheduleKey,
                                 serverURLString: msg.serverURLString,
                                 scheduledAt: msg.scheduledAt,
-                                onSendNow: { onSendNow(msg.draftText) },
+                                onSendNow: { onSendNow(msg) },
                                 onDelete: {
                                     modelContext.delete(msg)
                                     Task.detached(priority: .background) {

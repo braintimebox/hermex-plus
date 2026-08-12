@@ -749,8 +749,9 @@ struct ChatView: View {
                 ScheduleMessageSheet(
                     draftMessage: draftMessage,
                     chatTitle: displayTitle,
-                    onSchedule: { date, text, attachToChat in
-                        saveScheduledMessage(text: text, at: date, attachToChat: attachToChat)
+                    client: viewModel.client,
+                    onSchedule: { date, text, target in
+                        saveScheduledMessage(text: text, at: date, target: target)
                         showingSchedulePicker = false
                     },
                     onCancel: { showingSchedulePicker = false }
@@ -758,8 +759,8 @@ struct ChatView: View {
             }
             .sheet(isPresented: $showingScheduledList) {
                 ScheduledMessagesView(
-                    onSendNow: { text in
-                        draftMessage = text
+                    onSendNow: { msg in
+                        draftMessage = msg.draftText
                         showingScheduledList = false
                     }
                 )
@@ -2304,11 +2305,26 @@ struct ChatView: View {
         modelContext.insert(saved)
     }
 
-    private func saveScheduledMessage(text: String, at date: Date, attachToChat: Bool = true) {
+    private func saveScheduledMessage(text: String, at date: Date, target: ScheduledMessageTarget) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        let sessionId: String
+        let sessionTitle: String?
+        switch target {
+        case .currentChat:
+            sessionId = session.sessionId ?? ""
+            sessionTitle = displayTitle
+        case .newChat:
+            sessionId = ""
+            sessionTitle = nil
+        case .existing(let pickedID, let pickedTitle):
+            sessionId = pickedID
+            sessionTitle = pickedTitle
+        }
+
         let scheduled = PendingScheduledMessage(
-            sessionId: attachToChat ? (session.sessionId ?? "") : "",
-            sessionTitle: attachToChat ? displayTitle : nil,
+            sessionId: sessionId,
+            sessionTitle: sessionTitle,
             draftText: text,
             scheduledAt: date,
             serverURLString: server.absoluteString
@@ -2582,25 +2598,41 @@ private extension SlashCommandExecutionResult {
 
 // MARK: - Sheet Views (no new files needed)
 
+/// Where a scheduled message should be delivered when it fires.
+enum ScheduledMessageTarget {
+    /// The chat the user is currently viewing.
+    case currentChat
+    /// The server should create a brand-new chat.
+    case newChat
+    /// A specific existing chat, picked from the session list.
+    case existing(sessionId: String, title: String?)
+}
+
 struct ScheduleMessageSheet: View {
     let draftMessage: String
     let chatTitle: String?
-    let onSchedule: (Date, String, Bool) -> Void
+    let client: APIClient?
+    let onSchedule: (Date, String, ScheduledMessageTarget) -> Void
     let onCancel: () -> Void
 
     @State private var messageText: String = ""
     @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var attachToChat: Bool
     @State private var showEmptyAlert = false
+    @State private var sessions: [SessionListItem] = []
+    @State private var pickedExistingSession: SessionListItem?
+    @State private var showSessionPicker = false
 
     init(
         draftMessage: String,
         chatTitle: String? = nil,
-        onSchedule: @escaping (Date, String, Bool) -> Void,
+        client: APIClient? = nil,
+        onSchedule: @escaping (Date, String, ScheduledMessageTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.draftMessage = draftMessage
         self.chatTitle = chatTitle
+        self.client = client
         self.onSchedule = onSchedule
         self.onCancel = onCancel
         _attachToChat = State(initialValue: chatTitle != nil)
@@ -2633,6 +2665,29 @@ struct ScheduleMessageSheet: View {
                         .font(.subheadline)
                         .padding(.horizontal)
                 }
+
+                if !attachToChat {
+                    if let picked = pickedExistingSession {
+                        HStack {
+                            Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
+                            Spacer()
+                            Button("Change") { showSessionPicker = true }
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal)
+                    } else {
+                        HStack(spacing: 16) {
+                            Button {
+                                showSessionPicker = true
+                            } label: {
+                                Label("Choose Existing Chat", systemImage: "bubble.left.and.bubble.right")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
             }
             .navigationTitle("Schedule Message")
             .navigationBarTitleDisplayMode(.inline)
@@ -2646,18 +2701,48 @@ struct ScheduleMessageSheet: View {
                             showEmptyAlert = true
                             return
                         }
-                        onSchedule(scheduledDate, messageText, attachToChat)
+                        onSchedule(scheduledDate, messageText, target)
                     }
                 }
             }
             .alert("Message text cannot be empty", isPresented: $showEmptyAlert) {
                 Button("OK", role: .cancel) {}
             }
+            .sheet(isPresented: $showSessionPicker) {
+                SessionPickerForForward(sessions: sessions) { session in
+                    pickedExistingSession = session
+                }
+            }
+            .task {
+                guard let client else { return }
+                do {
+                    let response = try await client.sessions()
+                    sessions = (response.sessions ?? []).map {
+                        SessionListItem(
+                            id: ($0.id ?? $0.sessionId) ?? "",
+                            displayTitle: $0.title ?? "Chat",
+                            lastMessagePreview: nil
+                        )
+                    }
+                } catch {
+                    sessions = []
+                }
+            }
         }
         .onAppear {
             messageText = draftMessage
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+    }
+
+    private var target: ScheduledMessageTarget {
+        if attachToChat {
+            return .currentChat
+        }
+        if let picked = pickedExistingSession, !picked.id.isEmpty {
+            return .existing(sessionId: picked.id, title: picked.displayTitle)
+        }
+        return .newChat
     }
 }
 

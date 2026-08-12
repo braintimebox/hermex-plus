@@ -2,7 +2,7 @@
 
 <img src="docs/assets/readme/hermex-icon.png" alt="Hermes Plus icon" width="96" />
 
-# Hermes Plus v1.4.1 (on Hermex v1.5)
+# Hermes Plus v1.4.2 (on Hermex v1.5)
 
 **Native iPhone client for self-hosted Hermes Agent.** Forked from [Hermex](https://github.com/uzairansaruzi/hermex) v1.5.
 
