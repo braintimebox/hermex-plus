@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.5 — 2026-08-12
+
+### Fixed
+- **Freeze (3-4s) when opening Tasks → Scheduled Messages:** `ScheduledMessagesView` used a synchronous `@Query` fetch on the main thread at appear. Now loads asynchronously after the view appears — opening the page never blocks. (Confirmed by freeze diagnostics: `tasks opened → scheduled list opened → freeze` ×3.)
+- **"Send Now" from the calendar inside a chat actually sends:** it previously only pasted the text into the composer (`draftMessage = msg.draftText`). Now it delivers via the chat composer when the target is the current session, or via direct API for another/new chat, then removes the pending row locally + on the server.
+- **@Model crossing into background tasks:** `syncScheduledMessageToServer` was passed the `PendingScheduledMessage` model object into `Task.detached` (not thread-safe — could crash/hang). Now captures scalar values only.
+- **App version in diagnostics:** `appVersion` showed `1.3` because `MARKETING_VERSION` in pbxproj was never synced. `bump-version.py` now updates it; current build reports `1.4.5`.
+
+### Changed
+- `bump-version.py`: syncs VERSION + pbxproj MARKETING_VERSION (README header has no version — public file).
+
 ## 1.4.4 — 2026-08-12
 
 ### Fixed

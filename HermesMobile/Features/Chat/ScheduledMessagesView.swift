@@ -7,25 +7,25 @@ struct ScheduledMessagesView: View {
     let sessionId: String
     let onSendNow: (PendingScheduledMessage) -> Void
 
-    @Query private var messages: [PendingScheduledMessage]
-
-    init(sessionId: String, onSendNow: @escaping (PendingScheduledMessage) -> Void) {
-        self.sessionId = sessionId
-        self.onSendNow = onSendNow
-        let predicate = #Predicate<PendingScheduledMessage> { $0.sessionId == sessionId }
-        _messages = Query(filter: predicate, sort: \.scheduledAt)
-    }
+    @State private var messages: [PendingScheduledMessage] = []
+    @State private var isLoading = true
 
     /// Show ALL scheduled messages (no sessionId filter). Used from Tasks / Chat button.
     init(onSendNow: @escaping (PendingScheduledMessage) -> Void) {
         self.sessionId = ""
         self.onSendNow = onSendNow
-        _messages = Query(sort: \.scheduledAt)
+    }
+
+    init(sessionId: String, onSendNow: @escaping (PendingScheduledMessage) -> Void) {
+        self.sessionId = sessionId
+        self.onSendNow = onSendNow
     }
 
     var body: some View {
         Group {
-            if messages.isEmpty {
+            if isLoading {
+                ProgressView()
+            } else if messages.isEmpty {
                 ContentUnavailableView(
                     "No Scheduled Messages",
                     systemImage: "clock.badge.questionmark",
@@ -43,13 +43,8 @@ struct ScheduledMessagesView: View {
                             scheduledAt: msg.scheduledAt,
                             onSendNow: { onSendNow(msg) },
                             onDelete: {
-                                modelContext.delete(msg)
-                                Task.detached(priority: .background) {
-                                    await deleteScheduledFromServer(
-                                        scheduleKey: msg.scheduleKey,
-                                        serverURLString: msg.serverURLString
-                                    )
-                                }
+                                deleteLocal(msg)
+                                Task { await deleteScheduledFromServer(msg: msg) }
                             }
                         )
                     }
@@ -58,13 +53,45 @@ struct ScheduledMessagesView: View {
         }
         .navigationTitle("Scheduled")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadMessages()
+        }
         .onAppear {
             MainThreadWatchdog.shared.setScreen("ScheduledMessages")
             HermexLogger.shared.log(type: "event", screen: "ScheduledMessages", message: "scheduled list opened")
         }
     }
 
-    private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {
+    /// Fetch on the main actor AFTER the view has appeared, so opening the page
+    /// never blocks on a synchronous SwiftData fetch (this was the 3-4s freeze
+    /// when opening Tasks → Scheduled Messages).
+    private func loadMessages() async {
+        defer { isLoading = false }
+        let descriptor: FetchDescriptor<PendingScheduledMessage>
+        if sessionId.isEmpty {
+            descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.scheduledAt)])
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == sessionId },
+                sortBy: [SortDescriptor(\.scheduledAt)]
+            )
+        }
+        do {
+            messages = try modelContext.fetch(descriptor)
+        } catch {
+            messages = []
+        }
+    }
+
+    private func deleteLocal(_ msg: PendingScheduledMessage) {
+        modelContext.delete(msg)
+    }
+
+    private func deleteScheduledFromServer(msg: PendingScheduledMessage) async {
+        // Capture scalar values BEFORE any await — the model object must not
+        // be touched from a background task after deletion.
+        let scheduleKey = msg.scheduleKey
+        let serverURLString = msg.serverURLString
         guard !serverURLString.isEmpty,
               let serverURL = URL(string: serverURLString) else { return }
         let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")

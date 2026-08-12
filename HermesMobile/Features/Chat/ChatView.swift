@@ -767,8 +767,7 @@ struct ChatView: View {
                 NavigationStack {
                     ScheduledMessagesView(
                         onSendNow: { msg in
-                            draftMessage = msg.draftText
-                            showingScheduledList = false
+                            Task { await sendScheduledNow(fromChat: msg) }
                         }
                     )
                 }
@@ -2345,21 +2344,123 @@ struct ChatView: View {
         )
         modelContext.insert(scheduled)
         draftMessage = ""
-        // Sync to server for autonomous dispatch
-        Task.detached(priority: .background) { [payload = scheduled] in
-            await syncScheduledMessageToServer(payload)
+        // Sync to server for autonomous dispatch. Capture SCALAR values only —
+        // a @Model object must not cross into a background task.
+        let syncKey = scheduled.scheduleKey
+        let syncSessionId = scheduled.sessionId
+        let syncSessionTitle = scheduled.sessionTitle
+        let syncText = scheduled.draftText
+        let syncScheduledAt = scheduled.scheduledAt.timeIntervalSince1970
+        let syncServerURL = scheduled.serverURLString
+        Task.detached(priority: .background) {
+            await syncScheduledMessageToServer(
+                scheduleKey: syncKey,
+                sessionId: syncSessionId,
+                sessionTitle: syncSessionTitle,
+                text: syncText,
+                scheduledAt: syncScheduledAt,
+                serverURLString: syncServerURL
+            )
         }
     }
 
-    private func syncScheduledMessageToServer(_ msg: PendingScheduledMessage) async {
-        guard let serverURL = URL(string: msg.serverURLString) else { return }
+    /// "Send Now" from the scheduled-messages list inside a chat: actually
+    /// delivers the message (via this chat's composer when the target is the
+    /// current session, otherwise via a direct API call), then removes the
+    /// pending row locally and on the server.
+    private func sendScheduledNow(fromChat msg: PendingScheduledMessage) async {
+        let sessionId = msg.sessionId
+        let text = msg.draftText
+        let serverURLString = msg.serverURLString
+        let scheduleKey = msg.scheduleKey
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let serverURL = URL(string: serverURLString) else { return }
+
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ChatView",
+            message: "send now from chat session=\(sessionId)"
+        )
+
+        // Target is THIS chat → send through the existing composer machinery.
+        if sessionId == (session.sessionId ?? "") {
+            draftMessage = text
+            await sendDraftMessage()
+        } else {
+            // Target is another/new chat → send directly via API.
+            let apiClient = APIClient(baseURL: serverURL)
+            var targetSessionId = sessionId
+            if targetSessionId.isEmpty {
+                do {
+                    let response = try await apiClient.createSession(
+                        workspace: nil, model: nil, modelProvider: nil, profile: nil
+                    )
+                    targetSessionId = response.session?.sessionId ?? ""
+                } catch {
+                    onAPIError(error)
+                    return
+                }
+            }
+            guard !targetSessionId.isEmpty else { return }
+            do {
+                _ = try await apiClient.startChat(
+                    sessionID: targetSessionId,
+                    message: text,
+                    workspace: nil,
+                    model: nil
+                )
+            } catch {
+                onAPIError(error)
+            }
+        }
+
+        // Remove the pending row locally and on the server.
+        modelContext.delete(msg)
+        do {
+            try modelContext.save()
+        } catch {
+            print("[ScheduledMessage] local save after send-now error: \(error.localizedDescription)")
+        }
+        await deleteScheduledFromServer(scheduleKey: scheduleKey, serverURLString: serverURLString)
+    }
+
+    private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {
+        guard !serverURLString.isEmpty,
+              let serverURL = URL(string: serverURLString) else { return }
+        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
+        let body = ["scheduleKey": scheduleKey]
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 10
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                print("[ScheduledMessage] deleted from server: \(scheduleKey)")
+            }
+        } catch {
+            print("[ScheduledMessage] delete sync error: \(error.localizedDescription)")
+        }
+    }
+
+    private func syncScheduledMessageToServer(
+        scheduleKey: String,
+        sessionId: String,
+        sessionTitle: String?,
+        text: String,
+        scheduledAt: TimeInterval,
+        serverURLString: String
+    ) async {
+        guard let serverURL = URL(string: serverURLString) else { return }
         let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
         let body: [String: Any] = [
-            "scheduleKey": msg.scheduleKey,
-            "sessionId": msg.sessionId,
-            "sessionTitle": msg.sessionTitle as Any,
-            "text": msg.draftText,
-            "scheduledAt": msg.scheduledAt.timeIntervalSince1970,
+            "scheduleKey": scheduleKey,
+            "sessionId": sessionId,
+            "sessionTitle": sessionTitle as Any,
+            "text": text,
+            "scheduledAt": scheduledAt,
         ]
         var request = URLRequest(url: webhookURL)
         request.httpMethod = "POST"
