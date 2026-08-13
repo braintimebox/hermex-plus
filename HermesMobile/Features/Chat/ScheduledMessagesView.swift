@@ -92,11 +92,11 @@ struct ScheduledMessagesView: View {
             let ctx = ModelContext(container)
             let descriptor: FetchDescriptor<PendingScheduledMessage>
             if filter.isEmpty {
-                descriptor = FetchDescriptor(sortBy: [SortDescriptor(\\.scheduledAt)])
+                descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.scheduledAt)])
             } else {
                 descriptor = FetchDescriptor(
                     predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == filter },
-                    sortBy: [SortDescriptor(\\.scheduledAt)]
+                    sortBy: [SortDescriptor(\.scheduledAt)]
                 )
             }
             return (try? ctx.fetch(descriptor).map { $0.persistentModelID }) ?? []
