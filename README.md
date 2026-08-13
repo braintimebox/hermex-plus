@@ -18,7 +18,7 @@ Your server. Your iPhone. No middleman.
 
 **Latest IPA (direct):** https://github.com/braintimebox/hermex-plus/actions — click the latest green build → scroll to Artifacts → download `HermesPlus-unsigned`
 
-**Current build:** https://github.com/braintimebox/hermex-plus/actions/runs/31665604032/artifacts/9167887937
+**Current build:** https://github.com/braintimebox/hermex-plus/actions/runs/31667112882/artifacts/9168417260
 
 Then install with SideStore / AltStore → connect to your Hermes server.
 
