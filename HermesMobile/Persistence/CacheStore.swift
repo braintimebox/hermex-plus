@@ -121,7 +121,9 @@ enum CacheStore {
         try context.save()
     }
 
-    @MainActor
+    /// NOT MainActor-isolated: the hot chat-send path writes the cache from a
+    /// background ModelContext so the write (fetch + upsert + save) never
+    /// blocks the UI thread. Callers pass a context created on the worker.
     static func cacheMessages(
         _ messages: [ChatMessage],
         serverURL: URL,
@@ -237,22 +239,30 @@ enum CacheStore {
     /// Last time full-table maintenance (expiry + eviction) ran. Maintenance
     /// scans every cached row, so it is throttled — running it on every cache
     /// write turned every chat send into several full-table SwiftData fetches
-    /// on the MainActor (part of the send-time freeze).
-    @MainActor
+    /// (part of the send-time freeze). Now runs on background cache writes,
+    /// so the throttle is lock-protected.
+    private static let maintenanceLock = NSLock()
     private static var lastMaintenanceAt: Date?
 
-    @MainActor
+    /// NOT MainActor-isolated (runs on background contexts from the chat-send
+    /// cache write). Throttled and lock-protected.
     private static func performMaintenance(in context: ModelContext, now: Date) throws {
+        maintenanceLock.lock()
+        let shouldRun: Bool
         if let last = lastMaintenanceAt, now.timeIntervalSince(last) < 60 {
-            return
+            shouldRun = false
+        } else {
+            lastMaintenanceAt = now
+            shouldRun = true
         }
-        lastMaintenanceAt = now
+        maintenanceLock.unlock()
+        guard shouldRun else { return }
+
         try deleteExpiredSessions(in: context, now: now)
         try deleteExpiredMessages(in: context, now: now)
         try evictOldestMessagesIfNeeded(in: context)
     }
 
-    @MainActor
     private static func deleteExpiredSessions(in context: ModelContext, now: Date) throws {
         let descriptor = FetchDescriptor<CachedSession>()
         let expiredSessions = try context.fetch(descriptor).filter { $0.expiresAt <= now }
@@ -261,7 +271,6 @@ enum CacheStore {
         }
     }
 
-    @MainActor
     private static func deleteExpiredMessages(in context: ModelContext, now: Date) throws {
         let descriptor = FetchDescriptor<CachedMessage>()
         let expiredMessages = try context.fetch(descriptor).filter { $0.expiresAt <= now }
@@ -270,7 +279,6 @@ enum CacheStore {
         }
     }
 
-    @MainActor
     private static func evictOldestMessagesIfNeeded(in context: ModelContext) throws {
         let descriptor = FetchDescriptor<CachedMessage>()
         let messages = try context.fetch(descriptor)

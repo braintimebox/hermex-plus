@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 — 2026-08-13
+
+### Changed
+- **Cache writes fully off the main thread:** `CacheStore.cacheMessages` is no longer MainActor-isolated. All chat-send cache writes (6 call sites: send, rollback, stream-complete, load) now run on a background ModelContext created from the shared container and discarded after the save — the main thread only reads the cache. Even the one-fetch write can no longer stall the send. Maintenance throttle is now lock-protected (it runs on background workers).
+- Audit of remaining main-thread SwiftData: only small bounded ops remain (single-fetch reads on chat open, tiny session rows) — no per-message loops anywhere.
+
 ## 1.5.0 — 2026-08-13
 
 ### Added

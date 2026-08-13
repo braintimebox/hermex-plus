@@ -1396,11 +1396,7 @@ final class ChatViewModel {
                 estimatedCost: session?.estimatedCost
             )
             if let modelContext {
-                do {
-                    try CacheStore.cacheMessages(messages, serverURL: server, sessionID: sessionID, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
-                }
+                cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
             }
             if let title = session?.title {
                 displayTitle = Self.displayTitle(from: title)
@@ -1635,11 +1631,7 @@ final class ChatViewModel {
             completedReasoningGroups = []
 
             if let modelContext {
-                do {
-                    try CacheStore.cacheMessages(messages, serverURL: server, sessionID: sessionID, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
-                }
+                cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
             }
 
             return didAddMessages
@@ -2437,14 +2429,33 @@ final class ChatViewModel {
         attachmentCoordinator.restorePendingAttachments(attachments)
     }
 
-    private func cacheCurrentMessages(sessionID: String, modelContext: ModelContext?) {
+    /// Writes the cache on a background ModelContext so the write (fetch +
+    /// upsert + save) never blocks the main thread. The chat-send path used to
+    /// do this synchronously on the main context — the source of the 3-4s
+    /// send-time freeze (one SwiftData fetch per message). ModelContainer is
+    /// Sendable; the background context is created inside the worker and
+    /// discarded after the save.
+    private func cacheMessagesInBackground(
+        _ messages: [ChatMessage],
+        sessionID: String,
+        modelContext: ModelContext?
+    ) {
         guard let modelContext else { return }
-
-        do {
-            try CacheStore.cacheMessages(messages, serverURL: server, sessionID: sessionID, in: modelContext)
-        } catch {
-            cacheErrorMessage = error.localizedDescription
+        let container = modelContext.container
+        let serverURL = server
+        DispatchQueue.global(qos: .utility).async {
+            let bgContext = ModelContext(container)
+            do {
+                try CacheStore.cacheMessages(messages, serverURL: serverURL, sessionID: sessionID, in: bgContext)
+            } catch {
+                HermexLogger.shared.log(type: "error", message: "cache write: \(error.localizedDescription)")
+            }
         }
+    }
+
+    private func cacheCurrentMessages(sessionID: String, modelContext: ModelContext?) {
+        guard modelContext != nil else { return }
+        cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
     }
 
     func cacheCompletedResponse(modelContext: ModelContext) {
@@ -3525,11 +3536,7 @@ final class ChatViewModel {
                 reasoningAnchorMessageID = nil
 
                 if let modelContext {
-                    do {
-                        try CacheStore.cacheMessages(messages, serverURL: server, sessionID: sessionID, in: modelContext)
-                    } catch {
-                        cacheErrorMessage = error.localizedDescription
-                    }
+                    cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
                 }
             }
 
@@ -3628,11 +3635,7 @@ final class ChatViewModel {
                 reasoningAnchorMessageID = nil
 
                 if let modelContext {
-                    do {
-                        try CacheStore.cacheMessages(messages, serverURL: server, sessionID: sessionID, in: modelContext)
-                    } catch {
-                        cacheErrorMessage = error.localizedDescription
-                    }
+                    cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
                 }
             }
 
