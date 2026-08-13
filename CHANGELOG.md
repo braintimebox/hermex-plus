@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.8 — 2026-08-13
+
+### Fixed
+- **"Send Now" looked like a no-op when the message targeted another chat:** the message was delivered to its target session, but the user stayed in the current chat and saw nothing; the delivery only became visible after back/forward navigation (reported as "рассинхрон состояний"). ChatView now navigates to the target session after Send Now when it differs from the chat on screen, so the delivered message is immediately visible.
+
 ## 1.4.7 — 2026-08-13
 
 ### Fixed

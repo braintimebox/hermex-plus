@@ -2387,10 +2387,14 @@ struct ChatView: View {
             message: "send now from chat session=\(sessionId)"
         )
 
+        let currentSessionId = session.sessionId ?? ""
+        var deliveredSessionId: String?
+
         // Target is THIS chat → send through the existing composer machinery.
-        if sessionId == (session.sessionId ?? "") {
+        if sessionId == currentSessionId {
             draftMessage = text
             await sendDraftMessage()
+            deliveredSessionId = currentSessionId
         } else {
             // Target is another/new chat → send directly via API.
             let apiClient = APIClient(baseURL: serverURL)
@@ -2414,6 +2418,7 @@ struct ChatView: View {
                     workspace: nil,
                     model: nil
                 )
+                deliveredSessionId = targetSessionId
             } catch {
                 onAPIError(error)
             }
@@ -2431,6 +2436,19 @@ struct ChatView: View {
         // message land in the chat — before, the list stayed open and the row
         // never disappeared, which read as "Send Now does nothing".
         showingScheduledList = false
+
+        // The message went to a DIFFERENT session than the one on screen —
+        // navigate there so the delivery is visible. Without this the send
+        // looked like a no-op ("не увидел что сообщение отправлено в этот чат",
+        // "увидел другой чат Untitled после back/forward").
+        if let deliveredSessionId,
+           !deliveredSessionId.isEmpty,
+           deliveredSessionId != currentSessionId {
+            forkedSession = SessionSummary(
+                sessionId: deliveredSessionId,
+                title: msg.sessionTitle ?? "Chat"
+            )
+        }
     }
 
     private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {
