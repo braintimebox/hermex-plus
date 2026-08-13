@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.6 — 2026-08-13
+
+### Fixed
+- **Freeze opening Tasks → Scheduled Messages (still present in 1.4.5):** `TasksView` still used `@Query` — a synchronous SwiftData fetch on the main thread at view construction. The count now loads asynchronously on a detached context. `ScheduledMessagesView` also fetched synchronously in `.task` (main actor); the fetch now runs on a detached context and models are re-resolved on the main context, so opening the page never blocks.
+- **"Send Now" gave zero visible reaction:** the message was actually delivered, but the list held a stale snapshot — the row never disappeared and the sheet never closed. The list now reloads after a send/delete, and the sheet dismisses so the delivered message is visible in the chat.
+- **Double-tap sent the same message repeatedly:** "Send Now" is now guarded while a send is in flight (12 taps previously produced multiple deliveries).
+
 ## 1.4.5 — 2026-08-12
 
 ### Fixed

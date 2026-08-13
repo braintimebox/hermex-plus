@@ -5,18 +5,21 @@ struct ScheduledMessagesView: View {
     @Environment(\.modelContext) private var modelContext
 
     let sessionId: String
-    let onSendNow: (PendingScheduledMessage) -> Void
+    let onSendNow: (PendingScheduledMessage) async -> Void
 
     @State private var messages: [PendingScheduledMessage] = []
     @State private var isLoading = true
+    /// Guards against double-tapping "Send Now" while a send is in flight —
+    /// every extra tap used to re-send the same message (12 taps = 12 sends).
+    @State private var isSending = false
 
     /// Show ALL scheduled messages (no sessionId filter). Used from Tasks / Chat button.
-    init(onSendNow: @escaping (PendingScheduledMessage) -> Void) {
+    init(onSendNow: @escaping (PendingScheduledMessage) async -> Void) {
         self.sessionId = ""
         self.onSendNow = onSendNow
     }
 
-    init(sessionId: String, onSendNow: @escaping (PendingScheduledMessage) -> Void) {
+    init(sessionId: String, onSendNow: @escaping (PendingScheduledMessage) async -> Void) {
         self.sessionId = sessionId
         self.onSendNow = onSendNow
     }
@@ -41,10 +44,22 @@ struct ScheduledMessagesView: View {
                             scheduleKey: msg.scheduleKey,
                             serverURLString: msg.serverURLString,
                             scheduledAt: msg.scheduledAt,
-                            onSendNow: { onSendNow(msg) },
+                            isSending: isSending,
+                            onSendNow: {
+                                guard !isSending else { return }
+                                isSending = true
+                                Task {
+                                    await onSendNow(msg)
+                                    await loadMessages()
+                                    isSending = false
+                                }
+                            },
                             onDelete: {
                                 deleteLocal(msg)
-                                Task { await deleteScheduledFromServer(msg: msg) }
+                                Task {
+                                    await deleteScheduledFromServer(msg: msg)
+                                    await loadMessages()
+                                }
                             }
                         )
                     }
@@ -62,25 +77,31 @@ struct ScheduledMessagesView: View {
         }
     }
 
-    /// Fetch on the main actor AFTER the view has appeared, so opening the page
-    /// never blocks on a synchronous SwiftData fetch (this was the 3-4s freeze
-    /// when opening Tasks → Scheduled Messages).
+    /// Fetch off the main thread. The main ModelContext can be busy autosaving
+    /// streamed chat rows; a synchronous fetch on the main actor blocked the UI
+    /// for 3-4s every time the page opened (confirmed by freeze diagnostics on
+    /// v1.4.5: "scheduled list opened → main thread blocked 3s"). The heavy work
+    /// runs on a detached context; only the handful of IDs come back, and the
+    /// models are re-resolved on the main context so row actions (delete) work.
     private func loadMessages() async {
+        isLoading = true
         defer { isLoading = false }
-        let descriptor: FetchDescriptor<PendingScheduledMessage>
-        if sessionId.isEmpty {
-            descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.scheduledAt)])
-        } else {
-            descriptor = FetchDescriptor(
-                predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == sessionId },
-                sortBy: [SortDescriptor(\.scheduledAt)]
-            )
-        }
-        do {
-            messages = try modelContext.fetch(descriptor)
-        } catch {
-            messages = []
-        }
+        let container = modelContext.container
+        let filter = sessionId
+        let ids = await Task.detached(priority: .userInitiated) { () -> [PersistentIdentifier] in
+            let ctx = ModelContext(container)
+            let descriptor: FetchDescriptor<PendingScheduledMessage>
+            if filter.isEmpty {
+                descriptor = FetchDescriptor(sortBy: [SortDescriptor(\\.scheduledAt)])
+            } else {
+                descriptor = FetchDescriptor(
+                    predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == filter },
+                    sortBy: [SortDescriptor(\\.scheduledAt)]
+                )
+            }
+            return (try? ctx.fetch(descriptor).map { $0.persistentModelID }) ?? []
+        }.value
+        messages = ids.compactMap { modelContext.model(for: $0) as? PendingScheduledMessage }
     }
 
     private func deleteLocal(_ msg: PendingScheduledMessage) {
@@ -119,6 +140,7 @@ private struct ScheduledMessageRow: View {
     let scheduleKey: String
     let serverURLString: String
     let scheduledAt: Date
+    let isSending: Bool
     let onSendNow: () -> Void
     let onDelete: () -> Void
 
@@ -142,6 +164,7 @@ private struct ScheduledMessageRow: View {
                 Button("Send Now") { onSendNow() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .disabled(isSending)
 
                 Button("Delete", role: .destructive) { onDelete() }
                     .buttonStyle(.borderless)

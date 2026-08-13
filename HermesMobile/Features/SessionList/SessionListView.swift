@@ -474,7 +474,7 @@ struct SessionListView: View {
                 ArchivedSessionsView(server: server, onAPIError: authManager.handleAPIError)
             case .scheduledMessages:
                 ScheduledMessagesView { msg in
-                    Task { await sendScheduledNow(msg) }
+                    await sendScheduledNow(msg)
                 }
             case .scheduled:
                 ScheduledSessionsView(

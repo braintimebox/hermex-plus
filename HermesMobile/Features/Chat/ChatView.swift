@@ -767,7 +767,7 @@ struct ChatView: View {
                 NavigationStack {
                     ScheduledMessagesView(
                         onSendNow: { msg in
-                            Task { await sendScheduledNow(fromChat: msg) }
+                            await sendScheduledNow(fromChat: msg)
                         }
                     )
                 }
@@ -2423,6 +2423,10 @@ struct ChatView: View {
             print("[ScheduledMessage] local save after send-now error: \(error.localizedDescription)")
         }
         await deleteScheduledFromServer(scheduleKey: scheduleKey, serverURLString: serverURLString)
+        // Dismiss the scheduled-messages sheet so the user sees the delivered
+        // message land in the chat — before, the list stayed open and the row
+        // never disappeared, which read as "Send Now does nothing".
+        showingScheduledList = false
     }
 
     private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {

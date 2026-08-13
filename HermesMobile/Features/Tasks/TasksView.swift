@@ -8,7 +8,11 @@ struct TasksView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: TasksViewModel
     @State private var isPresentingCreateTask = false
-    @Query(filter: #Predicate<PendingScheduledMessage> { _ in true }) private var scheduledMessages: [PendingScheduledMessage]
+    /// Count of pending scheduled messages. Loaded asynchronously off the main
+    /// thread — a `@Query` here performed a synchronous SwiftData fetch at view
+    /// construction and froze opening Tasks over a busy store (same freeze class
+    /// as ScheduledMessagesView on v1.4.5).
+    @State private var scheduledCount = 0
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -61,7 +65,25 @@ struct TasksView: View {
                 MainThreadWatchdog.shared.setScreen("TasksView")
                 HermexLogger.shared.log(type: "event", screen: "TasksView", message: "tasks opened")
                 await loadTasks()
+                await loadScheduledCount()
             }
+            .onAppear {
+                // Refresh the count when returning from the Scheduled list
+                // (rows may have been sent/deleted there).
+                Task { await loadScheduledCount() }
+            }
+    }
+
+    /// Count pending scheduled messages on a detached context so a busy store
+    /// never blocks the main thread (the old `@Query` did exactly that).
+    private func loadScheduledCount() async {
+        let container = modelContext.container
+        let count = await Task.detached(priority: .userInitiated) { () -> Int in
+            let ctx = ModelContext(container)
+            let descriptor = FetchDescriptor<PendingScheduledMessage>()
+            return (try? ctx.fetchCount(descriptor)) ?? 0
+        }.value
+        scheduledCount = count
     }
 
     @ViewBuilder
@@ -86,17 +108,17 @@ struct TasksView: View {
             }
         } else {
             List {
-                if !scheduledMessages.isEmpty {
+                if scheduledCount > 0 {
                     Section {
                         NavigationLink {
                             ScheduledMessagesView { msg in
-                                Task { await sendScheduledNow(msg) }
+                                await sendScheduledNow(msg)
                             }
                         } label: {
                             HStack {
                                 Label("Scheduled Messages", systemImage: "calendar.badge.clock")
                                 Spacer()
-                                Text("\(scheduledMessages.count)")
+                                Text("\(scheduledCount)")
                                     .foregroundStyle(.secondary)
                             }
                         }
