@@ -162,7 +162,7 @@ final class MainThreadWatchdog {
             // snapshot (Thread.callStackSymbols is static/current-thread only,
             // so the main thread's own 1s loop stores it). Turns "blocked 3s
             // [ChatView]" into "blocked 3s at CacheStore.cacheMessages:149".
-            let memoryMB = MemoryFootprint.currentBytes().map { $0 / 1_048_576 } ?? -1
+            let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
             let heavyOp = HeavyOperationTracker.snapshot() ?? ""
             HermexLogger.shared.log(
                 type: "freeze",
