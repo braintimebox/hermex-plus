@@ -474,12 +474,24 @@ private struct GridAttachmentCell: View {
     @ViewBuilder
     private var imageCell: some View {
         ZStack {
-            if let localData, let uiImage = UIImage(data: localData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipped()
+            if let localData {
+                // Downsample local attachments too: decoding a full-resolution
+                // photo on the main thread (UIImage(data:) on a 12MP shot) janks
+                // scrolling and costs ~48MB RAM per bubble. The cell only needs
+                // a ~512px thumbnail; the full image opens on tap.
+                let previewData = ImagePreviewDownsampler.previewData(
+                    from: localData,
+                    maxPixelSize: ImagePreviewDownsampler.attachmentMaxPixelSize
+                ) ?? localData
+                if let uiImage = UIImage(data: previewData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipped()
+                } else {
+                    fallbackImage
+                }
             } else if let path = resolvedPath, let loadAttachmentImage {
                 RemoteAttachmentImage(
                     path: path,

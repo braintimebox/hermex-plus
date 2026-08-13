@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.2 — 2026-08-13
+
+### Fixed
+- **Local image attachments no longer decode at full resolution on the main thread:** chat bubbles with locally attached photos rendered via `UIImage(data:)` on the full-size data — a 12MP shot cost ~48MB RAM and a 200-500ms main-thread decode per bubble, janking scroll through photo-heavy chats. Bubbles now render a ~512px downsampled thumbnail (same path the remote images already used); the full image still opens on tap.
+- (Audit note: the file-size-before-read check in the paste/import path was already correct — validation runs via metadata before `Data(contentsOf:)`; no change needed.)
+
 ## 1.5.1 — 2026-08-13
 
 ### Changed
