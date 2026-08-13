@@ -109,10 +109,21 @@ struct ScheduledMessagesView: View {
     }
 
     private func deleteScheduledFromServer(msg: PendingScheduledMessage) async {
-        // Capture scalar values BEFORE any await — the model object must not
-        // be touched from a background task after deletion.
-        let scheduleKey = msg.scheduleKey
-        let serverURLString = msg.serverURLString
+        await PendingScheduledMessage.deleteFromServer(
+            scheduleKey: msg.scheduleKey,
+            serverURLString: msg.serverURLString
+        )
+    }
+}
+
+/// Shared server-side cleanup for scheduled messages. Cancels the timer on the
+/// scheduled-endpoint server (DELETE /webhook/scheduled-messages) so a message
+/// that was already sent manually ("Send Now") or by the client dispatch loop
+/// is NOT re-sent automatically when its scheduled time arrives. Must be called
+/// with SCALAR values — never pass a @Model object into an async helper that
+/// outlives the delete.
+extension PendingScheduledMessage {
+    static func deleteFromServer(scheduleKey: String, serverURLString: String) async {
         guard !serverURLString.isEmpty,
               let serverURL = URL(string: serverURLString) else { return }
         let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")

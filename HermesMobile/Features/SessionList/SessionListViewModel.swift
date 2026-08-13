@@ -1174,7 +1174,18 @@ final class SessionListViewModel {
                     workspace: nil,
                     model: nil
                 )
+                // Capture scalars BEFORE deleting the row — the model must not
+                // be touched after delete.
+                let scheduleKey = message.scheduleKey
+                let srv = message.serverURLString
                 modelContext.delete(message)
+                try? modelContext.save()
+                // Cancel the server timer so the message is NOT re-sent at its
+                // scheduled time by the scheduled-endpoint dispatcher.
+                await PendingScheduledMessage.deleteFromServer(
+                    scheduleKey: scheduleKey,
+                    serverURLString: srv
+                )
             } catch {
                 // Skip, retry next cycle
                 continue

@@ -205,7 +205,18 @@ struct TasksView: View {
                 workspace: nil,
                 model: nil
             )
+            // Capture scalars BEFORE deleting the row — the model must not be
+            // touched after delete.
+            let scheduleKey = msg.scheduleKey
+            let serverURLString = msg.serverURLString
             modelContext.delete(msg)
+            try? modelContext.save()
+            // Cancel the server timer so the message is NOT re-sent
+            // automatically at its scheduled time (duplicate-delivery bug).
+            await PendingScheduledMessage.deleteFromServer(
+                scheduleKey: scheduleKey,
+                serverURLString: serverURLString
+            )
         } catch {
             onAPIError(error)
         }

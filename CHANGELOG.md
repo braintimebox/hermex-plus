@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.7 — 2026-08-13
+
+### Fixed
+- **"Send Now" re-sent the message automatically (duplicate delivery):** the Tasks and Session List send paths removed the local row but never deleted the server-side webhook record, so the scheduled-endpoint timer fired at the scheduled time and delivered the message a second time. All send paths (Tasks, Session List, Chat) plus the client dispatch loop now cancel the server timer via a shared `PendingScheduledMessage.deleteFromServer` after delivery.
+- **Latency between creating a scheduled message and it appearing in Tasks → Scheduled:** the message was inserted into SwiftData without an explicit save, so the detached-context fetches (which only see committed rows) didn't show it until the autosave fired seconds later. Both creation sites now `save()` immediately.
+
 ## 1.4.6 — 2026-08-13
 
 ### Fixed

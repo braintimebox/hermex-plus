@@ -2343,6 +2343,10 @@ struct ChatView: View {
             serverURLString: server.absoluteString
         )
         modelContext.insert(scheduled)
+        // Commit immediately — the Scheduled/Tasks lists fetch on a detached
+        // context and only see committed rows; without save() the message
+        // appeared there with a multi-second delay (SwiftData autosave).
+        try? modelContext.save()
         draftMessage = ""
         // Sync to server for autonomous dispatch. Capture SCALAR values only —
         // a @Model object must not cross into a background task.
@@ -2430,23 +2434,10 @@ struct ChatView: View {
     }
 
     private func deleteScheduledFromServer(scheduleKey: String, serverURLString: String) async {
-        guard !serverURLString.isEmpty,
-              let serverURL = URL(string: serverURLString) else { return }
-        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
-        let body = ["scheduleKey": scheduleKey]
-        var request = URLRequest(url: webhookURL)
-        request.httpMethod = "DELETE"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 10
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                print("[ScheduledMessage] deleted from server: \(scheduleKey)")
-            }
-        } catch {
-            print("[ScheduledMessage] delete sync error: \(error.localizedDescription)")
-        }
+        await PendingScheduledMessage.deleteFromServer(
+            scheduleKey: scheduleKey,
+            serverURLString: serverURLString
+        )
     }
 
     private func syncScheduledMessageToServer(
