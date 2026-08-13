@@ -129,6 +129,11 @@ enum CacheStore {
         in context: ModelContext,
         cachedAt: Date = Date()
     ) throws {
+        // Marked so a freeze during this known-heavy main-thread operation is
+        // attributed to it in the freeze report (heavyOp field).
+        HeavyOperationTracker.begin("CacheStore.cacheMessages")
+        defer { HeavyOperationTracker.end() }
+
         let serverURLString = serverURL.absoluteString
         let freshKeys = Set(messages.enumerated().map { offset, message in
             CachedMessage.cacheKey(

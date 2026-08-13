@@ -70,6 +70,7 @@ struct HermesMobileApp: App {
     init() {
         BGTask.register()
         MainThreadWatchdog.shared.start()
+        FrameTimeMonitor.shared.start()
     }
 
     var body: some Scene {

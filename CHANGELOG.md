@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 — 2026-08-13
+
+### Added
+- **Freeze diagnostics v2 — real hangs, attributed:**
+  - **Main-thread stack capture:** every foreground freeze now ships the symbolicated stack of the main thread (where it was stuck) plus physical memory footprint and the instrumented heavy operation in flight (`heavyOp`). "blocked 3s" becomes "blocked 3s at `CacheStore.cacheMessages:149`".
+  - **Frame-time jank monitor (CADisplayLink):** sustained sub-30 FPS over a 2s window (or a single >50ms frame) logs a `jank` event with avg/max frame ms and fps — catches the "interface lags while the agent thinks" case that never hard-blocks the main thread. Rate-limited 1/30s.
+  - **Stutter detection:** 1-3s main-thread stalls (below the 3s hard-freeze threshold) log rate-limited `stutter` events.
+  - **Server-side watchdog** now alerts on `jank`/`stutter` too, still silent when healthy.
+
 ## 1.4.9 — 2026-08-13
 
 ### Fixed

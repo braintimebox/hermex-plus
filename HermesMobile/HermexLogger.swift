@@ -27,11 +27,14 @@ final class HermexLogger {
     private init() {}
 
     /// Enqueue a diagnostic event. Never throws, never crashes.
+    /// `extras` carries structured context (stack, memory, heavy op) for
+    /// freeze/jank reports; merged into the event after the base fields.
     func log(
         type: String,
         durationMs: Double? = nil,
         screen: String? = nil,
-        message: String
+        message: String,
+        extras: [String: Any]? = nil
     ) {
         queue.async { [self] in
             let now = Date().timeIntervalSince1970
@@ -52,6 +55,7 @@ final class HermexLogger {
             ]
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
+            if let extras { event.merge(extras) { _, new in new } }
             if type == "freeze" {
                 event["lastEvents"] = recentEvents
                 event["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "?"
