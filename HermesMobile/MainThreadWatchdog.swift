@@ -83,6 +83,11 @@ final class MainThreadWatchdog {
     private var timer: DispatchSourceTimer?
     private var currentScreen: String?
     private var lastStutterReport = Date(timeIntervalSince1970: 0)
+    /// Last captured main-thread stack (refreshed ~1/s by a main-queue loop).
+    /// Thread.callStackSymbols is static (current thread only), so we can't ask
+    /// for the main thread's stack from the watchdog queue; this snapshot shows
+    /// what the main thread was executing right before it got stuck.
+    private var lastMainStack = "main thread stack unavailable"
 
     private init() {}
 
@@ -98,6 +103,23 @@ final class MainThreadWatchdog {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
+
+        // Main-queue loop that snapshots the main thread's own stack ~1/s.
+        // Self-perpetuating; when the main thread blocks, the loop stalls and
+        // lastMainStack keeps the pre-freeze frame.
+        DispatchQueue.main.async { [weak self] in
+            self?.scheduleMainStackCapture()
+        }
+    }
+
+    private func scheduleMainStackCapture() {
+        let stack = Thread.callStackSymbols.prefix(15).joined(separator: " | ")
+        lock.lock()
+        lastMainStack = stack
+        lock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.scheduleMainStackCapture()
+        }
     }
 
     /// Optional context for the next freeze event (e.g. the active screen).
@@ -129,17 +151,17 @@ final class MainThreadWatchdog {
         let elapsed = now.timeIntervalSince(lastPong)
         let wasFrozen = isFrozen
         let screen = currentScreen
+        let mainStack = lastMainStack
         lock.unlock()
 
         if elapsed > hangThreshold && !wasFrozen {
             lock.lock()
             isFrozen = true
             lock.unlock()
-            // Capture WHERE the main thread is stuck. Thread.main.callStackSymbols
-            // from this background queue returns the main thread's current stack —
-            // turns "blocked 3s [ChatView]" into "blocked 3s at
-            // CacheStore.cacheMessages:149".
-            let stack = Thread.main.callStackSymbols.prefix(15).joined(separator: " | ")
+            // Capture WHERE the main thread is stuck: the last main-queue stack
+            // snapshot (Thread.callStackSymbols is static/current-thread only,
+            // so the main thread's own 1s loop stores it). Turns "blocked 3s
+            // [ChatView]" into "blocked 3s at CacheStore.cacheMessages:149".
             let memoryMB = MemoryFootprint.currentBytes().map { $0 / 1_048_576 } ?? -1
             let heavyOp = HeavyOperationTracker.snapshot() ?? ""
             HermexLogger.shared.log(
@@ -148,7 +170,7 @@ final class MainThreadWatchdog {
                 screen: screen,
                 message: "main thread blocked \(Int(elapsed))s",
                 extras: [
-                    "stack": stack,
+                    "stack": mainStack,
                     "memoryMB": memoryMB,
                     "heavyOp": heavyOp,
                 ]
