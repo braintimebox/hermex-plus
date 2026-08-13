@@ -139,6 +139,24 @@ enum CacheStore {
             )
         })
 
+        // ONE fetch for the whole session instead of a predicate fetch per
+        // message. The old loop called cachedMessage(cacheKey:) N times — with
+        // hundreds of cached messages that was hundreds of SwiftData queries on
+        // the MainActor per send, freezing the UI for seconds exactly when the
+        // user submitted a task (confirmed by freeze diagnostics: 3-4s block
+        // right after "chat opened" / on send).
+        let sessionDescriptor = FetchDescriptor<CachedMessage>(
+            predicate: #Predicate { cachedMessage in
+                cachedMessage.serverURLString == serverURLString
+                    && cachedMessage.sessionID == sessionID
+            }
+        )
+        let sessionCached = try context.fetch(sessionDescriptor)
+        var cachedByKey: [String: CachedMessage] = [:]
+        for cachedMessage in sessionCached {
+            cachedByKey[cachedMessage.cacheKey] = cachedMessage
+        }
+
         for (offset, message) in messages.enumerated() {
             let cacheKey = CachedMessage.cacheKey(
                 serverURLString: serverURLString,
@@ -146,7 +164,7 @@ enum CacheStore {
                 message: message,
                 sortIndex: offset
             )
-            if let cachedMessage = try cachedMessage(cacheKey: cacheKey, in: context) {
+            if let cachedMessage = cachedByKey[cacheKey] {
                 cachedMessage.apply(message, sortIndex: offset, cachedAt: cachedAt)
             } else {
                 context.insert(CachedMessage(
@@ -159,13 +177,7 @@ enum CacheStore {
             }
         }
 
-        let descriptor = FetchDescriptor<CachedMessage>(
-            predicate: #Predicate { cachedMessage in
-                cachedMessage.serverURLString == serverURLString
-                    && cachedMessage.sessionID == sessionID
-            }
-        )
-        let staleMessages = try context.fetch(descriptor).filter { !freshKeys.contains($0.cacheKey) }
+        let staleMessages = sessionCached.filter { !freshKeys.contains($0.cacheKey) }
         for staleMessage in staleMessages {
             context.delete(staleMessage)
         }
@@ -217,8 +229,19 @@ enum CacheStore {
         try context.save()
     }
 
+    /// Last time full-table maintenance (expiry + eviction) ran. Maintenance
+    /// scans every cached row, so it is throttled — running it on every cache
+    /// write turned every chat send into several full-table SwiftData fetches
+    /// on the MainActor (part of the send-time freeze).
+    @MainActor
+    private static var lastMaintenanceAt: Date?
+
     @MainActor
     private static func performMaintenance(in context: ModelContext, now: Date) throws {
+        if let last = lastMaintenanceAt, now.timeIntervalSince(last) < 60 {
+            return
+        }
+        lastMaintenanceAt = now
         try deleteExpiredSessions(in: context, now: now)
         try deleteExpiredMessages(in: context, now: now)
         try evictOldestMessagesIfNeeded(in: context)

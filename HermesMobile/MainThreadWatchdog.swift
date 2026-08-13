@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Detects main-thread hangs in the app.
 ///
@@ -48,6 +49,21 @@ final class MainThreadWatchdog {
 
     private func tick() {
         let now = Date()
+
+        // The main queue legitimately does not run while the app is suspended
+        // or in the background — counting that as a freeze produces false
+        // multi-minute "main thread blocked" reports every time the phone is
+        // locked or the app backgrounded (real case: 491s/729s "freezes" that
+        // were simply suspension time; the watchdog's timer fires on resume and
+        // measures the whole pause as a block). Only report when the app is
+        // active. Mirrors HermexLogger's foreground flag (UIApplication read
+        // from this background queue is already done there, line 58).
+        guard UIApplication.shared.applicationState == .active else {
+            lock.lock()
+            lastPong = now
+            lock.unlock()
+            return
+        }
 
         lock.lock()
         let elapsed = now.timeIntervalSince(lastPong)

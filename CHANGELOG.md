@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.9 — 2026-08-13
+
+### Fixed
+- **UI freeze when submitting a task (3-4s foreground block, longer perceived):** every chat send wrote the offline cache synchronously on the main thread — one SwiftData predicate fetch PER message plus full-table maintenance scans. With hundreds of cached messages that was hundreds of queries on the MainActor, blocking the UI exactly when the user submitted a task. `cacheMessages` now fetches the session's cache once and upserts from a dictionary (N queries → 1), and maintenance (expiry/eviction full scans) is throttled to once a minute.
+- **Watchdog false positives (multi-minute "freezes"):** the on-device watchdog counted app suspension as a main-thread block (its timer fires on resume and measures the whole pause — 491s/729s reports were simply the phone being locked). It now only reports when the app is active; the server-side freeze watchdog ignores `foreground=false` events too.
+
 ## 1.4.8 — 2026-08-13
 
 ### Fixed
