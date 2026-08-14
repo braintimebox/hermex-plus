@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.4 — 2026-08-14
+
+### Added
+- **Server avatar photo from gallery:** tapping the "Server Avatar" circle in Settings → Identity opens the system photo picker; the chosen image replaces the initials badge. Stored locally on the device only (never synced to the server); falls back to initials + color when unset. Works in the server list, the per-server editor, and the add-server flow.
+
 ## 1.5.3 — 2026-08-14
 
 ### Added
