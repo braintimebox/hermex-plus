@@ -5135,7 +5135,23 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
     }
 
     func streamCoordinatorDidReceiveErrorMessage(_ message: String) {
-        sendErrorMessage = message
+        if Self.isContextExhaustionMessage(message) {
+            sendErrorMessage = String(
+                localized: "This session's context is exhausted and can't be compressed further. Your messages are saved — start a new chat to continue."
+            )
+        } else {
+            sendErrorMessage = message
+        }
+    }
+
+    /// Detects terminal "context length exceeded / cannot compress further"
+    /// errors from the server so the client can surface a human-readable
+    /// recovery hint instead of the raw token-count error.
+    private static func isContextExhaustionMessage(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("context length exceeded")
+            || lower.contains("cannot compress further")
+            || (lower.contains("context length") && lower.contains("compress"))
     }
 
     func streamCoordinatorDidReceiveCompressingStart() {
