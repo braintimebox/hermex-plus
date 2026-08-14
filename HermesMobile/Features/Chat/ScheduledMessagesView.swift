@@ -12,6 +12,8 @@ struct ScheduledMessagesView: View {
     /// Guards against double-tapping "Send Now" while a send is in flight —
     /// every extra tap used to re-send the same message (12 taps = 12 sends).
     @State private var isSending = false
+    /// Message currently being edited in the sheet.
+    @State private var editingMessage: PendingScheduledMessage?
 
     /// Show ALL scheduled messages (no sessionId filter). Used from Tasks / Chat button.
     init(onSendNow: @escaping (PendingScheduledMessage) async -> Void) {
@@ -60,6 +62,9 @@ struct ScheduledMessagesView: View {
                                     await deleteScheduledFromServer(msg: msg)
                                     await loadMessages()
                                 }
+                            },
+                            onEdit: {
+                                editingMessage = msg
                             }
                         )
                     }
@@ -74,6 +79,11 @@ struct ScheduledMessagesView: View {
         .onAppear {
             MainThreadWatchdog.shared.setScreen("ScheduledMessages")
             HermexLogger.shared.log(type: "event", screen: "ScheduledMessages", message: "scheduled list opened")
+        }
+        .sheet(item: $editingMessage) { msg in
+            EditScheduledMessageSheet(message: msg) {
+                Task { await loadMessages() }
+            }
         }
     }
 
@@ -102,6 +112,36 @@ struct ScheduledMessagesView: View {
             return (try? ctx.fetch(descriptor).map { $0.persistentModelID }) ?? []
         }.value
         messages = ids.compactMap { modelContext.model(for: $0) as? PendingScheduledMessage }
+        await reconcileWithServer()
+    }
+
+    /// Drop local rows whose delivery time has already passed AND that the
+    /// server no longer tracks. When the scheduled-endpoint server dispatches
+    /// a message it removes it from its own state but never tells the client,
+    /// so those rows would otherwise linger in the list forever ("scheduled
+    /// message from yesterday still stuck"). Rows still known to the server
+    /// are kept (the server may still be retrying).
+    private func reconcileWithServer() async {
+        let now = Date()
+        let stale = messages.filter { $0.scheduledAt < now }
+        guard !stale.isEmpty else { return }
+        let byServer = Dictionary(grouping: stale) { $0.serverURLString }
+        var toDelete: [PendingScheduledMessage] = []
+        for (serverURLString, rows) in byServer {
+            guard let serverKeys = await PendingScheduledMessage.serverScheduleKeys(
+                serverURLString: serverURLString
+            ) else {
+                // Server unreachable — do NOT delete anything this pass.
+                continue
+            }
+            toDelete += rows.filter { !serverKeys.contains($0.scheduleKey) }
+        }
+        guard !toDelete.isEmpty else { return }
+        for msg in toDelete {
+            modelContext.delete(msg)
+        }
+        try? modelContext.save()
+        await loadMessages()
     }
 
     private func deleteLocal(_ msg: PendingScheduledMessage) {
@@ -142,6 +182,64 @@ extension PendingScheduledMessage {
             print("[ScheduledMessage] delete sync error: \(error.localizedDescription)")
         }
     }
+
+    /// GET the server's current scheduled-message keys for reconciliation.
+    /// Returns nil when the server is unreachable so the caller can skip
+    /// deletion rather than assume an empty remote state.
+    static func serverScheduleKeys(serverURLString: String) async -> Set<String>? {
+        guard !serverURLString.isEmpty,
+              let serverURL = URL(string: serverURLString) else { return nil }
+        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
+        var request = URLRequest(url: webhookURL)
+        request.timeoutInterval = 10
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+            let decoded = try JSONDecoder().decode(ScheduledServerResponse.self, from: data)
+            return Set(decoded.messages.compactMap { $0.scheduleKey })
+        } catch {
+            return nil
+        }
+    }
+
+    /// POST an (edited) scheduled message to the server. The server upserts by
+    /// scheduleKey and reschedules its dispatch timer.
+    static func syncToServer(
+        scheduleKey: String,
+        text: String,
+        scheduledAt: Double,
+        sessionId: String,
+        serverURLString: String
+    ) async {
+        guard !serverURLString.isEmpty,
+              let serverURL = URL(string: serverURLString) else { return }
+        let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
+        var request = URLRequest(url: webhookURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "scheduleKey": scheduleKey,
+            "text": text,
+            "scheduledAt": scheduledAt,
+            "sessionId": sessionId,
+        ])
+        request.timeoutInterval = 10
+        do {
+            let (_, _) = try await URLSession.shared.data(for: request)
+        } catch {
+            print("[ScheduledMessage] edit sync error: \(error.localizedDescription)")
+        }
+    }
+}
+
+private struct ScheduledServerResponse: Decodable {
+    let messages: [ScheduledServerMessage]
+}
+
+private struct ScheduledServerMessage: Decodable {
+    let scheduleKey: String?
 }
 
 private struct ScheduledMessageRow: View {
@@ -154,6 +252,7 @@ private struct ScheduledMessageRow: View {
     let isSending: Bool
     let onSendNow: () -> Void
     let onDelete: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -177,11 +276,82 @@ private struct ScheduledMessageRow: View {
                     .controlSize(.small)
                     .disabled(isSending)
 
+                Button("Edit") { onEdit() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
                 Button("Delete", role: .destructive) { onDelete() }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// Edit sheet for a scheduled message: change text and/or delivery time, then
+/// persist locally and POST to the scheduled-endpoint server (which upserts by
+/// scheduleKey and reschedules its dispatch timer).
+fileprivate struct EditScheduledMessageSheet: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    let message: PendingScheduledMessage
+    let onSaved: () -> Void
+
+    @State private var text: String = ""
+    @State private var scheduledAt: Date = Date()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Message") {
+                    TextField("Message text", text: $text, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+                Section("Scheduled time") {
+                    DatePicker("Deliver at", selection: $scheduledAt)
+                }
+            }
+            .navigationTitle("Edit Scheduled Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear {
+                text = message.draftText
+                scheduledAt = message.scheduledAt
+            }
+        }
+    }
+
+    private func save() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        message.draftText = trimmed
+        message.scheduledAt = scheduledAt
+        try? modelContext.save()
+
+        let key = message.scheduleKey
+        let sid = message.sessionId
+        let sURL = message.serverURLString
+        let ts = scheduledAt.timeIntervalSince1970
+        Task {
+            await PendingScheduledMessage.syncToServer(
+                scheduleKey: key,
+                text: trimmed,
+                scheduledAt: ts,
+                sessionId: sid,
+                serverURLString: sURL
+            )
+        }
+        onSaved()
+        dismiss()
     }
 }
