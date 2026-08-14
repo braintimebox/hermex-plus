@@ -72,6 +72,9 @@ enum SSEEvent: Equatable {
     case toolCompleted(ToolStreamEvent)
     case title(TitleStreamEvent)
     case metering(MeteringStreamEvent)
+    case compressing(CompressingStreamEvent)
+    case contextStatus(ContextStatusStreamEvent)
+    case warning(StreamWarningEvent)
     case done(DoneStreamEvent)
     case approvalPending(ApprovalPendingResponse)
     case clarificationPending(ClarificationPendingResponse)
@@ -220,6 +223,46 @@ struct MeteringStreamEvent: Decodable, Equatable {
     }
 }
 
+struct CompressingStreamEvent: Decodable, Equatable {
+    let sessionId: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case message
+    }
+
+    init(sessionId: String? = nil, message: String? = nil) {
+        self.sessionId = sessionId
+        self.message = message
+    }
+}
+
+struct ContextStatusStreamEvent: Decodable, Equatable {
+    let sessionId: String?
+    let prefill: JSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case prefill
+    }
+
+    init(sessionId: String? = nil, prefill: JSONValue? = nil) {
+        self.sessionId = sessionId
+        self.prefill = prefill
+    }
+}
+
+struct StreamWarningEvent: Decodable, Equatable {
+    let type: String?
+    let message: String?
+
+    init(type: String? = nil, message: String? = nil) {
+        self.type = type
+        self.message = message
+    }
+}
+
 struct SSEEventDecoder {
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "HermesMobile",
@@ -268,6 +311,15 @@ struct SSEEventDecoder {
                 
             )
             return .metering(payload ?? MeteringStreamEvent())
+        case "compressing":
+            let payload = decodePayload(CompressingStreamEvent.self, eventType: eventType, from: eventData)
+            return .compressing(payload ?? CompressingStreamEvent())
+        case "context_status":
+            let payload = decodePayload(ContextStatusStreamEvent.self, eventType: eventType, from: eventData)
+            return .contextStatus(payload ?? ContextStatusStreamEvent())
+        case "warning":
+            let payload = decodePayload(StreamWarningEvent.self, eventType: eventType, from: eventData)
+            return .warning(payload ?? StreamWarningEvent())
         case "done":
             guard let payload = decodePayload(DonePayload.self, eventType: eventType, from: eventData) else {
                 return .transportError("The stream returned a malformed completion event.")

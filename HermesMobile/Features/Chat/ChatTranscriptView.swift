@@ -25,6 +25,7 @@ struct ChatTranscriptView: View {
     let hidesRunStatusAccessibility: Bool
     let showsThinkingAndToolCards: Bool
     let showsAssistantTypingIndicator: Bool
+    let showsCompressingStatus: Bool
     let showsScrollToBottomButton: Bool
     let shouldFollowLatestMessage: Bool
     let latestTranscriptMessageRole: String?
@@ -393,7 +394,18 @@ struct ChatTranscriptView: View {
 
     @ViewBuilder
     private var typingIndicator: some View {
-        if showsAssistantTypingIndicator {
+        if showsCompressingStatus {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Сжимаю контекст…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(hidesRunStatusAccessibility)
+            .transition(.opacity)
+        } else if showsAssistantTypingIndicator {
             AssistantTypingIndicatorView()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityHidden(hidesRunStatusAccessibility)

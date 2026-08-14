@@ -1189,6 +1189,7 @@ struct ChatView: View {
             hidesRunStatusAccessibility: activeRunStatusPresentation != nil,
             showsThinkingAndToolCards: showsThinkingAndToolCards,
             showsAssistantTypingIndicator: showsAssistantTypingIndicator,
+            showsCompressingStatus: viewModel.isCompressingContext,
             showsScrollToBottomButton: showsScrollToBottomButton,
             shouldFollowLatestMessage: shouldFollowLatestMessage,
             latestTranscriptMessageRole: latestTranscriptMessageRole,

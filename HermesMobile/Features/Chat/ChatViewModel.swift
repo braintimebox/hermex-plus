@@ -222,6 +222,10 @@ final class ChatViewModel {
     private(set) var isEditingMessage = false
     private(set) var isRegeneratingMessage = false
     private(set) var isCompressingSession = false
+    /// True while the server reports it is compacting the conversation context
+    /// (SSE `compressing` event). Lets the UI show "Compressing context…"
+    /// instead of a bare typing indicator during long compactions.
+    private(set) var isCompressingContext = false
     private(set) var isCancellingStream = false
     private(set) var isViewingCachedData = false
 
@@ -5125,12 +5129,26 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
     }
 
     func streamCoordinatorDidFinishStream() {
+        isCompressingContext = false
         flushPendingStreamingContent()
         responseCompletionNeedsTranscriptRefresh = false
     }
 
     func streamCoordinatorDidReceiveErrorMessage(_ message: String) {
         sendErrorMessage = message
+    }
+
+    func streamCoordinatorDidReceiveCompressingStart() {
+        isCompressingContext = true
+    }
+
+    func streamCoordinatorDidReceiveContextStatus(_ payload: ContextStatusStreamEvent) {
+        // Reserved for future context-window UI; the compressing flag covers the visible state.
+    }
+
+    func streamCoordinatorDidReceiveWarning(_ payload: StreamWarningEvent) {
+        // Non-terminal notice (e.g. fallback provider). Deliberately not surfaced
+        // as an error — the stream keeps running.
     }
 
     func streamCoordinatorDidReceiveRecoveryError(_ error: Error) {

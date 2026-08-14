@@ -54,6 +54,9 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorDidCompleteCurrentResponse(needsTranscriptRefresh: Bool)
     func streamCoordinatorDidFinishStream()
     func streamCoordinatorDidReceiveErrorMessage(_ message: String)
+    func streamCoordinatorDidReceiveCompressingStart()
+    func streamCoordinatorDidReceiveContextStatus(_ payload: ContextStatusStreamEvent)
+    func streamCoordinatorDidReceiveWarning(_ payload: StreamWarningEvent)
     func streamCoordinatorDidReceiveRecoveryError(_ error: Error)
     func streamCoordinatorDidStartConnection(isReplay: Bool)
     func streamCoordinatorDidResetRecoveryState()
@@ -477,6 +480,12 @@ final class ChatStreamCoordinator {
                 break
             }
             liveTokensPerSecond = payload.displayableTokensPerSecond
+        case .compressing:
+            delegate?.streamCoordinatorDidReceiveCompressingStart()
+        case .contextStatus(let payload):
+            delegate?.streamCoordinatorDidReceiveContextStatus(payload)
+        case .warning(let payload):
+            delegate?.streamCoordinatorDidReceiveWarning(payload)
         case .done(let payload):
             let hasCompletedTranscript = delegate?.streamCoordinatorApplyDone(payload) == true
             completeCurrentResponse(needsTranscriptRefresh: !hasCompletedTranscript)
