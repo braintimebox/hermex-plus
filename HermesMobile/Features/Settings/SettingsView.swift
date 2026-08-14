@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import UIKit
 import UserNotifications
+import PhotosUI
 
 /// A Settings section a deep link can scroll to when the screen opens — the
 /// avatar long-press "Manage Servers" shortcut lands on the Servers card (#283).
@@ -1943,15 +1944,29 @@ private struct ServerAvatarBadge: View {
     let initials: String
     let colorHex: String
     var size: CGFloat = 32
+    /// Optional device-local photo; when present it replaces the initials badge.
+    var imageData: Data? = nil
 
     var body: some View {
-        Text(initials)
-            .font(AppFont.caption(weight: .semibold))
-            .foregroundStyle(HeaderLogoColor.prefersDarkForeground(for: colorHex) ? Color.black : Color.white)
-            .frame(width: size, height: size)
-            .background(HeaderLogoColor.color(for: colorHex), in: Circle())
-            .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
-            .accessibilityHidden(true)
+        Group {
+            if let imageData,
+               let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                Text(initials)
+                    .font(AppFont.caption(weight: .semibold))
+                    .foregroundStyle(HeaderLogoColor.prefersDarkForeground(for: colorHex) ? Color.black : Color.white)
+                    .frame(width: size, height: size)
+                    .background(HeaderLogoColor.color(for: colorHex), in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
+            }
+        }
+        .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
+        .accessibilityHidden(true)
     }
 }
 
@@ -1978,7 +1993,7 @@ private struct SettingsServerRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ServerAvatarBadge(initials: previewInitials, colorHex: account.headerLogoColorHex)
+            ServerAvatarBadge(initials: previewInitials, colorHex: account.headerLogoColorHex, imageData: account.avatarImageData)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
@@ -2018,8 +2033,12 @@ private struct ServerIdentityEditor: View {
     @Binding var displayName: String
     @Binding var initials: String
     @Binding var colorHex: String
+    @Binding var avatarImageData: Data?
     /// Host-derived fallback used for the avatar preview when fields are empty.
     let fallbackName: String
+
+    @State private var isPickingAvatar = false
+    @State private var avatarItem: PhotosPickerItem?
 
     private var previewInitials: String {
         SessionIdentitySettings.displayInitials(
@@ -2046,13 +2065,27 @@ private struct ServerIdentityEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                ServerAvatarBadge(initials: previewInitials, colorHex: colorHex, size: 36)
+                Button {
+                    isPickingAvatar = true
+                } label: {
+                    ServerAvatarBadge(
+                        initials: previewInitials,
+                        colorHex: colorHex,
+                        size: 36,
+                        imageData: avatarImageData
+                    )
+                }
+                .buttonStyle(.plain)
+                .photosPicker(isPresented: $isPickingAvatar, selection: $avatarItem, matching: .images)
+                .onChange(of: avatarItem) { _, _ in
+                    loadAvatar()
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Server Avatar")
                         .font(AppFont.subheadline(weight: .medium))
 
-                    Text("Stored on this device only.")
+                    Text("Tap the circle to pick a photo from your gallery. Stored on this device only.")
                         .font(AppFont.caption())
                         .foregroundStyle(.secondary)
                 }
@@ -2073,6 +2106,15 @@ private struct ServerIdentityEditor: View {
             HeaderLogoColorSettings(selectedHex: $colorHex, customColor: colorBinding)
         }
     }
+
+    private func loadAvatar() {
+        guard let avatarItem else { return }
+        Task {
+            if let data = try? await avatarItem.loadTransferable(type: Data.self) {
+                avatarImageData = data
+            }
+        }
+    }
 }
 
 /// Per-server detail: identity editing, switch-to-active, and remove/sign-out (#17).
@@ -2085,6 +2127,7 @@ private struct ServerDetailView: View {
     @State private var displayName: String
     @State private var initials: String
     @State private var colorHex: String
+    @State private var avatarImageData: Data?
     @State private var isConfirmingRemove = false
     @State private var isRemoving = false
 
@@ -2094,6 +2137,7 @@ private struct ServerDetailView: View {
         _displayName = State(initialValue: account.displayName)
         _initials = State(initialValue: account.initials)
         _colorHex = State(initialValue: account.headerLogoColorHex)
+        _avatarImageData = State(initialValue: account.avatarImageData)
     }
 
     private var isActive: Bool { account.id == authManager.activeServerID }
@@ -2118,6 +2162,7 @@ private struct ServerDetailView: View {
                         displayName: $displayName,
                         initials: $initials,
                         colorHex: $colorHex,
+                        avatarImageData: $avatarImageData,
                         fallbackName: hostFallback
                     )
                 }
@@ -2154,6 +2199,7 @@ private struct ServerDetailView: View {
         .onChange(of: displayName) { persistIdentity() }
         .onChange(of: initials) { persistIdentity() }
         .onChange(of: colorHex) { persistIdentity() }
+        .onChange(of: avatarImageData) { persistIdentity() }
         .alert(removeAlertTitle, isPresented: $isConfirmingRemove) {
             Button("Cancel", role: .cancel) {}
             Button(removeButtonTitle, role: .destructive) {
@@ -2188,7 +2234,8 @@ private struct ServerDetailView: View {
             account,
             displayName: displayName,
             initials: initials,
-            headerLogoColorHex: colorHex
+            headerLogoColorHex: colorHex,
+            avatarImageData: avatarImageData
         )
     }
 
@@ -2237,6 +2284,7 @@ struct AddServerView: View {
     @State private var displayName = ""
     @State private var initials = ""
     @State private var colorHex = HeaderLogoColor.defaultHex
+    @State private var avatarImageData: Data?
 
     private var trimmedURL: String {
         serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2287,6 +2335,7 @@ struct AddServerView: View {
                             displayName: $displayName,
                             initials: $initials,
                             colorHex: $colorHex,
+                            avatarImageData: $avatarImageData,
                             fallbackName: derivedHost
                         )
                     }
@@ -2368,7 +2417,8 @@ struct AddServerView: View {
             account,
             displayName: finalName,
             initials: finalInitials,
-            headerLogoColorHex: colorHex
+            headerLogoColorHex: colorHex,
+            avatarImageData: avatarImageData
         )
     }
 }

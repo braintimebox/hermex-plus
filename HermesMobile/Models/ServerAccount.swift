@@ -28,6 +28,9 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
     /// Per-server Header Logo Color (hex). Seeded from the global color on
     /// migration; editable per server in #17.
     var headerLogoColorHex: String
+    /// Optional device-local avatar image (user-picked from the photo gallery).
+    /// Stored on this device only; never synced to the server.
+    var avatarImageData: Data?
     /// Reference under which this server's custom request headers are scoped.
     /// Seeded to the server `id`; as of #16 headers are persisted per server under
     /// a Keychain key scoped by that id (`AuthManager` scopes by the equivalent
@@ -42,6 +45,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         displayName: String,
         initials: String,
         headerLogoColorHex: String,
+        avatarImageData: Data? = nil,
         customHeadersRef: String?,
         createdAt: Date,
         updatedAt: Date
@@ -51,6 +55,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         self.displayName = displayName
         self.initials = initials
         self.headerLogoColorHex = headerLogoColorHex
+        self.avatarImageData = avatarImageData
         self.customHeadersRef = customHeadersRef
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -62,6 +67,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         case displayName
         case initials
         case headerLogoColorHex
+        case avatarImageData
         case customHeadersRef
         case createdAt
         case updatedAt
@@ -86,6 +92,7 @@ struct ServerAccount: Codable, Identifiable, Equatable, Sendable {
         initials = try container.decodeIfPresent(String.self, forKey: .initials) ?? ""
         headerLogoColorHex = try container.decodeIfPresent(String.self, forKey: .headerLogoColorHex)
             ?? HeaderLogoColor.defaultHex
+        avatarImageData = try container.decodeIfPresent(Data.self, forKey: .avatarImageData)
         customHeadersRef = try container.decodeIfPresent(String.self, forKey: .customHeadersRef)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt

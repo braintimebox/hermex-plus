@@ -330,12 +330,14 @@ final class AuthManager {
         _ account: ServerAccount,
         displayName: String,
         initials: String,
-        headerLogoColorHex: String
+        headerLogoColorHex: String,
+        avatarImageData: Data? = nil
     ) {
         var updated = account
         updated.displayName = displayName
         updated.initials = initials
         updated.headerLogoColorHex = headerLogoColorHex
+        updated.avatarImageData = avatarImageData
         serverRegistry.update(updated)
         refreshServers()
     }
