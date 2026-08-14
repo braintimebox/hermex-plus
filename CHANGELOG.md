@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.3 — 2026-08-14
+
+### Added
+- **Visible "Compressing context…" status:** the client now parses the SSE `compressing` / `context_status` / `warning` events the server already emits. During a long compaction the transcript shows a progress indicator with "Сжимаю контекст…" instead of a bare typing indicator (a 60s+ compaction previously looked like a freeze).
+- **Edit scheduled messages:** new "Edit" button on scheduled-message rows opens a sheet to change the text and/or delivery time. Saves locally and POSTs to the scheduled-endpoint server, which upserts by scheduleKey and reschedules its dispatch timer.
+
+### Fixed
+- **"Scheduled message from yesterday still stuck":** the server dispatches a scheduled message and removes it from its own state but never notified the client, so the local row lingered forever. Opening the Scheduled list now reconciles local rows against the server and drops rows whose delivery time has passed and that the server no longer tracks (server unreachable = no deletion).
+- **Human-readable context-exhausted error:** the terminal "context length exceeded / cannot compress further" error is now surfaced as "This session's context is exhausted… start a new chat" instead of the raw token-count message.
+
 ## 1.5.2 — 2026-08-13
 
 ### Fixed
