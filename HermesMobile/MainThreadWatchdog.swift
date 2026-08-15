@@ -168,15 +168,13 @@ enum MainThreadStackCapture {
         var value: UInt64 = 0
         var size = vm_size_t(MemoryLayout<UInt64>.size)
         let kr = withUnsafeMutablePointer(to: &value) { ptr -> kern_return_t in
-            ptr.withMemoryRebound(to: vm_offset_t.self, capacity: 1) { dst in
-                vm_read_overwrite(
-                    mach_task_self_,
-                    vm_address_t(address),
-                    vm_size_t(MemoryLayout<UInt64>.size),
-                    dst,
-                    &size
-                )
-            }
+            vm_read_overwrite(
+                mach_task_self_,
+                vm_address_t(address),
+                vm_size_t(MemoryLayout<UInt64>.size),
+                vm_address_t(bitPattern: ptr),
+                &size
+            )
         }
         guard kr == KERN_SUCCESS, size == MemoryLayout<UInt64>.size else { return nil }
         return value
@@ -191,7 +189,10 @@ enum MainThreadStackCapture {
         var info = Dl_info()
         guard dladdr(raw, &info) != 0 else { return nil }
         let name = info.dli_sname.map { String(cString: $0) } ?? "?"
-        let image = info.dli_fname.map { ($0 as NSString).lastPathComponent } ?? "?"
+        let image: String = {
+            guard let path = info.dli_fname.map({ String(cString: $0) }) else { return "?" }
+            return (path as NSString).lastPathComponent
+        }()
 
         if let saddr = info.dli_saddr {
             let base = UInt64(UInt(bitPattern: saddr))
