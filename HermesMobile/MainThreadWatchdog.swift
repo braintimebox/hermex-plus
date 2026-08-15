@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import MachO
+import Darwin
 
 /// Tracks the currently-running heavy main-thread operation so a freeze can be
 /// attributed to it. Cheap: a locked (label, startTime) pair. Instrument the
@@ -51,6 +52,88 @@ enum MemoryFootprint {
     }
 }
 
+/// Captures the main thread's instruction pointer + return address directly via
+/// Mach `thread_get_state`, symbolicated with `dladdr`.
+///
+/// This runs on the *watchdog's background queue*, not the main thread, so it
+/// reads the main thread's register state while that thread is blocked — unlike
+/// `Thread.callStackSymbols`, which is static/current-thread-only and can never
+/// see the main thread from a background queue. A main-queue capture loop would
+/// snapshot its own frames and was the reason every freeze report showed the
+/// watchdog itself with an empty `heavyOp`.
+enum MainThreadStackCapture {
+    /// One-line "blocked at Foo.bar +0x12 (return: Baz.qux)" summary, or a
+    /// human-readable failure reason. Never throws, never crashes — the freeze
+    /// report must always get *some* text.
+    static func capture() -> String {
+        let mainThread = pthread_mach_thread_np(pthread_main_np())
+
+        #if arch(arm64)
+        var state = arm_thread_state64_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<arm_thread_state64_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &state) { ptr in
+            ptr.withMemoryRebound(to: natural_t.self, capacity: Int(count)) { natPtr in
+                thread_get_state(mainThread, ARM_THREAD_STATE64, natPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else {
+            return "thread_get_state failed (\(kr))"
+        }
+        let pc = state.__pc
+        let lr = state.__lr
+        let fp = state.__fp
+        #else
+        var state = x86_thread_state64_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<x86_thread_state64_t>.size / MemoryLayout<natural_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &state) { ptr in
+            ptr.withMemoryRebound(to: natural_t.self, capacity: Int(count)) { natPtr in
+                thread_get_state(mainThread, x86_THREAD_STATE64, natPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else {
+            return "thread_get_state failed (\(kr))"
+        }
+        let pc = state.__rip
+        let lr = state.__rbp
+        let fp = state.__rbp
+        #endif
+
+        var parts: [String] = []
+        if pc != 0, let sym = symbolize(pc) {
+            parts.append("blocked at \(sym)")
+        }
+        if lr != 0, lr != pc, let sym = symbolize(lr) {
+            parts.append("return: \(sym)")
+        }
+        if fp != 0, fp != pc, fp != lr, let sym = symbolize(fp) {
+            parts.append("fp: \(sym)")
+        }
+        if parts.isEmpty {
+            return String(format: "pc=0x%llx lr=0x%llx fp=0x%llx", pc, lr, fp)
+        }
+        return parts.joined(separator: " | ")
+    }
+
+    /// Resolve an instruction address to "SymbolName +0xNN" via `dladdr`.
+    private static func symbolize(_ address: UInt64) -> String? {
+        guard let raw = UnsafeRawPointer(bitPattern: UInt(address)) else { return nil }
+        var info = Dl_info()
+        guard dladdr(raw, &info) != 0 else { return nil }
+        let name = info.dli_sname.map { String(cString: $0) } ?? "?"
+        if let saddr = info.dli_saddr {
+            let base = UInt64(UInt(bitPattern: saddr))
+            guard address >= base else { return name }
+            let offset = address - base
+            return offset == 0 ? name : "\(name) +0x\(String(offset, radix: 16))"
+        }
+        return name
+    }
+}
+
 /// Detects main-thread hangs in the app.
 ///
 /// A background timer pings the main queue every `pingInterval` seconds. If the
@@ -83,11 +166,6 @@ final class MainThreadWatchdog {
     private var timer: DispatchSourceTimer?
     private var currentScreen: String?
     private var lastStutterReport = Date(timeIntervalSince1970: 0)
-    /// Last captured main-thread stack (refreshed ~1/s by a main-queue loop).
-    /// Thread.callStackSymbols is static (current thread only), so we can't ask
-    /// for the main thread's stack from the watchdog queue; this snapshot shows
-    /// what the main thread was executing right before it got stuck.
-    private var lastMainStack = "main thread stack unavailable"
 
     private init() {}
 
@@ -103,23 +181,6 @@ final class MainThreadWatchdog {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
-
-        // Main-queue loop that snapshots the main thread's own stack ~1/s.
-        // Self-perpetuating; when the main thread blocks, the loop stalls and
-        // lastMainStack keeps the pre-freeze frame.
-        DispatchQueue.main.async { [weak self] in
-            self?.scheduleMainStackCapture()
-        }
-    }
-
-    private func scheduleMainStackCapture() {
-        let stack = Thread.callStackSymbols.prefix(15).joined(separator: " | ")
-        lock.lock()
-        lastMainStack = stack
-        lock.unlock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.scheduleMainStackCapture()
-        }
     }
 
     /// Optional context for the next freeze event (e.g. the active screen).
@@ -151,19 +212,21 @@ final class MainThreadWatchdog {
         let elapsed = now.timeIntervalSince(lastPong)
         let wasFrozen = isFrozen
         let screen = currentScreen
-        let mainStack = lastMainStack
         lock.unlock()
 
         if elapsed > hangThreshold && !wasFrozen {
             lock.lock()
             isFrozen = true
             lock.unlock()
-            // Capture WHERE the main thread is stuck: the last main-queue stack
-            // snapshot (Thread.callStackSymbols is static/current-thread only,
-            // so the main thread's own 1s loop stores it). Turns "blocked 3s
-            // [ChatView]" into "blocked 3s at CacheStore.cacheMessages:149".
+            // Capture WHERE the main thread is stuck from THIS (background)
+            // watchdog queue. `Thread.callStackSymbols` is static/current-thread
+            // only, so a main-queue loop would capture *itself* (the bug that
+            // made every freeze report show the watchdog's own frames and an
+            // empty heavyOp). The Mach `thread_get_state` path below reads the
+            // main thread's instruction pointer directly.
             let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
             let heavyOp = HeavyOperationTracker.snapshot() ?? ""
+            let mainStack = MainThreadStackCapture.capture()
             HermexLogger.shared.log(
                 type: "freeze",
                 durationMs: elapsed * 1000,

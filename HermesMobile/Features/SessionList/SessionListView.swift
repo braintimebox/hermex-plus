@@ -215,9 +215,12 @@ struct SessionListView: View {
                     let sessionId: String
                     let sessionTitle: String?
                     switch target {
-                    case .currentChat, .newChat:
+                    case .currentChat:
                         sessionId = ""
                         sessionTitle = nil
+                    case .newChat(let title):
+                        sessionId = ""
+                        sessionTitle = title
                     case .existing(let pickedID, let pickedTitle):
                         sessionId = pickedID
                         sessionTitle = pickedTitle

@@ -191,6 +191,11 @@ struct TasksView: View {
                     workspace: nil, model: nil, modelProvider: nil, profile: nil
                 )
                 targetSessionId = response.session?.sessionId ?? ""
+                if !targetSessionId.isEmpty,
+                   let title = msg.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !title.isEmpty {
+                    _ = try? await apiClient.renameSession(id: targetSessionId, title: title)
+                }
             } catch {
                 onAPIError(error)
                 return

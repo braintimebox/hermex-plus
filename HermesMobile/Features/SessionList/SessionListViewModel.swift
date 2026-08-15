@@ -1161,6 +1161,11 @@ final class SessionListViewModel {
                         workspace: nil, model: nil, modelProvider: nil, profile: nil
                     )
                     targetSessionId = response.session?.sessionId ?? ""
+                    if !targetSessionId.isEmpty,
+                       let title = message.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !title.isEmpty {
+                        _ = try? await apiClient.renameSession(id: targetSessionId, title: title)
+                    }
                 } catch {
                     // Skip this message, will retry next cycle
                     continue

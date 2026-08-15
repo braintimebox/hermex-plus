@@ -2322,9 +2322,9 @@ struct ChatView: View {
         case .currentChat:
             sessionId = session.sessionId ?? ""
             sessionTitle = displayTitle
-        case .newChat:
+        case .newChat(let title):
             sessionId = ""
-            sessionTitle = nil
+            sessionTitle = title
         case .existing(let pickedID, let pickedTitle):
             sessionId = pickedID
             sessionTitle = pickedTitle
@@ -2406,6 +2406,11 @@ struct ChatView: View {
                         workspace: nil, model: nil, modelProvider: nil, profile: nil
                     )
                     targetSessionId = response.session?.sessionId ?? ""
+                    if !targetSessionId.isEmpty,
+                       let title = msg.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !title.isEmpty {
+                        _ = try? await apiClient.renameSession(id: targetSessionId, title: title)
+                    }
                 } catch {
                     onAPIError(error)
                     return
@@ -2731,8 +2736,9 @@ private extension SlashCommandExecutionResult {
 enum ScheduledMessageTarget {
     /// The chat the user is currently viewing.
     case currentChat
-    /// The server should create a brand-new chat.
-    case newChat
+    /// The server should create a brand-new chat. `title` is the optional
+    /// user-chosen name for that new chat.
+    case newChat(title: String?)
     /// A specific existing chat, picked from the session list.
     case existing(sessionId: String, title: String?)
 }
@@ -2761,6 +2767,7 @@ struct ScheduleMessageSheet: View {
     @State private var pickedExistingSession: SessionListItem?
     @State private var showSessionPicker = false
     @State private var chatChoice: ScheduledChatChoice = .newChat
+    @State private var newChatTitle = ""
 
     init(
         draftMessage: String,
@@ -2815,6 +2822,13 @@ struct ScheduleMessageSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
+
+                    if chatChoice == .newChat {
+                        TextField("New chat title (optional)", text: $newChatTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.sentences)
+                            .padding(.horizontal)
+                    }
 
                     if chatChoice == .existingChat {
                         if let picked = pickedExistingSession {
@@ -2903,7 +2917,8 @@ struct ScheduleMessageSheet: View {
         }
         switch chatChoice {
         case .newChat:
-            return .newChat
+            let title = newChatTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .newChat(title: title.isEmpty ? nil : title)
         case .existingChat:
             guard let picked = pickedExistingSession, !picked.id.isEmpty else { return nil }
             return .existing(sessionId: picked.id, title: picked.displayTitle)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.5 — 2026-08-15
+
+### Added
+- **Name a new chat when scheduling a message:** when a scheduled message targets "New Chat" (from inside a chat or the home screen), a new optional "New chat title" field names the chat it will create. The title rides along in `PendingScheduledMessage.sessionTitle` and is applied in every dispatch path (server dispatcher, client 30s dispatcher, and both "Send Now" paths) via `/api/session/rename` right after session creation.
+
+### Fixed
+- **Freeze reports were blind:** the main-thread watchdog captured its own stack via a `Thread.callStackSymbols` loop that ran *on* the main thread — so every freeze report showed the watchdog's own frames and an empty `heavyOp`, never the code actually blocking. Replaced with a Mach `thread_get_state` capture that reads the main thread's PC/LR/FP directly from the watchdog's background queue and symbolicates them with `dladdr`. Also removed the 1/s main-queue capture loop, which itself added main-thread work.
+
 ## 1.5.4 — 2026-08-14
 
 ### Added
