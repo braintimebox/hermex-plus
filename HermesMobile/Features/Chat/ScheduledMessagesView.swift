@@ -395,7 +395,7 @@ fileprivate struct EditScheduledMessageSheet: View {
         guard let response = try? await client.sessions() else { return }
         sessions = (response.sessions ?? []).map { summary in
             SessionListItem(
-                id: summary.id,
+                id: summary.sessionId ?? summary.id,
                 displayTitle: summary.title ?? summary.sessionId ?? "Untitled",
                 lastMessagePreview: nil
             )
@@ -409,7 +409,11 @@ fileprivate struct EditScheduledMessageSheet: View {
         let sid: String
         let title: String?
         if destinationIsExistingChat {
-            sid = pickedSession?.id ?? ""
+            guard let picked = pickedSession, !picked.id.isEmpty else {
+                showSessionPicker = true
+                return
+            }
+            sid = picked.id
             title = nil
         } else {
             sid = ""

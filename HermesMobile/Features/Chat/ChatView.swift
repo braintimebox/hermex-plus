@@ -2952,7 +2952,7 @@ struct ScheduleMessageSheet: View {
                     let response = try await client.sessions()
                     sessions = (response.sessions ?? []).map {
                         SessionListItem(
-                            id: ($0.id ?? $0.sessionId) ?? "",
+                            id: $0.sessionId ?? $0.id,
                             displayTitle: $0.title ?? "Chat",
                             lastMessagePreview: nil
                         )

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1 — 2026-08-15
+
+### Fixed
+- **Scheduled message "Existing Chat" selection not saving:** the session picker fed a computed `id` into the chosen session instead of the real `sessionId`, so re-targeting to an existing chat silently fell back to an empty/new-chat destination. Now uses `sessionId` (with `id` as fallback) in both the create and edit sheets, and the edit-sheet Save guards against an un-picked existing chat.
+- **Pin on long messages:** added `contentShape(Rectangle())` to the message bubble so the long-press context menu (with Pin) triggers across the whole bubble, not just on the text itself.
+
 ## 1.6.0 — 2026-08-15
 
 ### Added

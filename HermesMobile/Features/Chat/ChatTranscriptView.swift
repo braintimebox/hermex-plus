@@ -692,6 +692,7 @@ private struct ChatTranscriptMessageRow: View {
             MarkerMessageCardView(kind: markerKind, content: message.content)
         } else if let actionContext {
             bubble
+                .contentShape(Rectangle())
                 .contextMenu {
                     ChatMessageActionMenu(
                         context: actionContext,
