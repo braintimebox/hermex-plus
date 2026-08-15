@@ -2037,7 +2037,6 @@ private struct ServerIdentityEditor: View {
     /// Host-derived fallback used for the avatar preview when fields are empty.
     let fallbackName: String
 
-    @State private var isPickingAvatar = false
     @State private var avatarItem: PhotosPickerItem?
 
     private var previewInitials: String {
@@ -2065,18 +2064,16 @@ private struct ServerIdentityEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Button {
-                    isPickingAvatar = true
-                } label: {
+                PhotosPicker(selection: $avatarItem, matching: .images) {
                     ServerAvatarBadge(
                         initials: previewInitials,
                         colorHex: colorHex,
-                        size: 36,
+                        size: 44,
                         imageData: avatarImageData
                     )
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
-                .photosPicker(isPresented: $isPickingAvatar, selection: $avatarItem, matching: .images)
                 .onChange(of: avatarItem) { _, _ in
                     loadAvatar()
                 }

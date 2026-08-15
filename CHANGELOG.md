@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.9 — 2026-08-15
+
+### Fixed
+- **Server avatar couldn't be changed:** the avatar circle in Settings → Server → Identity was a `Button` + `.photosPicker` modifier with a 36pt hit target (below iOS's 44pt minimum) — taps went unreliably and the picker often didn't present inside the scroll view. Replaced with a native `PhotosPicker` view and a 44pt hit target, so tapping the circle reliably opens the photo picker.
+
 ## 1.5.8 — 2026-08-15
 
 ### Fixed
