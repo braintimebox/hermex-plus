@@ -1489,7 +1489,7 @@ struct HermesHeaderLogo: View {
                 .opacity(0.8)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Hermes Plus")
+        .accessibilityLabel("Hermex Plus")
     }
 }
 

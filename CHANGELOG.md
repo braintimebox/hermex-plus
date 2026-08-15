@@ -5,6 +5,9 @@
 ### Added
 - **Scheduled message edit → destination picker:** the edit sheet now has the same "New Chat | Existing Chat" segmented picker as the create sheet, so a pending message can be re-targeted from a new chat to an existing conversation (and vice-versa).
 
+### Changed
+- **App renamed to "Hermex Plus":** display name (`APP_DISPLAY_NAME` in pbxproj), README header/alt/app-name, and the session-list accessibility label now read "Hermex Plus" (was "Hermes Plus"). README "Current build" link no longer hardcodes a stale CI run.
+
 ## 1.5.16 — 2026-08-15
 
 ### Fixed

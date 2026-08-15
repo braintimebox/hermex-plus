@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/assets/readme/hermex-icon.png" alt="Hermes Plus icon" width="96" />
+<img src="docs/assets/readme/hermex-icon.png" alt="Hermex Plus icon" width="96" />
 
-# Hermes Plus
+# Hermex Plus
 
 **Native iPhone client for self-hosted Hermes Agent.** Forked from [Hermex](https://github.com/uzairansaruzi/hermex).
 
@@ -16,9 +16,9 @@ Your server. Your iPhone. No middleman.
 
 ## 🔗 Download
 
-**Current build (direct IPA):** https://github.com/braintimebox/hermex-plus/actions/runs/31828798637/artifacts/9229945045
+**Current build:** pick the latest green build at https://github.com/braintimebox/hermex-plus/actions → Artifacts → `HermexPlus-unsigned`
 
-**All builds:** https://github.com/braintimebox/hermex-plus/actions — pick a green build → Artifacts → `HermesPlus-unsigned`
+**All builds:** https://github.com/braintimebox/hermex-plus/actions — pick a green build → Artifacts → `HermexPlus-unsigned`
 
 Then install with SideStore / AltStore → connect to your Hermes server.
 
@@ -39,7 +39,7 @@ Then install with SideStore / AltStore → connect to your Hermes server.
 
 ## 🔧 Key differences from upstream
 
-- App name: "Hermes Plus"
+- App name: "Hermex Plus"
 - No swipe actions — contextMenu only
 - Reply, Forward, Save, Schedule, Share — all via contextMenu
 - Saved messages with drag-to-reorder + chat navigation
