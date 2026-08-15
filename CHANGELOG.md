@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.10 — 2026-08-15
+
+### Fixed
+- **Server avatar still wouldn't change:** the SwiftUI `PhotosPicker` (both modifier and view) did not present from inside the Settings scroll view / Liquid Glass card on iOS 26 — tapping the circle did nothing. Replaced with a UIKit-backed `UIImagePickerController` presented via `fullScreenCover`, the same reliable path already used for the camera.
+- **Scheduled-message sheet keyboard overlap:** the sheet was a `ScrollView` + `VStack`, which does not do keyboard avoidance inside a `.medium` sheet — the keyboard covered the "New chat title" field like a separate window. Replaced with a `Form` (native keyboard avoidance) and a compact `DatePicker`, so the title field stays above the keyboard and the form fits the `.medium` detent.
+
 ## 1.5.9 — 2026-08-15
 
 ### Fixed

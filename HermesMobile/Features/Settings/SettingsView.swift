@@ -2037,7 +2037,7 @@ private struct ServerIdentityEditor: View {
     /// Host-derived fallback used for the avatar preview when fields are empty.
     let fallbackName: String
 
-    @State private var avatarItem: PhotosPickerItem?
+    @State private var showsPhotoLibrary = false
 
     private var previewInitials: String {
         SessionIdentitySettings.displayInitials(
@@ -2064,7 +2064,9 @@ private struct ServerIdentityEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                PhotosPicker(selection: $avatarItem, matching: .images) {
+                Button {
+                    showsPhotoLibrary = true
+                } label: {
                     ServerAvatarBadge(
                         initials: previewInitials,
                         colorHex: colorHex,
@@ -2074,9 +2076,7 @@ private struct ServerIdentityEditor: View {
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
                 }
-                .onChange(of: avatarItem) { _, _ in
-                    loadAvatar()
-                }
+                .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Server Avatar")
@@ -2102,14 +2102,57 @@ private struct ServerIdentityEditor: View {
 
             HeaderLogoColorSettings(selectedHex: $colorHex, customColor: colorBinding)
         }
+        .fullScreenCover(isPresented: $showsPhotoLibrary) {
+            PhotoLibraryPickerView { image in
+                if let data = image.jpegData(compressionQuality: 0.85) {
+                    avatarImageData = data
+                }
+            }
+        }
+    }
+}
+
+/// UIKit-backed photo-library picker (UIImagePickerController). Replaces
+/// SwiftUI `PhotosPicker`, which did not reliably present from inside the
+/// Settings scroll view / Liquid Glass card on iOS 26 — the tap did nothing.
+private struct PhotoLibraryPickerView: UIViewControllerRepresentable {
+    let onPick: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPick: onPick, dismiss: dismiss)
     }
 
-    private func loadAvatar() {
-        guard let avatarItem else { return }
-        Task {
-            if let data = try? await avatarItem.loadTransferable(type: Data.self) {
-                avatarImageData = data
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onPick: (UIImage) -> Void
+        let dismiss: DismissAction
+
+        init(onPick: @escaping (UIImage) -> Void, dismiss: DismissAction) {
+            self.onPick = onPick
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                onPick(image)
             }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
         }
     }
 }

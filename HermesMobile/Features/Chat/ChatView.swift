@@ -2850,49 +2850,45 @@ struct ScheduleMessageSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
+            Form {
+                Section {
                     TextEditor(text: $messageText)
                         .font(.body)
                         .frame(minHeight: 80)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                        )
-                        .padding(.horizontal)
+                } header: {
+                    Text("Message")
+                }
 
+                Section {
                     DatePicker(
                         "Send at",
                         selection: $scheduledDate,
                         in: Date()...,
                         displayedComponents: [.date, .hourAndMinute]
                     )
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    .padding(.horizontal)
+                    .datePickerStyle(.compact)
+                }
 
-                    if let title = chatTitle {
+                if let title = chatTitle {
+                    Section {
                         Toggle("Attach to \u{201C}\(title)\u{201D}", isOn: $attachToChat)
-                            .font(.subheadline)
-                            .padding(.horizontal)
                     }
+                }
 
-                    // When not attached to the current chat, the destination MUST
-                    // be explicit: a brand-new chat or one picked from the list.
-                    if !attachToChat {
+                // When not attached to the current chat, the destination MUST
+                // be explicit: a brand-new chat or one picked from the list.
+                if !attachToChat {
+                    Section {
                         Picker("Destination", selection: $chatChoice) {
                             ForEach(ScheduledChatChoice.allCases) { choice in
                                 Text(choice.rawValue).tag(choice)
                             }
                         }
                         .pickerStyle(.segmented)
-                        .padding(.horizontal)
 
                         if chatChoice == .newChat {
                             TextField("New chat title (optional)", text: $newChatTitle)
-                                .textFieldStyle(.roundedBorder)
                                 .textInputAutocapitalization(.sentences)
-                                .padding(.horizontal)
                         }
 
                         if chatChoice == .existingChat {
@@ -2902,23 +2898,18 @@ struct ScheduleMessageSheet: View {
                                     Spacer()
                                     Button("Change") { showSessionPicker = true }
                                 }
-                                .font(.subheadline)
-                                .padding(.horizontal)
                             } else {
                                 Button {
                                     showSessionPicker = true
                                 } label: {
                                     Label("Choose Chat", systemImage: "bubble.left.and.bubble.right")
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .padding(.horizontal)
                             }
                         }
                     }
                 }
-                .padding(.bottom, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Schedule Message")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
