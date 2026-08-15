@@ -6,6 +6,8 @@
 - **Name a new chat when scheduling a message:** when a scheduled message targets "New Chat" (from inside a chat or the home screen), a new optional "New chat title" field names the chat it will create. The title rides along in `PendingScheduledMessage.sessionTitle` and is applied in every dispatch path (server dispatcher, client 30s dispatcher, and both "Send Now" paths) via `/api/session/rename` right after session creation.
 
 ### Fixed
+- **App icon couldn't be changed:** `Info.plist` declared no `CFBundleIcons` / `CFBundleAlternateIcons`, so `UIApplication.shared.supportsAlternateIcons` was always false and the whole icon picker never rendered. Added the `CFBundleIcons` block mapping all seven alternate icon sets (Light/Dark/Disco/Monochrome Light/Monochrome Dark/Gradient Light/Gradient Dark) plus the primary `AppIcon`.
+- **"Pin message" was missing from the message menu:** `ChatTranscriptMessageRow` hardcoded `onPin: nil` / `isPinned: false` into `ChatMessageActionMenu`, so the Pin/Unpin row never appeared even though the parent wired `onPin` and `isMessagePinned`. Now passes the real callbacks through.
 - **Freeze reports were blind:** the main-thread watchdog captured its own stack via a `Thread.callStackSymbols` loop that ran *on* the main thread — so every freeze report showed the watchdog's own frames and an empty `heavyOp`, never the code actually blocking. Replaced with a Mach `thread_get_state` capture that reads the main thread's PC/LR/FP directly from the watchdog's background queue and symbolicates them with `dladdr`. Also removed the 1/s main-queue capture loop, which itself added main-thread work.
 
 ## 1.5.4 — 2026-08-14

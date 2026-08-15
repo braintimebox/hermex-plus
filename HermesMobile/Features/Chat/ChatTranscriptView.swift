@@ -692,8 +692,8 @@ private struct ChatTranscriptMessageRow: View {
                         onReply: onReply,
                         onForward: onForward,
                         onSave: onSave,
-                        onPin: nil,
-                        isPinned: false
+                        onPin: onPin,
+                        isPinned: isMessagePinned(message.id)
                     )
                 }
         } else {

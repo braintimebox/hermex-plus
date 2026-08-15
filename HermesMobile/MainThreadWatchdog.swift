@@ -62,11 +62,24 @@ enum MemoryFootprint {
 /// snapshot its own frames and was the reason every freeze report showed the
 /// watchdog itself with an empty `heavyOp`.
 enum MainThreadStackCapture {
+    /// The main thread's Mach port, captured once on the main thread at start.
+    /// `pthread_main_np()` returns an `Int32` (not a `pthread_t`), so the clean
+    /// way to read the main thread's state from a background queue is to store
+    /// `mach_thread_self()` while we're still on the main thread.
+    private static var mainThreadPort: mach_port_t?
+
+    /// Must be called ON the main thread once (from `MainThreadWatchdog.start`).
+    static func captureMainThreadPort() {
+        mainThreadPort = mach_thread_self()
+    }
+
     /// One-line "blocked at Foo.bar +0x12 (return: Baz.qux)" summary, or a
     /// human-readable failure reason. Never throws, never crashes — the freeze
     /// report must always get *some* text.
     static func capture() -> String {
-        let mainThread = pthread_mach_thread_np(pthread_main_np())
+        guard let mainThread = mainThreadPort else {
+            return "main thread port not captured"
+        }
 
         #if arch(arm64)
         var state = arm_thread_state64_t()
@@ -174,6 +187,12 @@ final class MainThreadWatchdog {
         lock.lock()
         defer { lock.unlock() }
         guard timer == nil else { return }
+
+        // Capture the main thread's Mach port NOW, while we're on the main
+        // thread (called from HermesMobileApp.init). Later, when a freeze is
+        // detected from the background watchdog queue, MainThreadStackCapture
+        // reads this port's register state directly.
+        MainThreadStackCapture.captureMainThreadPort()
 
         let queue = DispatchQueue(label: "hermex.watchdog", qos: .utility)
         let t = DispatchSource.makeTimerSource(queue: queue)
