@@ -314,7 +314,10 @@ struct ChatView: View {
     @State private var showsGoalSheet = false
     @State private var activeGitSheet: ActiveGitSheet?
     @State private var turnDiffPresentation: TurnDiffPresentation?
-    @State private var pinnedMessageID: String?
+    @State private var pinnedMessageIDs: [String] = []
+    /// Set to a pinned message's id to scroll the transcript to it; cleared by
+    /// `ChatTranscriptView` once the scroll is consumed.
+    @State private var pinnedScrollTarget: String?
     @State private var viewModel: ChatViewModel
     @State private var gitAvailabilityViewModel: GitWorkspaceAvailabilityViewModel
     @State private var gitToastState = GitActionToastState()
@@ -1138,38 +1141,28 @@ struct ChatView: View {
     @ViewBuilder
     private var messageContent: some View {
         VStack(spacing: 0) {
-            if let pinnedID = pinnedMessageID,
-               let pinnedMsg = viewModel.messages.first(where: { $0.id == pinnedID }) {
-                Button {
-                    // Scroll to pinned message
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "pin.fill")
-                            .font(.caption)
-                        Text((pinnedMsg.content ?? "").prefix(80))
-                            .font(.caption)
-                            .lineLimit(1)
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Button {
-                            pinnedMessageID = nil
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+            if !pinnedMessageIDs.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(pinnedMessageIDs, id: \.self) { pinnedID in
+                        if let pinnedMsg = viewModel.messages.first(where: { $0.id == pinnedID }) {
+                            pinnedBannerRow(id: pinnedID, message: pinnedMsg)
+                            if pinnedID != pinnedMessageIDs.last {
+                                Divider().padding(.leading, 36)
+                            }
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial)
                 }
-                .buttonStyle(.plain)
+                .background(.ultraThinMaterial)
             }
-            
+
             ChatTranscriptView(
             isLoading: viewModel.isLoading,
             errorMessage: viewModel.errorMessage,
             messages: viewModel.messages,
+            pinnedScrollTarget: pinnedScrollTarget,
+            onPinnedScrollConsumed: {
+                pinnedScrollTarget = nil
+            },
             displayedTranscriptMessages: displayedTranscriptMessages,
             compressionReferenceCard: viewModel.compressionReferenceCard,
             reasoningGroups: viewModel.displayedReasoningGroups,
@@ -1289,14 +1282,14 @@ struct ChatView: View {
                 saveMessage(context)
             },
             onPin: { context in
-                if pinnedMessageID == context.messageID {
-                    pinnedMessageID = nil
+                if let index = pinnedMessageIDs.firstIndex(of: context.messageID) {
+                    pinnedMessageIDs.remove(at: index)
                 } else {
-                    pinnedMessageID = context.messageID
+                    pinnedMessageIDs.append(context.messageID)
                 }
             },
             isMessagePinned: { messageID in
-                pinnedMessageID == messageID
+                pinnedMessageIDs.contains(messageID)
             },
             inlineCommitContext: inlineCommitContext,
             onInlineCommit: {
@@ -1311,6 +1304,57 @@ struct ChatView: View {
             }
         )
         }
+    }
+
+    /// One pinned-message banner row. Tapping scrolls the transcript to the
+    /// message (the `xmark` unpins without scrolling). Long content is collapsed
+    /// to a single line; the full text is still what the tap targets.
+    private func pinnedBannerRow(id: String, message: ChatMessage) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "pin.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                pinnedScrollTarget = id
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(message.role == "user" ? "You" : "Hermes")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(Self.pinnedPreview(for: message.content))
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundColor(.primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                pinnedMessageIDs.removeAll { $0 == id }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    /// Collapses a message body to a single-line preview, normalising newlines
+    /// so a long multi-paragraph message doesn't balloon the banner.
+    private static func pinnedPreview(for content: String?) -> String {
+        let raw = content ?? ""
+        let singleLine = raw
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+        let trimmed = singleLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(120))
     }
 
     /// The chat-canvas layout direction. Driven by the manual Settings → Chat

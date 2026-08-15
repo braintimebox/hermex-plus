@@ -9,6 +9,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
       - name: Build for device
         run: >
           xcodebuild
@@ -24,10 +27,10 @@ jobs:
           echo "APP_PATH=$(find DerivedData/Build/Products -name '*.app' -path '*/Release-iphoneos/*' -type d | head -1)" >> $GITHUB_ENV
       - name: Package IPA
         run: |
-          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r HermesPlus.ipa Payload && rm -rf Payload && ls -lh HermesPlus.ipa
+          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "HermesPlus-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: HermesPlus-unsigned
-          path: HermesPlus.ipa
+          name: HermesPlus-${{ steps.version.outputs.VER }}-unsigned
+          path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30

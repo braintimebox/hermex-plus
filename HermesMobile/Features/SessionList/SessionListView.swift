@@ -1422,7 +1422,6 @@ enum SessionListInitialLoad {
         await initialRefresh
     }
 }
-
 enum SessionListNewChatReturn {
     static func run(
         from oldValue: SessionNavigationDestination?,

@@ -216,7 +216,7 @@ final class SessionListViewModel {
         defer { isLoading = false }
 
         do {
-            let response = try await client.sessions()
+            let response = try await fetchSessionsWithRetry()
             let visibleSessions = (response.sessions ?? [])
                 .filter { $0.archived != true && $0.shouldAppearInSessionList }
             applySessions(visibleSessions, archivedCount: response.archivedCount, animation: animation)
@@ -259,6 +259,31 @@ final class SessionListViewModel {
             }
 
             return false
+        }
+    }
+
+    /// Fetches the session list, retrying transient connectivity failures a few
+    /// times with short backoff. On cold start the tunnel (Tailscale/cloudflared)
+    /// may not be up yet, so the first request fails and previously surfaced a
+    /// "Cannot reach server" error that only a manual Retry could clear. A couple
+    /// of quick retries let the tunnel come up without any user action. Auth and
+    /// other non-transient errors are NOT retried (they fail fast to the cache).
+    private func fetchSessionsWithRetry() async throws -> SessionsResponse {
+        var attempt = 0
+        let maxAttempts = 3
+        while true {
+            do {
+                return try await client.sessions()
+            } catch {
+                guard CacheFallbackPolicy.shouldUseCache(for: error),
+                      attempt < maxAttempts - 1,
+                      !isCancellationError(error) else {
+                    throw error
+                }
+                attempt += 1
+                let delay = TimeInterval(attempt) * 0.5
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
         }
     }
 

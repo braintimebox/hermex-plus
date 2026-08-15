@@ -8,6 +8,10 @@ struct ChatTranscriptView: View {
     let isLoading: Bool
     let errorMessage: String?
     let messages: [ChatMessage]
+    /// When set, scroll to the transcript row whose `message.id` matches this.
+    /// The parent clears it via `onPinnedScrollConsumed` after the scroll fires.
+    var pinnedScrollTarget: String? = nil
+    var onPinnedScrollConsumed: () -> Void = {}
     let displayedTranscriptMessages: [TranscriptMessage]
     let compressionReferenceCard: CompressionReferenceCard?
     let reasoningGroups: [ReasoningGroup]
@@ -195,6 +199,20 @@ struct ChatTranscriptView: View {
                 .onChange(of: clarificationPrompt?.id) {
                     guard clarificationPrompt != nil, shouldFollowLatestMessage else { return }
                     onScrollToBottom(proxy)
+                }
+                .onChange(of: pinnedScrollTarget) {
+                    guard let target = pinnedScrollTarget else { return }
+                    // Resolve the pinned message id → its transcript renderID, then
+                    // scroll to it. A pinned id can be stale (e.g. the message was
+                    // compacted away), so scroll only when the row still exists.
+                    let renderID = displayedTranscriptMessages
+                        .first(where: { $0.message.id == target })?.renderID
+                    if let renderID {
+                        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                            proxy.scrollTo(renderID, anchor: .top)
+                        }
+                    }
+                    onPinnedScrollConsumed()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     if isScrolledNearBottom {
