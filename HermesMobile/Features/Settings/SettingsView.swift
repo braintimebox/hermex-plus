@@ -84,6 +84,8 @@ struct SettingsView: View {
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
     @AppStorage(SessionIdentitySettings.displayNameKey) private var identityDisplayName = ""
     @AppStorage(SessionIdentitySettings.initialsKey) private var identityInitials = ""
+    @AppStorage(SessionIdentitySettings.avatarImageDataKey) private var identityAvatarImageData: Data?
+    @State private var showsSessionAvatarPicker = false
     @AppStorage(SectionVisibilitySettings.tasksKey) private var showsTasksSection = true
     @AppStorage(SectionVisibilitySettings.kanbanKey) private var showsKanbanSection = true
     @AppStorage(SectionVisibilitySettings.skillsKey) private var showsSkillsSection = true
@@ -105,9 +107,11 @@ struct SettingsView: View {
                     SessionIdentitySettingsEditor(
                         displayName: $identityDisplayName,
                         initials: identityInitialsBinding,
+                        avatarImageData: $identityAvatarImageData,
                         previewInitials: identityPreviewInitials,
                         previewColor: HeaderLogoColor.color(for: headerLogoColorHex),
-                        previewForeground: HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white
+                        previewForeground: HeaderLogoColor.prefersDarkForeground(for: headerLogoColorHex) ? .black : .white,
+                        onPickAvatar: { showsSessionAvatarPicker = true }
                     )
                 }
 
@@ -593,6 +597,13 @@ struct SettingsView: View {
         }
         .background(Color(.systemBackground))
         .navigationTitle("Settings")
+        .fullScreenCover(isPresented: $showsSessionAvatarPicker) {
+            PhotoLibraryPickerView { image in
+                if let data = image.jpegData(compressionQuality: 0.85) {
+                    identityAvatarImageData = data
+                }
+            }
+        }
         .task {
             await loadServerSettings()
             await refreshNotificationPermissionStatus()
@@ -1325,24 +1336,39 @@ private extension UNAuthorizationStatus {
 }
 
 private struct SessionIdentitySettingsEditor: View {
-    @ScaledMetric(relativeTo: .caption) private var avatarPreviewSize: CGFloat = 36
-
     @Binding var displayName: String
     @Binding var initials: String
+    @Binding var avatarImageData: Data?
     let previewInitials: String
     let previewColor: Color
     let previewForeground: Color
+    let onPickAvatar: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Text(previewInitials)
-                    .font(AppFont.caption(weight: .semibold))
-                    .foregroundStyle(previewForeground)
-                    .frame(width: avatarPreviewSize, height: avatarPreviewSize)
-                    .background(previewColor, in: Circle())
+                Button(action: onPickAvatar) {
+                    Group {
+                        if let avatarImageData,
+                           let image = UIImage(data: avatarImageData) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 44, height: 44)
+                                .clipShape(Circle())
+                        } else {
+                            Text(previewInitials)
+                                .font(AppFont.caption(weight: .semibold))
+                                .foregroundStyle(previewForeground)
+                                .frame(width: 44, height: 44)
+                                .background(previewColor, in: Circle())
+                        }
+                    }
                     .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
-                    .accessibilityHidden(true)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Sessions Avatar")

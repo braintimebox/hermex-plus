@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.15 — 2026-08-15
+
+### Fixed
+- **Sessions avatar (the actual one you tapped):** the global Settings → Identity → "Sessions Avatar" circle was never a button at all — it was a static `Text` with initials. Made it a tappable button backed by a UIKit photo picker, added a `sessionIdentity.avatarImageData` storage key (mirrored to the active server and seeded on new-server creation), and showed the chosen photo in the session-list header avatar. This is the real fix for "avatar doesn't change" — earlier fixes targeted the per-server editor instead.
+
 ## 1.5.14 — 2026-08-15
 
 ### Fixed

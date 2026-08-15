@@ -72,6 +72,7 @@ struct SessionListView: View {
     @AppStorage(GlassPreference.isEnabledKey) private var isGlassEnabled = GlassPreference.defaultIsEnabled
     @AppStorage(SessionIdentitySettings.displayNameKey) private var identityDisplayName = ""
     @AppStorage(SessionIdentitySettings.initialsKey) private var identityInitials = ""
+    @AppStorage(SessionIdentitySettings.avatarImageDataKey) private var identityAvatarImageData: Data?
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
 
     init(
@@ -702,15 +703,26 @@ struct SessionListView: View {
             }
         } label: {
             ZStack {
-                Text(settingsInitials)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(initialsAvatarForegroundColor)
-                    .frame(width: Self.searchChromeIconVisualSize, height: Self.searchChromeIconVisualSize)
-                    .background(selectedHeaderLogoColor, in: Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
-                    .opacity(searchChromeIsExpanded ? 0 : 1)
-                    .scaleEffect(searchChromeIsExpanded ? 0.72 : 1)
-                    .rotationEffect(.degrees(searchChromeIsExpanded ? -18 : 0))
+                Group {
+                    if let identityAvatarImageData,
+                       let image = UIImage(data: identityAvatarImageData) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: Self.searchChromeIconVisualSize, height: Self.searchChromeIconVisualSize)
+                            .clipShape(Circle())
+                    } else {
+                        Text(settingsInitials)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(initialsAvatarForegroundColor)
+                            .frame(width: Self.searchChromeIconVisualSize, height: Self.searchChromeIconVisualSize)
+                            .background(selectedHeaderLogoColor, in: Circle())
+                    }
+                }
+                .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
+                .opacity(searchChromeIsExpanded ? 0 : 1)
+                .scaleEffect(searchChromeIsExpanded ? 0.72 : 1)
+                .rotationEffect(.degrees(searchChromeIsExpanded ? -18 : 0))
 
                 Image(systemName: "xmark")
                     .font(.system(size: 22, weight: .medium))

@@ -453,6 +453,7 @@ enum SessionSidebarDisclosureSettings {
 enum SessionIdentitySettings {
     static let displayNameKey = "sessionIdentity.displayName"
     static let initialsKey = "sessionIdentity.initials"
+    static let avatarImageDataKey = "sessionIdentity.avatarImageData"
 
     static func normalizedInitials(_ rawValue: String) -> String {
         rawValue

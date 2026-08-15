@@ -316,6 +316,7 @@ final class ServerRegistry: @unchecked Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let storedInitials = identityDefaults.string(forKey: SessionIdentitySettings.initialsKey) ?? ""
         let storedColor = identityDefaults.string(forKey: HeaderLogoColor.storageKey) ?? ""
+        let storedAvatar = identityDefaults.data(forKey: SessionIdentitySettings.avatarImageDataKey)
 
         let displayName = storedName.isEmpty ? hostFallback : storedName
         let initials = SessionIdentitySettings.displayInitials(
@@ -332,6 +333,7 @@ final class ServerRegistry: @unchecked Sendable {
             displayName: displayName,
             initials: initials,
             headerLogoColorHex: colorHex,
+            avatarImageData: storedAvatar,
             customHeadersRef: id,
             createdAt: timestamp,
             updatedAt: timestamp
@@ -348,6 +350,11 @@ final class ServerRegistry: @unchecked Sendable {
         identityDefaults.set(account.displayName, forKey: SessionIdentitySettings.displayNameKey)
         identityDefaults.set(account.initials, forKey: SessionIdentitySettings.initialsKey)
         identityDefaults.set(account.headerLogoColorHex, forKey: HeaderLogoColor.storageKey)
+        if let avatar = account.avatarImageData {
+            identityDefaults.set(avatar, forKey: SessionIdentitySettings.avatarImageDataKey)
+        } else {
+            identityDefaults.removeObject(forKey: SessionIdentitySettings.avatarImageDataKey)
+        }
     }
 
     // MARK: - Persistence
