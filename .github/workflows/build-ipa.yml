@@ -12,6 +12,8 @@ jobs:
       - name: Read version
         id: version
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+      - name: Release guard
+        run: python3 scripts/release-check.py --allow-untagged
       - name: Build for device
         run: >
           xcodebuild
