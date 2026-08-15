@@ -1375,12 +1375,14 @@ final class ChatViewModel {
                 reloadedMessages = loadedMessages
             }
             applyCompressionAnchorMetadata(from: session)
+            HeavyOperationTracker.begin("applyReloadedMessages")
             applyReloadedMessages(
                 reloadedMessages,
                 from: session,
                 previousMessages: previousMessages,
                 previousMessagesOffset: previousMessagesOffset
             )
+            HeavyOperationTracker.end()
             if renderedCacheFirst {
                 // The taller server transcript has now replaced the lighter cache-first
                 // render; signal the view to re-pin to the bottom without a visible jump.
@@ -1405,11 +1407,13 @@ final class ChatViewModel {
             if let title = session?.title {
                 displayTitle = Self.displayTitle(from: title)
             }
+            HeavyOperationTracker.begin("ToolCallGroup.groups")
             setCompletedToolCallGroups(ToolCallGroup.groups(
                 persistedToolCalls: session?.toolCalls ?? [],
                 messages: messages,
                 messageOffset: messagesOffset
             ))
+            HeavyOperationTracker.end()
             completedReasoningGroups = []
             liveToolCalls = []
             liveReasoningText = ""

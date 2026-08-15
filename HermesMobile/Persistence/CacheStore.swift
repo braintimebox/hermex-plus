@@ -37,6 +37,8 @@ enum CacheStore {
         }
 
         let serverURLString = serverURL.absoluteString
+        HeavyOperationTracker.begin("CacheStore.cachedMessages")
+        defer { HeavyOperationTracker.end() }
         var descriptor = FetchDescriptor<CachedMessage>(
             predicate: #Predicate { cachedMessage in
                 cachedMessage.serverURLString == serverURLString

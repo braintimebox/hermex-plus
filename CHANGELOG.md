@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.3 — 2026-08-15
+
+### Changed
+- **Freeze diagnostics:** instrumented the known-expensive main-thread paths on chat open (JSON decode, cached-message read, message apply, tool-call grouping) with the heavy-operation tracker, so the next ChatView freeze reports exactly which step blocked the main thread instead of an empty `heavyOp`.
+
 ## 1.6.2 — 2026-08-15
 
 ### Changed

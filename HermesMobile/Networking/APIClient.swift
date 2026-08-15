@@ -112,6 +112,8 @@ actor APIClient {
     }
 
     func decode<Response: Decodable>(_ type: Response.Type, from data: Data) throws -> Response {
+        HeavyOperationTracker.begin("APIClient.decode")
+        defer { HeavyOperationTracker.end() }
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
