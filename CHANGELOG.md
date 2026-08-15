@@ -4,6 +4,7 @@
 
 ### Changed
 - **Offline mode (session list):** when the server can't be reached, the full-screen "Could not load sessions" error row no longer blocks the list. The app now shows a non-blocking "Offline" banner (with cached sessions if available, otherwise an empty list) and auto-reconnects every 10s until the server responds — no manual Retry needed.
+- **More resilient session cache:** cached sessions are now shown even past their 7-day expiry (expiry still governs background eviction), so an offline start no longer degrades to a blank error just because the cache aged out.
 
 ## 1.6.1 — 2026-08-15
 

@@ -15,9 +15,13 @@ enum CacheStore {
             }
         )
 
-        return try context.fetch(descriptor)
-            .filter { $0.archived != true && $0.expiresAt > now }
-            .map(SessionSummary.init(cachedSession:))
+        // Prefer fresh rows, but fall back to ANY cached row (even past its
+        // expiry) rather than failing to an error. Expiry still governs
+        // eviction via maintenance, but a stale cache beats a blank error.
+        let fetched = try context.fetch(descriptor).filter { $0.archived != true }
+        let fresh = fetched.filter { $0.expiresAt > now }
+        let chosen = fresh.isEmpty ? fetched : fresh
+        return chosen.map(SessionSummary.init(cachedSession:))
     }
 
     @MainActor
