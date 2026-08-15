@@ -307,6 +307,10 @@ fileprivate struct EditScheduledMessageSheet: View {
     @State private var text: String = ""
     @State private var scheduledAt: Date = Date()
     @State private var sessionTitle: String = ""
+    @State private var destinationIsExistingChat = false
+    @State private var sessions: [SessionListItem] = []
+    @State private var showSessionPicker = false
+    @State private var pickedSession: SessionListItem?
 
     var body: some View {
         NavigationStack {
@@ -316,16 +320,34 @@ fileprivate struct EditScheduledMessageSheet: View {
                         .font(.body)
                         .frame(minHeight: 80)
                 }
-                // The chat title only matters for messages destined for a brand-new
-                // chat (sessionId empty) — those the server creates on delivery and
-                // renames to this title. Attached-to-existing-chat messages have no
-                // editable title of their own.
-                if message.sessionId.isEmpty {
-                    Section("New chat title (optional)") {
-                        TextField("Chat title", text: $sessionTitle)
+
+                Section {
+                    Picker("Destination", selection: $destinationIsExistingChat) {
+                        Text("New Chat").tag(false)
+                        Text("Existing Chat").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if !destinationIsExistingChat {
+                        TextField("New chat title (optional)", text: $sessionTitle)
                             .textInputAutocapitalization(.sentences)
+                    } else {
+                        if let picked = pickedSession {
+                            HStack {
+                                Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
+                                Spacer()
+                                Button("Change") { showSessionPicker = true }
+                            }
+                        } else {
+                            Button {
+                                showSessionPicker = true
+                            } label: {
+                                Label("Choose Chat", systemImage: "bubble.left.and.bubble.right")
+                            }
+                        }
                     }
                 }
+
                 Section {
                     DatePicker(
                         "Send at",
@@ -349,24 +371,58 @@ fileprivate struct EditScheduledMessageSheet: View {
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .sheet(isPresented: $showSessionPicker) {
+                SessionPickerForForward(sessions: sessions, title: "Choose Chat") { session in
+                    pickedSession = session
+                    destinationIsExistingChat = true
+                }
+            }
             .onAppear {
                 text = message.draftText
                 scheduledAt = message.scheduledAt
                 sessionTitle = message.sessionTitle ?? ""
+                destinationIsExistingChat = !message.sessionId.isEmpty
             }
+            .task {
+                await loadSessions()
+            }
+        }
+    }
+
+    private func loadSessions() async {
+        guard let url = URL(string: message.serverURLString) else { return }
+        let client = APIClient(baseURL: url)
+        guard let response = try? await client.sessions() else { return }
+        sessions = (response.sessions ?? []).map { summary in
+            SessionListItem(
+                id: summary.id,
+                displayTitle: summary.title ?? summary.sessionId ?? "Untitled",
+                lastMessagePreview: nil
+            )
         }
     }
 
     private func save() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        let sid: String
+        let title: String?
+        if destinationIsExistingChat {
+            sid = pickedSession?.id ?? ""
+            title = nil
+        } else {
+            sid = ""
+            title = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
         message.draftText = trimmed
         message.scheduledAt = scheduledAt
-        message.sessionTitle = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        message.sessionId = sid
+        message.sessionTitle = title
         try? modelContext.save()
 
         let key = message.scheduleKey
-        let sid = message.sessionId
         let sURL = message.serverURLString
         let ts = scheduledAt.timeIntervalSince1970
         Task {
@@ -375,7 +431,7 @@ fileprivate struct EditScheduledMessageSheet: View {
                 text: trimmed,
                 scheduledAt: ts,
                 sessionId: sid,
-                sessionTitle: message.sessionTitle,
+                sessionTitle: title,
                 serverURLString: sURL
             )
         }

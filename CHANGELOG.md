@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0 — 2026-08-15
+
+### Added
+- **Scheduled message edit → destination picker:** the edit sheet now has the same "New Chat | Existing Chat" segmented picker as the create sheet, so a pending message can be re-targeted from a new chat to an existing conversation (and vice-versa).
+
 ## 1.5.16 — 2026-08-15
 
 ### Fixed
