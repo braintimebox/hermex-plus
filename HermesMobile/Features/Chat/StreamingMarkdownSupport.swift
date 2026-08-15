@@ -13,7 +13,33 @@ struct StreamingMarkdownBlockSegments: Equatable {
 enum StreamingMarkdownBlockSplitter {
     static let stableChunkTargetCharacterCount = 6_000
 
+    /// Memoized last result. During streaming the body + onChange handlers call
+    /// `split` several times per token on the *same* `content`; recomputing an
+    /// O(N) line scan each time (and copying `activeMarkdown` every time) is a
+    /// real main-thread cost on long messages. Guarded — `split` runs on the
+    /// main thread in body evaluation, but the lock keeps it safe regardless.
+    private static let cacheLock = NSLock()
+    private static var cachedText: String?
+    private static var cachedResult: StreamingMarkdownBlockSegments?
+
     static func split(_ text: String) -> StreamingMarkdownBlockSegments {
+        cacheLock.lock()
+        if let cachedText, cachedText == text, let cachedResult {
+            cacheLock.unlock()
+            return cachedResult
+        }
+        cacheLock.unlock()
+
+        let result = computeSplit(text)
+
+        cacheLock.lock()
+        cachedText = text
+        cachedResult = result
+        cacheLock.unlock()
+        return result
+    }
+
+    private static func computeSplit(_ text: String) -> StreamingMarkdownBlockSegments {
         var lineStart = text.startIndex
         var chunkStart = text.startIndex
         var isInsideFence = false

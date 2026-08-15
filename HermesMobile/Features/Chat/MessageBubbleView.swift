@@ -224,7 +224,6 @@ struct MessageBubbleView: View {
     private var userBubble: some View {
         Text(verbatim: userBubbleText)
             .font(.body)
-            .textSelection(.enabled)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(userBubbleBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

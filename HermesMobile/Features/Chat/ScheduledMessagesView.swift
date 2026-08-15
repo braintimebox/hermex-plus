@@ -211,6 +211,7 @@ extension PendingScheduledMessage {
         text: String,
         scheduledAt: Double,
         sessionId: String,
+        sessionTitle: String? = nil,
         serverURLString: String
     ) async {
         guard !serverURLString.isEmpty,
@@ -219,12 +220,16 @@ extension PendingScheduledMessage {
         var request = URLRequest(url: webhookURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "scheduleKey": scheduleKey,
             "text": text,
             "scheduledAt": scheduledAt,
             "sessionId": sessionId,
-        ])
+        ]
+        if let sessionTitle, !sessionTitle.isEmpty {
+            payload["sessionTitle"] = sessionTitle
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
         request.timeoutInterval = 10
         do {
             let (_, _) = try await URLSession.shared.data(for: request)
@@ -301,6 +306,7 @@ fileprivate struct EditScheduledMessageSheet: View {
 
     @State private var text: String = ""
     @State private var scheduledAt: Date = Date()
+    @State private var sessionTitle: String = ""
 
     var body: some View {
         NavigationStack {
@@ -308,6 +314,16 @@ fileprivate struct EditScheduledMessageSheet: View {
                 Section("Message") {
                     TextField("Message text", text: $text, axis: .vertical)
                         .lineLimit(3...6)
+                }
+                // The chat title only matters for messages destined for a brand-new
+                // chat (sessionId empty) — those the server creates on delivery and
+                // renames to this title. Attached-to-existing-chat messages have no
+                // editable title of their own.
+                if message.sessionId.isEmpty {
+                    Section("New chat title (optional)") {
+                        TextField("Chat title", text: $sessionTitle)
+                            .textInputAutocapitalization(.sentences)
+                    }
                 }
                 Section("Scheduled time") {
                     DatePicker("Deliver at", selection: $scheduledAt)
@@ -327,6 +343,7 @@ fileprivate struct EditScheduledMessageSheet: View {
             .onAppear {
                 text = message.draftText
                 scheduledAt = message.scheduledAt
+                sessionTitle = message.sessionTitle ?? ""
             }
         }
     }
@@ -336,6 +353,7 @@ fileprivate struct EditScheduledMessageSheet: View {
         guard !trimmed.isEmpty else { return }
         message.draftText = trimmed
         message.scheduledAt = scheduledAt
+        message.sessionTitle = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         try? modelContext.save()
 
         let key = message.scheduleKey
@@ -348,6 +366,7 @@ fileprivate struct EditScheduledMessageSheet: View {
                 text: trimmed,
                 scheduledAt: ts,
                 sessionId: sid,
+                sessionTitle: message.sessionTitle,
                 serverURLString: sURL
             )
         }

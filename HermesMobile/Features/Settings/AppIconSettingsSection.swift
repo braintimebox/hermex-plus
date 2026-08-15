@@ -11,13 +11,21 @@ struct AppIconSettingsSection: View {
     var body: some View {
         if UIApplication.shared.supportsAlternateIcons {
             VStack(alignment: .leading, spacing: 12) {
-                DisclosureGroup(isExpanded: $isAppIconPickerExpanded) {
-                    appIconChoices
-                        .padding(.top, 12)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isAppIconPickerExpanded.toggle()
+                    }
                 } label: {
-                    AppIconDisclosureLabel(selectedAppIcon: selectedAppIcon)
+                    AppIconDisclosureLabel(
+                        selectedAppIcon: selectedAppIcon,
+                        isExpanded: isAppIconPickerExpanded
+                    )
                 }
-                .tint(.secondary)
+                .buttonStyle(.plain)
+
+                if isAppIconPickerExpanded {
+                    appIconChoices
+                }
 
                 if let appIconErrorMessage {
                     Text(appIconErrorMessage)
@@ -97,6 +105,7 @@ struct AppIconSettingsSection: View {
 
 private struct AppIconDisclosureLabel: View {
     let selectedAppIcon: AppIconChoice
+    let isExpanded: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -113,6 +122,10 @@ private struct AppIconDisclosureLabel: View {
             }
 
             Spacer(minLength: 8)
+
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .frame(minHeight: 44)
         .contentShape(Rectangle())

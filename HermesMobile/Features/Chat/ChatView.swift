@@ -318,6 +318,7 @@ struct ChatView: View {
     /// Set to a pinned message's id to scroll the transcript to it; cleared by
     /// `ChatTranscriptView` once the scroll is consumed.
     @State private var pinnedScrollTarget: String?
+    @State private var showsPinnedMessagesSheet = false
     @State private var viewModel: ChatViewModel
     @State private var gitAvailabilityViewModel: GitWorkspaceAvailabilityViewModel
     @State private var gitToastState = GitActionToastState()
@@ -754,6 +755,19 @@ struct ChatView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showsPinnedMessagesSheet) {
+                PinnedMessagesSheet(
+                    pinnedIDs: pinnedMessageIDs,
+                    messages: viewModel.messages,
+                    onSelect: { id in
+                        showsPinnedMessagesSheet = false
+                        pinnedScrollTarget = id
+                    },
+                    onUnpin: { id in
+                        pinnedMessageIDs.removeAll { $0 == id }
+                    }
+                )
+            }
             .sheet(isPresented: $showingSchedulePicker) {
                 ScheduleMessageSheet(
                     draftMessage: draftMessage,
@@ -1141,18 +1155,30 @@ struct ChatView: View {
     @ViewBuilder
     private var messageContent: some View {
         VStack(spacing: 0) {
-            if !pinnedMessageIDs.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(pinnedMessageIDs, id: \.self) { pinnedID in
-                        if let pinnedMsg = viewModel.messages.first(where: { $0.id == pinnedID }) {
-                            pinnedBannerRow(id: pinnedID, message: pinnedMsg)
-                            if pinnedID != pinnedMessageIDs.last {
-                                Divider().padding(.leading, 36)
-                            }
-                        }
+            if let latestPinnedID = pinnedMessageIDs.last,
+               let pinnedMsg = viewModel.messages.first(where: { $0.id == latestPinnedID }) {
+                pinnedBannerRow(
+                    id: latestPinnedID,
+                    message: pinnedMsg,
+                    totalCount: pinnedMessageIDs.count
+                )
+                .background(.ultraThinMaterial)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    pinnedScrollTarget = latestPinnedID
+                }
+                .contextMenu {
+                    Button {
+                        showsPinnedMessagesSheet = true
+                    } label: {
+                        Label(String(localized: "View All Pinned"), systemImage: "pin")
+                    }
+                    Button(role: .destructive) {
+                        pinnedMessageIDs.removeAll { $0 == latestPinnedID }
+                    } label: {
+                        Label(String(localized: "Unpin"), systemImage: "pin.slash")
                     }
                 }
-                .background(.ultraThinMaterial)
             }
 
             ChatTranscriptView(
@@ -1306,41 +1332,35 @@ struct ChatView: View {
         }
     }
 
-    /// One pinned-message banner row. Tapping scrolls the transcript to the
-    /// message (the `xmark` unpins without scrolling). Long content is collapsed
-    /// to a single line; the full text is still what the tap targets.
-    private func pinnedBannerRow(id: String, message: ChatMessage) -> some View {
+    /// One pinned-message banner row (always the most recently pinned). Tapping
+    /// scrolls to it; long-press opens the pinned list or unpins. When more than
+    /// one message is pinned a trailing "+N" badge signals the rest.
+    private func pinnedBannerRow(id: String, message: ChatMessage, totalCount: Int) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "pin.fill")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Button {
-                pinnedScrollTarget = id
-            } label: {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(message.role == "user" ? "You" : "Hermes")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(Self.pinnedPreview(for: message.content))
-                        .font(.caption)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundColor(.primary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                pinnedMessageIDs.removeAll { $0 == id }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(message.role == "user" ? "You" : "Hermes")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(Self.pinnedPreview(for: message.content))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundColor(.primary)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if totalCount > 1 {
+                Text("+\(totalCount - 1)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -1348,7 +1368,7 @@ struct ChatView: View {
 
     /// Collapses a message body to a single-line preview, normalising newlines
     /// so a long multi-paragraph message doesn't balloon the banner.
-    private static func pinnedPreview(for content: String?) -> String {
+    static func pinnedPreview(for content: String?) -> String {
         let raw = content ?? ""
         let singleLine = raw
             .split(whereSeparator: \.isNewline)
@@ -2830,71 +2850,74 @@ struct ScheduleMessageSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                TextEditor(text: $messageText)
-                    .font(.body)
-                    .frame(minHeight: 80)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                    )
-                    .padding(.horizontal)
-
-                DatePicker(
-                    "Send at",
-                    selection: $scheduledDate,
-                    in: Date()...,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.wheel)
-                .labelsHidden()
-                .padding(.horizontal)
-
-                if let title = chatTitle {
-                    Toggle("Attach to \u{201C}\(title)\u{201D}", isOn: $attachToChat)
-                        .font(.subheadline)
+            ScrollView {
+                VStack(spacing: 20) {
+                    TextEditor(text: $messageText)
+                        .font(.body)
+                        .frame(minHeight: 80)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
                         .padding(.horizontal)
-                }
 
-                // When not attached to the current chat, the destination MUST
-                // be explicit: a brand-new chat or one picked from the list.
-                if !attachToChat {
-                    Picker("Destination", selection: $chatChoice) {
-                        ForEach(ScheduledChatChoice.allCases) { choice in
-                            Text(choice.rawValue).tag(choice)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    DatePicker(
+                        "Send at",
+                        selection: $scheduledDate,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
                     .padding(.horizontal)
 
-                    if chatChoice == .newChat {
-                        TextField("New chat title (optional)", text: $newChatTitle)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.sentences)
-                            .padding(.horizontal)
-                    }
-
-                    if chatChoice == .existingChat {
-                        if let picked = pickedExistingSession {
-                            HStack {
-                                Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
-                                Spacer()
-                                Button("Change") { showSessionPicker = true }
-                            }
+                    if let title = chatTitle {
+                        Toggle("Attach to \u{201C}\(title)\u{201D}", isOn: $attachToChat)
                             .font(.subheadline)
                             .padding(.horizontal)
-                        } else {
-                            Button {
-                                showSessionPicker = true
-                            } label: {
-                                Label("Choose Chat", systemImage: "bubble.left.and.bubble.right")
+                    }
+
+                    // When not attached to the current chat, the destination MUST
+                    // be explicit: a brand-new chat or one picked from the list.
+                    if !attachToChat {
+                        Picker("Destination", selection: $chatChoice) {
+                            ForEach(ScheduledChatChoice.allCases) { choice in
+                                Text(choice.rawValue).tag(choice)
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .padding(.horizontal)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal)
+
+                        if chatChoice == .newChat {
+                            TextField("New chat title (optional)", text: $newChatTitle)
+                                .textFieldStyle(.roundedBorder)
+                                .textInputAutocapitalization(.sentences)
+                                .padding(.horizontal)
+                        }
+
+                        if chatChoice == .existingChat {
+                            if let picked = pickedExistingSession {
+                                HStack {
+                                    Label(picked.displayTitle, systemImage: "bubble.left.and.bubble.right")
+                                    Spacer()
+                                    Button("Change") { showSessionPicker = true }
+                                }
+                                .font(.subheadline)
+                                .padding(.horizontal)
+                            } else {
+                                Button {
+                                    showSessionPicker = true
+                                } label: {
+                                    Label("Choose Chat", systemImage: "bubble.left.and.bubble.right")
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .padding(.horizontal)
+                            }
                         }
                     }
                 }
+                .padding(.bottom, 16)
             }
             .navigationTitle("Schedule Message")
             .navigationBarTitleDisplayMode(.inline)
@@ -3008,4 +3031,78 @@ private struct ActivityViewController: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Pinned messages list (Telegram-style: a page listing every pin)
+
+/// A sheet listing all pinned messages, newest first. Tapping a row scrolls the
+/// transcript to it; a trailing unpin button removes it. Mirrors Telegram's
+/// "pinned messages" page instead of stacking every pin in the chat header.
+private struct PinnedMessagesSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let pinnedIDs: [String]
+    let messages: [ChatMessage]
+    let onSelect: (String) -> Void
+    let onUnpin: (String) -> Void
+
+    private var pinnedMessages: [(id: String, message: ChatMessage)] {
+        // Preserve pin order (newest last), skip ids no longer present.
+        pinnedIDs.compactMap { id in
+            messages.first(where: { $0.id == id }).map { (id, $0) }
+        }
+        .reversed()
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if pinnedMessages.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: "No Pinned Messages"),
+                        systemImage: "pin",
+                        description: Text(String(localized: "Long-press a message and choose Pin to keep it here."))
+                    )
+                } else {
+                    List {
+                        ForEach(pinnedMessages, id: \.id) { item in
+                            Button {
+                                dismiss()
+                                onSelect(item.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.message.role == "user" ? "You" : "Hermes")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text(ChatView.pinnedPreview(for: item.message.content))
+                                        .font(.subheadline)
+                                        .lineLimit(2)
+                                        .foregroundStyle(.primary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    onUnpin(item.id)
+                                } label: {
+                                    Label(String(localized: "Unpin"), systemImage: "pin.slash")
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle(String(localized: "Pinned Messages"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
 }

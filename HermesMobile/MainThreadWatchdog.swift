@@ -76,6 +76,11 @@ enum MainThreadStackCapture {
     /// One-line "blocked at Foo.bar +0x12 (return: Baz.qux)" summary, or a
     /// human-readable failure reason. Never throws, never crashes — the freeze
     /// report must always get *some* text.
+    ///
+    /// Walks the arm64 frame-pointer chain (via `vm_read_overwrite`, which
+    /// returns an error on a bad address instead of faulting) to emit a full
+    /// backtrace, so a freeze reports the whole call path down to our code —
+    /// not just the top stripped frame.
     static func capture() -> String {
         guard let mainThread = mainThreadPort else {
             return "main thread port not captured"
@@ -115,35 +120,91 @@ enum MainThreadStackCapture {
         let fp = state.__rbp
         #endif
 
-        var parts: [String] = []
+        var frames: [String] = []
+        var seen: Set<UInt64> = []
+
         if pc != 0, let sym = symbolize(pc) {
-            parts.append("blocked at \(sym)")
+            frames.append(sym)
+            seen.insert(pc)
         }
         if lr != 0, lr != pc, let sym = symbolize(lr) {
-            parts.append("return: \(sym)")
+            frames.append("return: \(sym)")
+            seen.insert(lr)
         }
-        if fp != 0, fp != pc, fp != lr, let sym = symbolize(fp) {
-            parts.append("fp: \(sym)")
+
+        // Walk the frame-pointer chain: [FP] = saved FP, [FP+8] = saved LR.
+        // Each return address is the caller of the frame below, so walking up
+        // yields the full call stack toward main() / SwiftUI internals.
+        var currentFP = fp
+        var depth = 0
+        while currentFP != 0, currentFP % 8 == 0, depth < 32 {
+            guard let savedLR = readWord(currentFP + 8), savedLR != 0 else { break }
+            guard let savedFP = readWord(currentFP) else { break }
+            // Guard against loops and bogus addresses (stack grows downward,
+            // so a valid next frame pointer is always larger than the current).
+            if seen.contains(savedLR) || savedFP == currentFP || savedFP < currentFP {
+                break
+            }
+            if let sym = symbolize(savedLR) {
+                frames.append(sym)
+                seen.insert(savedLR)
+            }
+            currentFP = savedFP
+            depth += 1
         }
-        if parts.isEmpty {
+
+        if frames.isEmpty {
             return String(format: "pc=0x%llx lr=0x%llx fp=0x%llx", pc, lr, fp)
         }
-        return parts.joined(separator: " | ")
+        return frames.joined(separator: " <- ")
     }
 
-    /// Resolve an instruction address to "SymbolName +0xNN" via `dladdr`.
+    /// Read one 8-byte word from another thread's stack. Uses `vm_read_overwrite`
+    /// (mach_task_self) so a bad address returns an error instead of faulting the
+    /// watchdog — critical, since a torn frame pointer must never crash the app
+    /// while it is already frozen.
+    private static func readWord(_ address: UInt64) -> UInt64? {
+        guard address != 0, address % 8 == 0 else { return nil }
+        var value: UInt64 = 0
+        var size = vm_size_t(MemoryLayout<UInt64>.size)
+        let kr = withUnsafeMutablePointer(to: &value) { ptr -> kern_return_t in
+            ptr.withMemoryRebound(to: vm_offset_t.self, capacity: 1) { dst in
+                vm_read_overwrite(
+                    mach_task_self_,
+                    vm_address_t(address),
+                    vm_size_t(MemoryLayout<UInt64>.size),
+                    dst,
+                    &size
+                )
+            }
+        }
+        guard kr == KERN_SUCCESS, size == MemoryLayout<UInt64>.size else { return nil }
+        return value
+    }
+
+    /// Resolve an instruction address to "Image Symbol +0xNN" via `dladdr`.
+    /// Always reports the binary's basename (UIKitCore, SwiftUI, HermesMobile…)
+    /// even when the symbol itself is stripped — so `<redacted>` becomes a real
+    /// library name plus an offset into it.
     private static func symbolize(_ address: UInt64) -> String? {
         guard let raw = UnsafeRawPointer(bitPattern: UInt(address)) else { return nil }
         var info = Dl_info()
         guard dladdr(raw, &info) != 0 else { return nil }
         let name = info.dli_sname.map { String(cString: $0) } ?? "?"
+        let image = info.dli_fname.map { ($0 as NSString).lastPathComponent } ?? "?"
+
         if let saddr = info.dli_saddr {
             let base = UInt64(UInt(bitPattern: saddr))
-            guard address >= base else { return name }
+            guard address >= base else { return "\(image) \(name)" }
             let offset = address - base
-            return offset == 0 ? name : "\(name) +0x\(String(offset, radix: 16))"
+            return offset == 0 ? "\(image) \(name)" : "\(image) \(name) +0x\(String(offset, radix: 16))"
         }
-        return name
+        if let fbase = info.dli_fbase {
+            let base = UInt64(UInt(bitPattern: fbase))
+            let offset = address - base
+            return "\(image) +0x\(String(offset, radix: 16))"
+        }
+        return "\(image) \(name)"
     }
 }
 

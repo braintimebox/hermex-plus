@@ -70,14 +70,12 @@ struct MarkdownRenderer: View {
                     }
                 }
             }
-            .textSelection(.enabled)
         } else {
             ChatMarkdownView(
                 content: MarkdownMathFormatter.replacingInlineMath(in: content),
                 colorScheme: colorScheme,
                 isStreaming: isStreaming
             )
-            .textSelection(.enabled)
         }
     }
 }
@@ -1173,7 +1171,6 @@ private struct PlainMarkdownFallbackView: View {
             .font(.body)
             .foregroundStyle(.primary)
             .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
             .onAppear {
                 logger.info(
                     "Markdown plain fallback reason=\(reason.rawValue, privacy: .public) characters=\(content.count, privacy: .public) lines=\(MarkdownHighlightPolicy.lineCount(in: content), privacy: .public)"

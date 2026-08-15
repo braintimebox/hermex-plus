@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.7 — 2026-08-15
+
+### Fixed
+- **Long messages couldn't be pinned:** `MarkdownRenderer` and the user bubble both applied `.textSelection(.enabled)`, which intercepted the long-press gesture on long messages — the whole bubble was text, so the context menu (with Pin) never appeared. Short messages pinned fine because there was non-text area to grab. Removed the conflicting `.textSelection` from the transcript path (Copy/Select Text remain available via the context menu).
+- **Pinned list no longer stacks in the header:** instead of stacking every pin as a banner, the chat now shows only the most recently pinned message with a `+N` badge. Long-press it (or tap "View All Pinned") to open a dedicated "Pinned Messages" page (Telegram-style) listing every pin; tapping a row scrolls to it, swipe-left unpins.
+- **Pinned banner lost its accidental "x" button:** the one-tap unpin was too easy to trigger by mistake; unpinning now lives behind long-press / the pinned page, so a stray tap scrolls instead of unpinning.
+- **App icon still wouldn't change on tap:** the picker used a `DisclosureGroup` inside the settings card, which didn't reliably respond to taps. Replaced with an explicit button that toggles the icon list inline.
+- **Scheduled-message sheet cramped the title field:** the schedule sheet was a fixed `VStack` with a wheel `DatePicker`, so on the `.medium` detent the "New chat title" field was squeezed. The form now scrolls, so the title field always has room.
+- **Couldn't rename a scheduled message's chat from the list:** the edit sheet had no title field. Added an editable "New chat title" (for new-chat messages only), persisted and synced to the server so a renamed destination survives a reschedule.
+
+### Changed
+- **Freeze diagnostics now capture the full backtrace:** the watchdog previously read only the top frame (PC/LR/FP), so a freeze showed `blocked at <redacted>` — a stripped symbol with no library name. It now walks the arm64 frame-pointer chain (via `vm_read_overwrite`, which can't fault the watchdog on a bad address) to emit the whole call path, and `dladdr` reports the binary name (`UIKitCore`, `SwiftUI`, `HermesMobile`…) even when the symbol is stripped.
+- **Streaming markdown split is memoized:** `StreamingMarkdownBlockSplitter.split` ran an O(N) line scan several times per streamed token (body + onChange handlers), re-copying the active markdown each time. It now caches the last result, removing repeated main-thread work on long streams.
+
 ## 1.5.6 — 2026-08-15
 
 ### Fixed
