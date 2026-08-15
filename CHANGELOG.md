@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.14 — 2026-08-15
+
+### Fixed
+- **Scheduled-message date picker consistency:** the wheel `DatePicker` was presented in a separate sheet that felt detached from the form. Moved it back inline at the bottom of the `Form` (with the title field above it, so the title stays visible above the keyboard). Also aligned the edit-sheet (`EditScheduledMessageSheet`) to the same layout — `TextEditor` for the message and an inline wheel picker — so creating and editing a scheduled message now look the same.
+
 ## 1.5.13 — 2026-08-15
 
 ### Fixed

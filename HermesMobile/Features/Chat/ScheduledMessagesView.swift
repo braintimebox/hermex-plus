@@ -312,8 +312,9 @@ fileprivate struct EditScheduledMessageSheet: View {
         NavigationStack {
             Form {
                 Section("Message") {
-                    TextField("Message text", text: $text, axis: .vertical)
-                        .lineLimit(3...6)
+                    TextEditor(text: $text)
+                        .font(.body)
+                        .frame(minHeight: 80)
                 }
                 // The chat title only matters for messages destined for a brand-new
                 // chat (sessionId empty) — those the server creates on delivery and
@@ -325,10 +326,18 @@ fileprivate struct EditScheduledMessageSheet: View {
                             .textInputAutocapitalization(.sentences)
                     }
                 }
-                Section("Scheduled time") {
-                    DatePicker("Deliver at", selection: $scheduledAt)
+                Section {
+                    DatePicker(
+                        "Send at",
+                        selection: $scheduledAt,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Scheduled Message")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
