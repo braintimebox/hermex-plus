@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.13 — 2026-08-15
+
+### Fixed
+- **Scheduled-message date picker layout:** the wheel `DatePicker` was convenient but so tall (~216pt) that the "New chat title" field no longer fit on screen and slipped under the keyboard. Moved the wheel into its own sheet — the main form now shows a compact "Send at" row (tap to open the wheel), so the title field stays visible above the keyboard.
+
 ## 1.5.12 — 2026-08-15
 
 ### Fixed

@@ -2832,6 +2832,7 @@ struct ScheduleMessageSheet: View {
     @State private var showSessionPicker = false
     @State private var chatChoice: ScheduledChatChoice = .newChat
     @State private var newChatTitle = ""
+    @State private var showsDateTimePicker = false
 
     init(
         draftMessage: String,
@@ -2860,14 +2861,17 @@ struct ScheduleMessageSheet: View {
                 }
 
                 Section {
-                    DatePicker(
-                        "Send at",
-                        selection: $scheduledDate,
-                        in: Date()...,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
+                    Button {
+                        showsDateTimePicker = true
+                    } label: {
+                        HStack {
+                            Text("Send at")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(scheduledDate, format: .dateTime.month().day().hour().minute())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 if let title = chatTitle {
@@ -2945,6 +2949,27 @@ struct ScheduleMessageSheet: View {
                     pickedExistingSession = session
                     chatChoice = .existingChat
                 }
+            }
+            .sheet(isPresented: $showsDateTimePicker) {
+                NavigationStack {
+                    DatePicker(
+                        "Send at",
+                        selection: $scheduledDate,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .padding()
+                    .navigationTitle("Send at")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showsDateTimePicker = false }
+                        }
+                    }
+                }
+                .presentationDetents([.height(320)])
             }
             .task {
                 guard let client else { return }
