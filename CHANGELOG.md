@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.6 — 2026-08-15
+
+### Fixed
+- **Pinning is now multi-message and tappable:** a single `pinnedMessageID` was replaced with an ordered `pinnedMessageIDs` list, so you can pin several messages at once (Telegram-style, stacked in a banner). Tapping a pinned banner row now scrolls the transcript to that message (id → renderID resolution); the `xmark` unpins. Long multi-paragraph messages are collapsed to a single-line preview instead of a raw `prefix(80)`.
+- **"Could not load sessions" on cold start:** the first session fetch could fail while the tunnel (Tailscale/cloudflared) was still coming up, surfacing a "Cannot reach server" error that only a manual Retry cleared. The initial load now retries transient connectivity failures up to 3 times with short backoff, so the tunnel can come up without user action (auth/other errors still fail fast).
+
+### Changed
+- **Versioned IPA artifact:** CI reads `VERSION` and names the build artifact `HermesPlus-<version>-unsigned` with the IPA inside as `HermesPlus-<version>.ipa`, instead of a bare `HermesPlus.ipa`.
+
 ## 1.5.5 — 2026-08-15
 
 ### Added
@@ -7,8 +16,6 @@
 
 ### Fixed
 - **"Pin message" was missing from the message menu:** `ChatTranscriptMessageRow` hardcoded `onPin: nil` / `isPinned: false` into `ChatMessageActionMenu`, so the Pin/Unpin row never appeared even though the parent wired `onPin` and `isMessagePinned`. Now passes the real callbacks through.
-- **Pinning is now multi-message and tappable:** a single `pinnedMessageID` was replaced with an ordered `pinnedMessageIDs` list, so you can pin several messages at once (Telegram-style, stacked in a banner). Tapping a pinned banner row now scrolls the transcript to that message (id → renderID resolution); the `xmark` unpins. Long multi-paragraph messages are collapsed to a single-line preview instead of a raw `prefix(80)`.
-- **"Could not load sessions" on cold start:** the first session fetch could fail while the tunnel (Tailscale/cloudflared) was still coming up, surfacing a "Cannot reach server" error that only a manual Retry cleared. The initial load now retries transient connectivity failures up to 3 times with short backoff, so the tunnel can come up without user action (auth/other errors still fail fast).
 - **App icon couldn't be changed:** `Info.plist` declared no `CFBundleIcons` / `CFBundleAlternateIcons`, so `UIApplication.shared.supportsAlternateIcons` was always false and the whole icon picker never rendered. Added the `CFBundleIcons` block mapping all seven alternate icon sets (Light/Dark/Disco/Monochrome Light/Monochrome Dark/Gradient Light/Gradient Dark) plus the primary `AppIcon`.
 - **Freeze reports were blind:** the main-thread watchdog captured its own stack via a `Thread.callStackSymbols` loop that ran *on* the main thread — so every freeze report showed the watchdog's own frames and an empty `heavyOp`, never the code actually blocking. Replaced with a Mach `thread_get_state` capture that reads the main thread's PC/LR/FP directly from the watchdog's background queue and symbolicates them with `dladdr`. Also removed the 1/s main-queue capture loop, which itself added main-thread work.
 
