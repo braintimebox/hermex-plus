@@ -2036,8 +2036,10 @@ private struct ServerIdentityEditor: View {
     @Binding var avatarImageData: Data?
     /// Host-derived fallback used for the avatar preview when fields are empty.
     let fallbackName: String
-
-    @State private var showsPhotoLibrary = false
+    /// Callback the parent uses to present the photo-library picker. Presentation
+    /// (fullScreenCover/sheet) from this deeply nested view does not reliably
+    /// present on iOS 26, so it's hoisted to the parent.
+    let onPickAvatar: () -> Void
 
     private var previewInitials: String {
         SessionIdentitySettings.displayInitials(
@@ -2064,9 +2066,7 @@ private struct ServerIdentityEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Button {
-                    showsPhotoLibrary = true
-                } label: {
+                Button(action: onPickAvatar) {
                     ServerAvatarBadge(
                         initials: previewInitials,
                         colorHex: colorHex,
@@ -2101,13 +2101,6 @@ private struct ServerIdentityEditor: View {
             SettingsDivider()
 
             HeaderLogoColorSettings(selectedHex: $colorHex, customColor: colorBinding)
-        }
-        .fullScreenCover(isPresented: $showsPhotoLibrary) {
-            PhotoLibraryPickerView { image in
-                if let data = image.jpegData(compressionQuality: 0.85) {
-                    avatarImageData = data
-                }
-            }
         }
     }
 }
@@ -2170,6 +2163,7 @@ private struct ServerDetailView: View {
     @State private var avatarImageData: Data?
     @State private var isConfirmingRemove = false
     @State private var isRemoving = false
+    @State private var showsPhotoLibrary = false
 
     init(authManager: AuthManager, account: ServerAccount) {
         self.authManager = authManager
@@ -2203,7 +2197,8 @@ private struct ServerDetailView: View {
                         initials: $initials,
                         colorHex: $colorHex,
                         avatarImageData: $avatarImageData,
-                        fallbackName: hostFallback
+                        fallbackName: hostFallback,
+                        onPickAvatar: { showsPhotoLibrary = true }
                     )
                 }
 
@@ -2233,6 +2228,13 @@ private struct ServerDetailView: View {
         .background(Color(.systemBackground))
         .navigationTitle(displayName.isEmpty ? hostFallback : displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showsPhotoLibrary) {
+            PhotoLibraryPickerView { image in
+                if let data = image.jpegData(compressionQuality: 0.85) {
+                    avatarImageData = data
+                }
+            }
+        }
         // Persist identity edits to this server's registry entry. When it's the
         // active server, the registry mirrors them into the global @AppStorage so
         // the avatar / header tint update live (#17).
@@ -2325,6 +2327,7 @@ struct AddServerView: View {
     @State private var initials = ""
     @State private var colorHex = HeaderLogoColor.defaultHex
     @State private var avatarImageData: Data?
+    @State private var showsPhotoLibrary = false
 
     private var trimmedURL: String {
         serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2376,7 +2379,8 @@ struct AddServerView: View {
                             initials: $initials,
                             colorHex: $colorHex,
                             avatarImageData: $avatarImageData,
-                            fallbackName: derivedHost
+                            fallbackName: derivedHost,
+                            onPickAvatar: { showsPhotoLibrary = true }
                         )
                     }
 
@@ -2389,6 +2393,13 @@ struct AddServerView: View {
             .background(Color(.systemBackground))
             .navigationTitle("Add Server")
             .navigationBarTitleDisplayMode(.inline)
+            .fullScreenCover(isPresented: $showsPhotoLibrary) {
+                PhotoLibraryPickerView { image in
+                    if let data = image.jpegData(compressionQuality: 0.85) {
+                        avatarImageData = data
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.11 — 2026-08-15
+
+### Fixed
+- **Server avatar (root cause):** the photo picker was being presented (`fullScreenCover`/`PhotosPicker`) from the deeply nested `ServerIdentityEditor` inside Settings scroll → card, which does not reliably present on iOS 26. Hoisted the presentation to the top-level `ServerDetailView` and `AddServerView` via an `onPickAvatar` callback — the picker now presents from the navigation root.
+- **Scheduled-message date picker:** restored the wheel `DatePicker` (compact style was too fiddly); the `Form` still keeps the title field above the keyboard.
+
 ## 1.5.10 — 2026-08-15
 
 ### Fixed

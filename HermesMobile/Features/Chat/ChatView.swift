@@ -2866,7 +2866,8 @@ struct ScheduleMessageSheet: View {
                         in: Date()...,
                         displayedComponents: [.date, .hourAndMinute]
                     )
-                    .datePickerStyle(.compact)
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
                 }
 
                 if let title = chatTitle {
