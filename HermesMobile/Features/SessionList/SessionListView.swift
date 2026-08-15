@@ -317,6 +317,16 @@ struct SessionListView: View {
                     try? await Task.sleep(for: .seconds(30))
                 }
             }
+            .task {
+                // Auto-reconnect: while offline, retry the session load every 10s
+                // so the list recovers on its own without a manual Retry tap.
+                while !Task.isCancelled {
+                    if viewModel.isOffline {
+                        await viewModel.load(modelContext: modelContext)
+                    }
+                    try? await Task.sleep(for: .seconds(10))
+                }
+            }
             .onAppear {
                 MainThreadWatchdog.shared.setScreen("SessionList")
                 HermexLogger.shared.log(type: "event", screen: "SessionList", message: "session list appeared")
@@ -516,8 +526,8 @@ struct SessionListView: View {
             header
                 .sessionsTopChromeListRow()
 
-            if viewModel.isViewingCachedData {
-                OfflineCacheBanner()
+            if viewModel.isOffline {
+                OfflineCacheBanner(isViewingCachedData: viewModel.isViewingCachedData)
                     .padding(.top, 16)
                     .sessionsScreenListRow()
             }

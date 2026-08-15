@@ -1588,13 +1588,15 @@ struct SessionRowSkeletonConfiguration: Identifiable {
 }
 
 struct OfflineCacheBanner: View {
+    var isViewingCachedData: Bool
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "wifi.slash")
                 .imageScale(.small)
                 .accessibilityHidden(true)
 
-            Text("Offline - viewing cached version")
+            Text(isViewingCachedData ? "Offline - viewing cached version" : "Offline - reconnecting")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 

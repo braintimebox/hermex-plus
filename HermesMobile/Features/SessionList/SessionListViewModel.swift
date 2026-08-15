@@ -55,6 +55,10 @@ final class SessionListViewModel {
     private(set) var isRenamingProject = false
     private(set) var isMovingSession = false
     private(set) var isViewingCachedData = false
+    /// True when the server couldn't be reached (a connectivity error) and the
+    /// list is showing cached/empty data. Drives a non-blocking offline banner
+    /// instead of the full-screen "Could not load sessions" error row.
+    private(set) var isOffline = false
     private(set) var projects: [ProjectSummary] = []
     private(set) var errorMessage: String?
     private(set) var actionErrorMessage: String?
@@ -213,6 +217,7 @@ final class SessionListViewModel {
         cacheErrorMessage = nil
         sessionLoadError = nil
         lastError = nil
+        isOffline = false
         defer { isLoading = false }
 
         do {
@@ -244,18 +249,22 @@ final class SessionListViewModel {
                         sessions = cachedSessions
                         isViewingCachedData = true
                         errorMessage = nil
+                        isOffline = true
                     } else {
                         isViewingCachedData = false
-                        errorMessage = error.localizedDescription
+                        errorMessage = nil
+                        isOffline = true
                     }
                 } catch {
                     cacheErrorMessage = error.localizedDescription
                     isViewingCachedData = false
-                    errorMessage = lastError?.localizedDescription
+                    errorMessage = nil
+                    isOffline = true
                 }
             } else {
                 isViewingCachedData = false
                 errorMessage = error.localizedDescription
+                isOffline = false
             }
 
             return false

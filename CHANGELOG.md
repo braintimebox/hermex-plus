@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.2 — 2026-08-15
+
+### Changed
+- **Offline mode (session list):** when the server can't be reached, the full-screen "Could not load sessions" error row no longer blocks the list. The app now shows a non-blocking "Offline" banner (with cached sessions if available, otherwise an empty list) and auto-reconnects every 10s until the server responds — no manual Retry needed.
+
 ## 1.6.1 — 2026-08-15
 
 ### Fixed
