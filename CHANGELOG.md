@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.12 — 2026-08-15
+
+### Fixed
+- **Settings cards unresponsive (root cause):** the Liquid Glass `glassEffect` on `SettingsCard` was swallowing taps on iOS 26 — the Display Name/Initials text fields and the avatar button did nothing, while `ColorPicker` and preset buttons still worked. Removed the `adaptiveGlass` effect from `SettingsCard` so text input and the avatar tap work again. (Avatar picker presentation was also hoisted to the navigation root — see 1.5.11.)
+
 ## 1.5.11 — 2026-08-15
 
 ### Fixed

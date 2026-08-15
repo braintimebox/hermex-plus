@@ -1535,11 +1535,6 @@ private struct SettingsCard<Content: View>: View {
             .background {
                 shape.fill(Color(.secondarySystemBackground).opacity(cardFillOpacity))
             }
-            .adaptiveGlass(
-                .regular,
-                fallbackMaterial: .regularMaterial,
-                in: shape
-            )
             .overlay {
                 shape
                     .stroke(Color.primary.opacity(cardStrokeOpacity), lineWidth: 0.7)
