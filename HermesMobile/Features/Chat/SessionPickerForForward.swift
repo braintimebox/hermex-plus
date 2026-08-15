@@ -3,6 +3,7 @@ import SwiftUI
 struct SessionPickerForForward: View {
     let sessions: [SessionListItem]
     let onSelect: (SessionListItem) -> Void
+    var title: String = "Forward To"
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -41,7 +42,7 @@ struct SessionPickerForForward: View {
                     }
                 }
             }
-            .navigationTitle("Forward To")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search sessions")
             .toolbar {

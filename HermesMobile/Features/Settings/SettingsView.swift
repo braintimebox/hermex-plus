@@ -597,7 +597,7 @@ struct SettingsView: View {
         }
         .background(Color(.systemBackground))
         .navigationTitle("Settings")
-        .fullScreenCover(isPresented: $showsSessionAvatarPicker) {
+        .sheet(isPresented: $showsSessionAvatarPicker) {
             PhotoLibraryPickerView { image in
                 if let data = image.jpegData(compressionQuality: 0.85) {
                     identityAvatarImageData = data
@@ -2249,7 +2249,7 @@ private struct ServerDetailView: View {
         .background(Color(.systemBackground))
         .navigationTitle(displayName.isEmpty ? hostFallback : displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $showsPhotoLibrary) {
+        .sheet(isPresented: $showsPhotoLibrary) {
             PhotoLibraryPickerView { image in
                 if let data = image.jpegData(compressionQuality: 0.85) {
                     avatarImageData = data
@@ -2414,7 +2414,7 @@ struct AddServerView: View {
             .background(Color(.systemBackground))
             .navigationTitle("Add Server")
             .navigationBarTitleDisplayMode(.inline)
-            .fullScreenCover(isPresented: $showsPhotoLibrary) {
+            .sheet(isPresented: $showsPhotoLibrary) {
                 PhotoLibraryPickerView { image in
                     if let data = image.jpegData(compressionQuality: 0.85) {
                         avatarImageData = data

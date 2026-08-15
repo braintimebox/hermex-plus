@@ -2941,7 +2941,7 @@ struct ScheduleMessageSheet: View {
                 Button("OK", role: .cancel) {}
             }
             .sheet(isPresented: $showSessionPicker) {
-                SessionPickerForForward(sessions: sessions) { session in
+                SessionPickerForForward(sessions: sessions, title: "Choose Chat") { session in
                     pickedExistingSession = session
                     chatChoice = .existingChat
                 }
@@ -3062,17 +3062,23 @@ private struct PinnedMessagesSheet: View {
                                 dismiss()
                                 onSelect(item.id)
                             } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.message.role == "user" ? "You" : "Hermes")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                    Text(ChatView.pinnedPreview(for: item.message.content))
-                                        .font(.subheadline)
-                                        .lineLimit(2)
-                                        .foregroundStyle(.primary)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+     VStack(alignment: .leading, spacing: 3) {
+         HStack(spacing: 6) {
+             Text(item.message.role == "user" ? "You" : "Hermes")
+                 .font(.caption.weight(.semibold))
+                 .foregroundStyle(.secondary)
+             Spacer()
+             Label(String(localized: "View in chat"), systemImage: "arrow.turn.down.right")
+                 .font(.caption)
+                 .foregroundStyle(.tint)
+         }
+         Text(ChatView.pinnedPreview(for: item.message.content))
+             .font(.subheadline)
+             .lineLimit(2)
+             .foregroundStyle(.primary)
+     }
+     .frame(maxWidth: .infinity, alignment: .leading)
+ }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {

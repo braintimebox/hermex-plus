@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.16 — 2026-08-15
+
+### Fixed
+- **Avatar picker still wouldn't open:** the photo picker was presented with `fullScreenCover`, which doesn't reliably present from these navigation contexts on iOS 26. Switched all three avatar pickers (global Sessions Avatar, per-server editor, add-server) to `.sheet`.
+- **Scheduled message "choose existing chat":** the session picker reused for scheduling still showed the "Forward To" title; it now shows "Choose Chat" in the schedule flow.
+- **Pinned messages:** added an explicit "View in chat" link on each pinned message row (the row already scrolled to the original; now it's visible as a link).
+
 ## 1.5.15 — 2026-08-15
 
 ### Fixed
