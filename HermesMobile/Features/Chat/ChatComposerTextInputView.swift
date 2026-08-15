@@ -132,6 +132,7 @@ private struct ComposerTextView: UIViewRepresentable {
         @Binding var isFocused: Bool
         var onHeightChange: (CGFloat) -> Void
         private var pendingFocusTarget: Bool?
+        private var lastReportedHeight: CGFloat = 0
 
         init(
             text: Binding<String>,
@@ -199,7 +200,17 @@ private struct ComposerTextView: UIViewRepresentable {
 
             let fittingSize = CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
             let height = ceil(textView.sizeThatFits(fittingSize).height)
-            onHeightChange(min(96, max(22, height)))
+            let clamped = min(96, max(22, height))
+
+            // Only propagate a change when the height actually moves. A naive
+            // call on every keystroke (this fires from both textViewDidChange and
+            // updateUIView) re-sizes the composer and re-layouts the whole chat
+            // transcript for every typed character — the "typing lags" bug. The
+            // clamped value is stable while a line doesn't wrap, so skip the
+            // no-op update entirely.
+            if clamped == lastReportedHeight { return }
+            lastReportedHeight = clamped
+            onHeightChange(clamped)
         }
     }
 

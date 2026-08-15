@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.8 — 2026-08-15
+
+### Fixed
+- **Typing lag while composing a message:** every keystroke fired `reportHeight` (from both `textViewDidChange` and `updateUIView`), which ran a `sizeThatFits` and pushed the new height into the parent's `composerHeight` state. Because that state feeds the transcript's bottom padding and the composer material fade, a single typed character could re-layout the whole chat transcript. The height is now memoized — it only propagates when it actually changes (i.e. on line wrap), so typing on one line no longer re-lays-out the transcript.
+
 ## 1.5.7 — 2026-08-15
 
 ### Fixed
