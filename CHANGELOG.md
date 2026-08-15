@@ -5,6 +5,8 @@
 ### Changed
 - **Offline mode (session list):** when the server can't be reached, the full-screen "Could not load sessions" error row no longer blocks the list. The app now shows a non-blocking "Offline" banner (with cached sessions if available, otherwise an empty list) and auto-reconnects every 10s until the server responds — no manual Retry needed.
 - **More resilient session cache:** cached sessions are now shown even past their 7-day expiry (expiry still governs background eviction), so an offline start no longer degrades to a blank error just because the cache aged out.
+- **Longer cold-start retry:** the session fetch now retries 5× with exponential backoff (1s→2s→4s→8s ≈ 15s total) instead of 3× over ~1.5s, so a tunnel that's still coming up on cold start has time to connect instead of failing straight to the offline path.
+- **Cache sessions without an explicit `sessionId`:** rows are now cached under `sessionId ?? id`, so sessions that only carry an `id` no longer silently skip the cache write.
 
 ## 1.6.1 — 2026-08-15
 

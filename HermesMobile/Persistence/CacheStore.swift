@@ -69,14 +69,14 @@ enum CacheStore {
         cachedAt: Date = Date()
     ) throws {
         let serverURLString = serverURL.absoluteString
-        let cacheableSessions = sessions.filter { $0.archived != true && $0.sessionId != nil }
-        let freshKeys = Set(cacheableSessions.compactMap { session -> String? in
-            guard let sessionID = session.sessionId else { return nil }
+        let cacheableSessions = sessions.filter { $0.archived != true }
+        let freshKeys = Set(cacheableSessions.map { session -> String in
+            let sessionID = session.sessionId ?? session.id
             return CachedSession.cacheKey(serverURLString: serverURLString, sessionID: sessionID)
         })
 
         for session in cacheableSessions {
-            guard let sessionID = session.sessionId else { continue }
+            let sessionID = session.sessionId ?? session.id
             let cacheKey = CachedSession.cacheKey(serverURLString: serverURLString, sessionID: sessionID)
             if let cachedSession = try cachedSession(cacheKey: cacheKey, in: context) {
                 cachedSession.apply(session, cachedAt: cachedAt)

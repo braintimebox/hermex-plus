@@ -279,7 +279,7 @@ final class SessionListViewModel {
     /// other non-transient errors are NOT retried (they fail fast to the cache).
     private func fetchSessionsWithRetry() async throws -> SessionsResponse {
         var attempt = 0
-        let maxAttempts = 3
+        let maxAttempts = 5
         while true {
             do {
                 return try await client.sessions()
@@ -290,7 +290,9 @@ final class SessionListViewModel {
                     throw error
                 }
                 attempt += 1
-                let delay = TimeInterval(attempt) * 0.5
+                // Exponential backoff (1s, 2s, 4s, 8s ≈ 15s total) so a tunnel
+                // that's still coming up on cold start has time to connect.
+                let delay = TimeInterval(1 << (attempt - 1))
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }
