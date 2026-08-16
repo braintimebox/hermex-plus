@@ -86,7 +86,7 @@ final class SessionListMutationTests: XCTestCase {
     }
 
     @MainActor
-    func testLoadSurfacesNetworkTimeoutWhenCacheIsEmpty() async throws {
+    func testLoadShowsOfflineWhenCacheIsEmpty() async throws {
         let context = try makeContext()
         let viewModel = try makeViewModel { request in
             XCTAssertEqual(request.url?.path, "/api/sessions")
@@ -97,10 +97,8 @@ final class SessionListMutationTests: XCTestCase {
 
         XCTAssertTrue(viewModel.sessions.isEmpty)
         XCTAssertFalse(viewModel.isViewingCachedData)
-        XCTAssertEqual(
-            viewModel.errorMessage,
-            "The server did not respond in time. Check that it's running and reachable."
-        )
+        XCTAssertTrue(viewModel.isOffline)
+        XCTAssertNil(viewModel.errorMessage)
         XCTAssertNotNil(viewModel.lastError)
     }
 
@@ -128,19 +126,15 @@ final class SessionListMutationTests: XCTestCase {
         await viewModel.load(modelContext: context)
         let sessionLoadError = try XCTUnwrap(viewModel.sessionLoadError)
         XCTAssertTrue(CacheFallbackPolicy.shouldUseCache(for: sessionLoadError))
-        XCTAssertEqual(
-            viewModel.errorMessage,
-            "The server did not respond in time. Check that it's running and reachable."
-        )
+        XCTAssertTrue(viewModel.isOffline)
+        XCTAssertNil(viewModel.errorMessage)
 
         await viewModel.searchSessions(query: "later", debounceNanoseconds: 0)
 
         XCTAssertFalse(CacheFallbackPolicy.shouldUseCache(for: try XCTUnwrap(viewModel.lastError)))
         XCTAssertTrue(CacheFallbackPolicy.shouldUseCache(for: try XCTUnwrap(viewModel.sessionLoadError)))
-        XCTAssertEqual(
-            viewModel.errorMessage,
-            "The server did not respond in time. Check that it's running and reachable."
-        )
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertNotNil(viewModel.searchErrorMessage)
     }
 
     @MainActor

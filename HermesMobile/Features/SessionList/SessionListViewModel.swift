@@ -220,12 +220,31 @@ final class SessionListViewModel {
         isOffline = false
         defer { isLoading = false }
 
+        // Cache-first: paint cached sessions immediately so the list never waits
+        // on the network (including the cold-start retry backoff added in 1.6.2).
+        // The network result below replaces this placeholder on success, keeps it
+        // on a connectivity failure (offline fallback), and reverts it on a real
+        // server error so stale data can't mask a live failure.
+        let cachedSessions: [SessionSummary]
+        if let modelContext {
+            cachedSessions = ((try? CacheStore.cachedSessions(serverURL: server, in: modelContext)) ?? [])
+                .filter(\.shouldAppearInSessionList)
+        } else {
+            cachedSessions = []
+        }
+        let paintedCacheFirst = !cachedSessions.isEmpty
+        if paintedCacheFirst {
+            sessions = cachedSessions
+            isViewingCachedData = false
+        }
+
         do {
             let response = try await fetchSessionsWithRetry()
             let visibleSessions = (response.sessions ?? [])
                 .filter { $0.archived != true && $0.shouldAppearInSessionList }
             applySessions(visibleSessions, archivedCount: response.archivedCount, animation: animation)
             isViewingCachedData = false
+            isOffline = false
 
             if let modelContext {
                 do {
@@ -241,27 +260,23 @@ final class SessionListViewModel {
 
             lastError = error
             sessionLoadError = error
-            if CacheFallbackPolicy.shouldUseCache(for: error), let modelContext {
-                do {
-                    let cachedSessions = try CacheStore.cachedSessions(serverURL: server, in: modelContext)
-                        .filter(\.shouldAppearInSessionList)
-                    if !cachedSessions.isEmpty {
-                        sessions = cachedSessions
-                        isViewingCachedData = true
-                        errorMessage = nil
-                        isOffline = true
-                    } else {
-                        isViewingCachedData = false
-                        errorMessage = nil
-                        isOffline = true
-                    }
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
+            if CacheFallbackPolicy.shouldUseCache(for: error) {
+                // Connectivity failure: keep the cache-first paint (or fall back to
+                // an empty offline list when there was nothing cached to paint).
+                if paintedCacheFirst {
+                    sessions = cachedSessions
+                    isViewingCachedData = true
+                } else {
                     isViewingCachedData = false
-                    errorMessage = nil
-                    isOffline = true
                 }
+                errorMessage = nil
+                isOffline = true
             } else {
+                // Real server error (500, 401, …): revert the cache-first placeholder
+                // and surface the error rather than showing stale sessions.
+                if paintedCacheFirst {
+                    sessions = []
+                }
                 isViewingCachedData = false
                 errorMessage = error.localizedDescription
                 isOffline = false

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.5 — 2026-08-16
+
+### Changed
+- **Cache-first session list:** the session list now paints cached sessions immediately on open and refreshes from the network in the background, instead of always waiting on the network first (including the 15s cold-start retry backoff from 1.6.2). The list feels instant even when the server is slow or unreachable — a connectivity failure keeps the cached list under the offline banner, and a real server error (500/401) reverts the cached placeholder so stale data can't mask a live failure.
+
 ## 1.6.4 — 2026-08-16
 
 ### Changed
