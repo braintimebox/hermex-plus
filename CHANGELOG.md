@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.6 — 2026-08-16
+
+### Changed
+- **Hide messaging-channel sessions:** Telegram/Discord/Slack/Email/WeChat sessions are read-only from WebUI (the server rejects a chat start with 403), so the session list now hides them instead of showing chats you can't reply to. WebUI/CLI/other writable sessions are unaffected.
+
 ## 1.6.5 — 2026-08-16
 
 ### Changed

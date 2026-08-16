@@ -2256,6 +2256,21 @@ final class SessionListMutationTests: XCTestCase {
         XCTAssertFalse(SessionSummary(sessionId: "normal").isClaudeCodeSession)
     }
 
+    func testMessagingSessionsAreHiddenFromSessionList() {
+        XCTAssertTrue(SessionSummary(sessionId: "tg", sessionSource: "messaging").isMessagingSession)
+        XCTAssertTrue(SessionSummary(sessionId: "tg2", sourceLabel: "Telegram").isMessagingSession)
+        XCTAssertTrue(SessionSummary(sessionId: "disc", rawSource: "Discord").isMessagingSession)
+        XCTAssertTrue(SessionSummary(sessionId: "slack", sourceTag: "slack").isMessagingSession)
+        XCTAssertFalse(SessionSummary(sessionId: "web", sessionSource: "webui").isMessagingSession)
+        XCTAssertFalse(SessionSummary(sessionId: "normal").isMessagingSession)
+        XCTAssertFalse(SessionSummary(sessionId: "sub", sourceTag: "subagent").isMessagingSession)
+
+        XCTAssertFalse(SessionSummary(sessionId: "tg3", sessionSource: "messaging").shouldAppearInSessionList)
+        XCTAssertFalse(SessionSummary(sessionId: "tg4", sourceLabel: "Telegram").shouldAppearInSessionList)
+        XCTAssertTrue(SessionSummary(sessionId: "web2", sessionSource: "webui").shouldAppearInSessionList)
+        XCTAssertTrue(SessionSummary(sessionId: "normal2").shouldAppearInSessionList)
+    }
+
     func testReadOnlyRowsOfferExportButNoMutationActions() {
         let currentShape = SessionSummary(sessionId: "current", readOnly: true)
         let legacyShape = SessionSummary(sessionId: "legacy", isReadOnly: true)

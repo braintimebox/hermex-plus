@@ -388,6 +388,22 @@ extension SessionSummary {
             .contains("claude_code")
     }
 
+    /// Messaging-channel sessions (Telegram, Discord, Slack, Email, WeChat…)
+    /// are owned by the gateway channel that created them and are read-only from
+    /// WebUI — the server rejects a chat start with 403. Hide them from the
+    /// sidebar so it only lists sessions the user can actually continue here.
+    var isMessagingSession: Bool {
+        if (sessionSource?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) == "messaging" {
+            return true
+        }
+        let messagingMarkers: Set<String> = [
+            "telegram", "discord", "slack", "email", "wecom", "wecom_callback", "weixin",
+        ]
+        return [sourceTag, rawSource, sourceLabel]
+            .compactMap(Self.normalizedSourceMarker)
+            .contains(where: messagingMarkers.contains)
+    }
+
     /// Delegated children are runner-owned and view-only. Upstream has also
     /// emitted both read-only spellings across row sources, so either explicit
     /// true value preserves that safety for other imported sessions.
@@ -396,7 +412,7 @@ extension SessionSummary {
     }
 
     var shouldAppearInSessionList: Bool {
-        !isEmptySidebarPlaceholder
+        !isEmptySidebarPlaceholder && !isMessagingSession
     }
 
     /// Mirrors hermes-webui's visible-sidebar safety net for just-created
