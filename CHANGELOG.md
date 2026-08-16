@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.7 — 2026-08-16
+
+### Changed
+- **Streaming hot-path:** removed two per-token O(n) operations in the assistant-token path (linear message lookup + buffer `joined()`). Long responses no longer do quadratic string/array work on the main thread, so generation is smoother and uses less CPU.
+
 ## 1.6.6 — 2026-08-16
 
 ### Changed

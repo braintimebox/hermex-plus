@@ -347,7 +347,7 @@ final class ChatViewModel {
 
     // Internal streaming state — kept on ChatViewModel for actor isolation
     @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
-    @ObservationIgnored var pendingAssistantTokenChunks: [String] = []
+    @ObservationIgnored var pendingAssistantTokenText: String = ""
     @ObservationIgnored var pendingReasoningChunks: [String] = []
     @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
     var hasPrimedInitialCachedMessages = false
@@ -810,7 +810,7 @@ final class ChatViewModel {
     private func drainStreamingContentTick() {
         var didMutate = false
         let quota = StreamingWordDrain.drainQuota(
-            backlogUnitCount: StreamingWordDrain.unitCount(in: pendingAssistantTokenChunks.joined()),
+            backlogUnitCount: StreamingWordDrain.unitCount(in: pendingAssistantTokenText),
             cadenceNanoseconds: streamingWordRevealCadenceNanoseconds,
             maxLagNanoseconds: streamingMaxRevealLagNanoseconds
         )
@@ -825,7 +825,7 @@ final class ChatViewModel {
             scheduleStreamingScrollTrigger()
         }
 
-        if !pendingAssistantTokenChunks.isEmpty {
+        if !pendingAssistantTokenText.isEmpty {
             scheduleStreamingContentFlush(afterNanoseconds: streamingWordRevealCadenceNanoseconds)
         }
     }
@@ -837,7 +837,7 @@ final class ChatViewModel {
 
     private func resetPendingStreamingContentBuffers() {
         cancelPendingStreamingContentFlush()
-        pendingAssistantTokenChunks = []
+        pendingAssistantTokenText = ""
         pendingReasoningChunks = []
         // Chunks are deduplicated at append time, so the replay matched-prefix
         // counters can reference unflushed content; dropping the buffers makes them
@@ -4510,34 +4510,39 @@ final class ChatViewModel {
         // return value stays a synchronous progress signal for the reconnect watchdog
         // while transcript mutation stays batched behind the coalesced flush.
         let messageID = ensureStreamingAssistantMessage()
-        let flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
-        let effectiveContent = flushedContent + pendingAssistantTokenChunks.joined()
+        let flushedContent: String
+        if messages.last?.messageId == messageID {
+            flushedContent = messages.last?.content ?? ""
+        } else {
+            flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
+        }
+        let effectiveContent = flushedContent + pendingAssistantTokenText
         let remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
         guard !remainder.isEmpty else { return false }
 
-        pendingAssistantTokenChunks.append(remainder)
+        pendingAssistantTokenText += remainder
         scheduleStreamingContentFlush()
         return true
     }
 
     @discardableResult
     private func flushAssistantTokens(maxWordUnits: Int? = nil) -> Bool {
-        guard !pendingAssistantTokenChunks.isEmpty else { return false }
+        guard !pendingAssistantTokenText.isEmpty else { return false }
 
         // Chunks were deduplicated at append time, so flushing is pure concatenation.
         // A word-unit limit moves only the head of the buffer into the visible
         // message; the tail stays pending, keeping the replay-dedup invariant that
         // flushed + pending text is the full received content.
-        let pendingText = pendingAssistantTokenChunks.joined()
+        let pendingText = pendingAssistantTokenText
         let appendedContent: String
         if let maxWordUnits {
             let (head, tail) = StreamingWordDrain.splitAtUnitBoundary(pendingText, unitCount: maxWordUnits)
             guard !head.isEmpty else { return false }
             appendedContent = head
-            pendingAssistantTokenChunks = tail.isEmpty ? [] : [tail]
+            pendingAssistantTokenText = tail
         } else {
             appendedContent = pendingText
-            pendingAssistantTokenChunks = []
+            pendingAssistantTokenText = ""
         }
 
         let messageID = ensureStreamingAssistantMessage()
