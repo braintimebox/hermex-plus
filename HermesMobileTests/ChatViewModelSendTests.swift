@@ -3052,7 +3052,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertFalse(viewModel.isViewingCachedData)
         XCTAssertEqual(
             viewModel.errorMessage,
-            "The server or Cloudflare tunnel is unavailable. Check that the Mac is awake, hermes-webui is running, and the tunnel is connected."
+            "The server is temporarily unavailable. Check that it's running, then try again."
         )
         XCTAssertNotNil(viewModel.lastError)
     }

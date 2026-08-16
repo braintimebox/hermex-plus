@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.4 — 2026-08-16
+
+### Changed
+- **Hermes-specific connection errors:** replaced the upstream Hermex error copy (which referenced "Mac", "hermes-webui", "Cloudflare tunnel", and "Tailscale") with server-agnostic wording appropriate for a direct Hermes server URL.
+- **Softer chat-send failures:** when the server is provably unreachable (no connection, DNS failure, offline), sending a message now retries up to 3× with a 1.5s→3s pause before surfacing the error, so a cold start or brief network blip no longer fails instantly. The optimistic message stays in place during the retries. Retries deliberately exclude timeouts and mid-transfer drops to avoid creating a duplicate run.
+
 ## 1.6.3 — 2026-08-15
 
 ### Changed

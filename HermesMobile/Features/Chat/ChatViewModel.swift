@@ -2241,6 +2241,50 @@ final class ChatViewModel {
         )
     }
 
+    /// Retries `startChat` a few times when the server is provably unreachable,
+    /// so a cold start or a brief network blip doesn't surface an instant error.
+    /// Only retries failures where the request never reached the server (see
+    /// `APIError.isRetryableConnectionFailure`); retrying a request that *did*
+    /// reach the server would create a duplicate run, so those fall through.
+    private func startChatWithRetry(
+        sessionID: String,
+        message: String,
+        workspace: String?,
+        model: String?,
+        modelProvider: String?,
+        profile: String?,
+        explicitModelPick: Bool,
+        attachments: [JSONValue]?
+    ) async throws -> ChatStartResponse {
+        let maxAttempts = 3
+        let retryDelays: [Duration] = [.seconds(1.5), .seconds(3)]
+
+        for attempt in 0..<maxAttempts {
+            do {
+                return try await client.startChat(
+                    sessionID: sessionID,
+                    message: message,
+                    workspace: workspace,
+                    model: model,
+                    modelProvider: modelProvider,
+                    profile: profile,
+                    explicitModelPick: explicitModelPick,
+                    attachments: attachments
+                )
+            } catch {
+                guard attempt < maxAttempts - 1,
+                      let apiError = error as? APIError,
+                      apiError.isRetryableConnectionFailure
+                else {
+                    throw error
+                }
+                try? await Task.sleep(for: retryDelays[attempt])
+            }
+        }
+
+        throw APIError.network(underlying: URLError(.cannotConnectToHost))
+    }
+
     /// Shared optimistic-append + `startChat` + rollback core used by both the
     /// text composer (`sendMessage`) and the voice-note flow (`sendVoiceNote`).
     /// `attachmentsToRestoreOnFailure` is re-staged into the composer if the send
@@ -2281,7 +2325,7 @@ final class ChatViewModel {
 
         do {
             let explicitModelPick = explicitModelPickForChatStart()
-            let response = try await client.startChat(
+            let response = try await startChatWithRetry(
                 sessionID: sessionID,
                 message: messageForAPI,
                 workspace: currentWorkspace,

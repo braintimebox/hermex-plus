@@ -10,7 +10,7 @@ enum APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidServerURL:
-            return String(localized: "Enter a valid server URL, for example https://hermes.yourdomain.com or http://<server-tailscale-ip>:8787.")
+            return String(localized: "Enter a valid server URL, for example https://hermes.yourdomain.com or http://192.168.1.10:1118.")
         case .network(let underlying):
             return Self.networkMessage(for: underlying)
         case .http(let statusCode, let body):
@@ -20,7 +20,7 @@ enum APIError: LocalizedError {
 
             switch statusCode {
             case -1:
-                return String(localized: "The server response could not be read. Check that the URL points to a Hermes Web UI server.")
+                return String(localized: "The server response could not be read. Check that the URL points to a Hermes server.")
             case 400:
                 if let message = Self.serverErrorMessage(from: body) {
                     return String(localized: "The server rejected the request: \(message)")
@@ -29,15 +29,15 @@ enum APIError: LocalizedError {
             case 403:
                 return String(localized: "The server refused access. Check the server password and permissions.")
             case 404:
-                return String(localized: "The server endpoint was not found. Check that the URL points to a Hermes Web UI server.")
+                return String(localized: "The server endpoint was not found. Check that the URL points to a Hermes server.")
             case 408:
-                return String(localized: "The server took too long to respond. Check that the Mac is awake and the server is running.")
+                return String(localized: "The server took too long to respond. Check that the server is running and reachable.")
             case 429:
                 return String(localized: "The server is receiving too many requests. Wait a moment, then try again.")
             case 500:
                 return String(localized: "The Hermes server hit an internal error. Check the server logs, then try again.")
             case 502, 503, 504:
-                return String(localized: "The server or Cloudflare tunnel is unavailable. Check that the Mac is awake, hermes-webui is running, and the tunnel is connected.")
+                return String(localized: "The server is temporarily unavailable. Check that it's running, then try again.")
             default:
                 if let message = Self.serverErrorMessage(from: body) {
                     return String(localized: "Server returned HTTP \(statusCode): \(message)")
@@ -48,6 +48,25 @@ enum APIError: LocalizedError {
             return String(localized: "The server response could not be read.")
         case .unauthorized:
             return String(localized: "The password was rejected. Check the server password and try again.")
+        }
+    }
+
+    /// True when the request provably never reached the server, so it is safe to
+    /// retry without risking a duplicate side effect (a chat-start POST is not
+    /// idempotent). Deliberately excludes `.timedOut` and `.networkConnectionLost`,
+    /// which can fire *after* the server has already accepted the request.
+    var isRetryableConnectionFailure: Bool {
+        guard case .network(let underlying) = self else { return false }
+        guard let urlError = underlying as? URLError else { return false }
+        switch urlError.code {
+        case .cannotConnectToHost,
+             .dnsLookupFailed,
+             .cannotFindHost,
+             .notConnectedToInternet,
+             .dataNotAllowed:
+            return true
+        default:
+            return false
         }
     }
 
@@ -143,11 +162,11 @@ private extension APIError {
 
         switch urlError.code {
         case .timedOut:
-            return String(localized: "The server did not respond in time. Check that the Mac is awake, hermes-webui is running, and the tunnel is connected.")
+            return String(localized: "The server did not respond in time. Check that it's running and reachable.")
         case .cannotFindHost, .dnsLookupFailed:
-            return String(localized: "Could not find that server. Check the URL and Cloudflare DNS hostname.")
+            return String(localized: "Could not find that server. Check the URL and network connection.")
         case .cannotConnectToHost, .networkConnectionLost:
-            return String(localized: "Could not connect to the server. Check that hermes-webui is running and the tunnel is connected.")
+            return String(localized: "Could not connect to the server. Check that it's running and reachable on your network.")
         case .notConnectedToInternet, .dataNotAllowed:
             return String(localized: "This device is offline. Connect to the internet, then try again.")
         case .secureConnectionFailed,
@@ -157,11 +176,11 @@ private extension APIError {
              .serverCertificateNotYetValid:
             return String(localized: "The HTTPS connection failed. Check the server URL and certificate.")
         case .appTransportSecurityRequiresSecureConnection:
-            return String(localized: "iOS blocked this insecure HTTP connection. Use HTTPS, or use a Tailscale IP in the 100.64.0.0/10 range.")
+            return String(localized: "iOS blocked this insecure HTTP connection. Use HTTPS instead.")
         case .cancelled:
             return String(localized: "The request was cancelled.")
         default:
-            return String(localized: "Could not reach the server. Check the URL, network connection, and tunnel status.")
+            return String(localized: "Could not reach the server. Check the URL and network connection.")
         }
     }
 

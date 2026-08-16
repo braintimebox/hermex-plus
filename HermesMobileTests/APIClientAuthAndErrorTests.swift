@@ -173,7 +173,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
             let message = APIError.http(statusCode: statusCode, body: body).localizedDescription
             XCTAssertEqual(
                 message,
-                "The server or Cloudflare tunnel is unavailable. Check that the Mac is awake, hermes-webui is running, and the tunnel is connected."
+                "The server is temporarily unavailable. Check that it's running, then try again."
             )
             XCTAssertFalse(message.contains("<html>"))
             XCTAssertFalse(message.localizedCaseInsensitiveContains("bad gateway"))
@@ -207,7 +207,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
 
         XCTAssertEqual(
             error.localizedDescription,
-            "The server did not respond in time. Check that the Mac is awake, hermes-webui is running, and the tunnel is connected."
+            "The server did not respond in time. Check that it's running and reachable."
         )
     }
 
@@ -216,7 +216,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
 
         XCTAssertEqual(
             error.localizedDescription,
-            "iOS blocked this insecure HTTP connection. Use HTTPS, or use a Tailscale IP in the 100.64.0.0/10 range."
+            "iOS blocked this insecure HTTP connection. Use HTTPS instead."
         )
     }
 }
