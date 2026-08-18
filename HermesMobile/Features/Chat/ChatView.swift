@@ -2328,7 +2328,18 @@ struct ChatView: View {
         }
 
         if isNearBottom {
-            shouldFollowLatestMessage = true
+            // Do NOT auto-re-arm follow-latest just because the viewport drifted
+            // back near the bottom during an active stream. Re-arming here is what
+            // made the transcript yank downward while the user was reading older
+            // messages: a couple of tokens plus the loose streaming threshold
+            // (160 pt) could briefly read as "near bottom", snap follow on, and
+            // the next size change pulled the viewport back down. While streaming,
+            // follow-latest stays off until the user explicitly taps the
+            // scroll-to-bottom button (or sends a message), matching how Telegram
+            // and chat sites behave: no auto-glue, a manual "↓" button instead.
+            if !isStreaming {
+                shouldFollowLatestMessage = true
+            }
             if isReadingOlderTranscript {
                 withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
                     isReadingOlderTranscript = false

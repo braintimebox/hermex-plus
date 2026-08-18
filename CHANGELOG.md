@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.2 — 2026-08-18
+
+### Changed
+- **No more bottom-glue while streaming (manual "↓" instead).** Auto-follow is no
+  longer re-armed just because the viewport drifted near the bottom during an
+  active response — the loose 160 pt streaming threshold could briefly read "near
+  bottom", snap follow back on, and yank the transcript down while you were reading
+  older messages. While a response streams, follow-latest stays off once you scroll
+  up, and the existing scroll-to-bottom button (Telegram/chat-site style) is how you
+  return to the tail. Sending a message still re-arms follow.
+
 ## 2.0.1 — 2026-08-18
 
 ### Fixed
