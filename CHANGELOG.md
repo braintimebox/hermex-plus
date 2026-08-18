@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.0 — 2026-08-18
+
+### Performance / architecture (smoothness refactor)
+This release is a single, architectural pass on the render pipeline — not a point
+patch. Targets the two freeze signatures captured from on-device logs
+(`AttributeGraph` + `swift_retain` + `TranscriptMessage` value-witness copies) and
+the rhythmic ~30 s idle stutter:
+
+- **O(1) transcript hot path.** `recomputeDisplayedTranscriptMessages()` no longer
+  scans the whole message array twice per token flush (an id-array pass plus a
+  full-string `content` compare across every message, then a full-array copy). The
+  streaming assistant message is always the last element, so a trailing content
+  change now updates that one slot in O(1).
+- **No second full-history copy.** The `previousMessages: [ChatMessage]` snapshot
+  (a complete duplicate of the chat history, kept only for the diff) is replaced
+  with three scalars (`previousLastMessageID`, `previousLastContent`,
+  `previousMessageCount`). This removes doubled memory on long chats and the
+  per-flush full-array copy + retain churn that fed the 357 MB footprint and
+  `swift_retain` freeze frames.
+- **Idle stutter removed.** The 30 s scheduled-message dispatch now fetches on a
+  background `ModelContext` inside a detached task and passes only sendable scalars
+  back to the main actor, instead of doing a full SwiftData fetch on `@MainActor`
+  every 30 s (which woke SwiftUI/AttributeGraph even when nothing was due).
+
 ## 1.6.9 — 2026-08-18
 
 ### Fixed

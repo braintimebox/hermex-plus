@@ -200,10 +200,15 @@ enum ActiveStreamRecoveryState: Equatable {
 final class ChatViewModel {
     private static let messagePageLimit = 50
 
-    /// Previous snapshot of `messages` used by incremental transcript update to
-    /// skip full recomputation when only a single message's content was mutated
-    /// during streaming.
-    private var previousMessages: [ChatMessage] = []
+    /// Scalars describing the previous tail of `messages`, used by incremental
+    /// transcript update to detect a trailing stream-message content change in
+    /// O(1) without keeping a full second copy of the message history in memory.
+    /// (A full `previousMessages: [ChatMessage]` snapshot was doubled memory on
+    /// long chats and forced a full-array copy on every token flush — a real
+    /// contributor to the 357 MB footprint and per-flush retain churn.)
+    private var previousLastMessageID: String?
+    private var previousLastContent: String?
+    private var previousMessageCount: Int = 0
 
     private(set) var messages: [ChatMessage] = [] {
         didSet { recomputeDisplayedTranscriptMessages() }
@@ -272,42 +277,52 @@ final class ChatViewModel {
     }
 
     private func recomputeDisplayedTranscriptMessages() {
-        // Incremental path: when only message content changed (same count, same IDs)
-        // during streaming, update just the affected slot — O(1) instead of O(n).
-        let prev = previousMessages
-        let sameCount = messages.count == prev.count
-        let sameLastID = messages.last?.messageId == prev.last?.messageId
-        let allSameIDs = sameCount && zip(messages, prev).allSatisfy({ $0.messageId == $1.messageId })
-        var changedIndex: Int?
-        if allSameIDs {
-            for i in messages.indices where messages[i].content != prev[i].content {
-                changedIndex = i
-                break
-            }
-        }
+        // Incremental fast path (hot, per-token): the streaming assistant message
+        // is ALWAYS the last element (ensureStreamingAssistantMessage appends it),
+        // so "content-only growth" is detectable in O(1) from the previous tail
+        // scalars — no full-array scan and no full-history copy. The old build
+        // scanned the entire array twice per flush (id compare + full-string
+        // content compare) and copied the whole history every time, which is what
+        // drove the `AttributeGraph`/`swift_retain` freezes on long chats.
+        let count = messages.count
+        let last = messages.last
+        let lastID = last?.messageId
+        let lastContent = last?.content
 
-        if sameCount, sameLastID, allSameIDs, let changedIndex {
-            // Only content mutated; update the single slot without full recompute.
-            if changedIndex < displayedTranscriptMessages.count,
-               displayedTranscriptMessages[changedIndex].message.messageId == messages[changedIndex].messageId
-            {
-                let slot = displayedTranscriptMessages[changedIndex]
-                displayedTranscriptMessages[changedIndex] = TranscriptMessage(
-                    loadedIndex: slot.loadedIndex,
-                    renderID: slot.renderID,
-                    anchorID: slot.anchorID,
-                    message: messages[changedIndex]
-                )
-            } else {
-                // Transcript slot mismatch — fall through to full recompute.
-                displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
-            }
+        let isTrailingContentChange =
+            count == previousMessageCount &&
+            lastID == previousLastMessageID &&
+            lastContent != previousLastContent
+
+        if isTrailingContentChange,
+           let last,
+           count > 0,
+           displayedTranscriptMessages.last?.message.messageId == lastID {
+            // Only the trailing stream message's content changed — update the last
+            // transcript slot in place (O(1)).
+            let lastIndex = displayedTranscriptMessages.index(before: displayedTranscriptMessages.endIndex)
+            let slot = displayedTranscriptMessages[lastIndex]
+            displayedTranscriptMessages[lastIndex] = TranscriptMessage(
+                loadedIndex: slot.loadedIndex,
+                renderID: slot.renderID,
+                anchorID: slot.anchorID,
+                message: last
+            )
+        } else if count == previousMessageCount {
+            // Same length but not a clean trailing-append (rare single-slot edit or
+            // reorder). Without a full snapshot a non-trailing in-place edit is not
+            // cheaply identifiable — recompute the transcript. This is the rare
+            // non-streaming path, not the per-token hot path.
+            displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
         } else {
             // Structural change (insert/delete/reorder) — full recompute.
             displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
             recomputeCompressionReferenceCard()
         }
-        previousMessages = messages
+
+        previousMessageCount = count
+        previousLastMessageID = lastID
+        previousLastContent = lastContent
     }
     /// Synthesized "Context compaction · Reference only" card resolved from the
     /// session's `compression_anchor_*` metadata; nil when the session has no

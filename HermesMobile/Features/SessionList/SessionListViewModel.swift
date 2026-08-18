@@ -1186,26 +1186,69 @@ final class SessionListViewModel {
 
     /// Checks SwiftData for due scheduled messages and sends them via the API.
     /// Called on app foreground and periodically.
+    ///
+    /// Runs the SwiftData fetch on a BACKGROUND context, not the caller's
+    /// main-actor `modelContext`. The previous shape fetched on `@MainActor` every
+    /// 30 s in a `.task` loop — a full-table `FetchDescriptor<PendingScheduledMessage>`
+    /// on the main thread that woke SwiftUI/AttributeGraph even when there was
+    /// nothing due, which surfaced as a rhythmic ~30 s stutter while idle. The
+    /// network dispatch is already `await`-based, so it never blocked main.
     func dispatchDueScheduledMessages(modelContext: ModelContext) async {
-        let now = Date()
-        let descriptor = FetchDescriptor<PendingScheduledMessage>()
-        let allMessages = (try? modelContext.fetch(descriptor)) ?? []
-        let dueMessages = allMessages.filter { $0.scheduledAt <= now }
-        guard !dueMessages.isEmpty else { return }
+        // All SwiftData work (fetch + delete + save) happens inside ONE detached
+        // background task on a background ModelContext, so nothing touches the
+        // main actor or the caller's main-actor context. Only sendable scalars
+        // (server URL, session id, title, draft text, schedule key) leave the
+        // task; the network dispatch below uses those scalars and never blocks
+        // main. The previous shape fetched on `@MainActor` every 30 s, waking
+        // SwiftUI/AttributeGraph even with nothing due — a rhythmic idle stutter.
+        struct DueItem: Sendable {
+            let serverURLString: String
+            let sessionId: String
+            let sessionTitle: String?
+            let draftText: String
+            let scheduleKey: String
+        }
 
-        for message in dueMessages {
-            let serverURLString = message.serverURLString
-            guard !serverURLString.isEmpty,
-                  let serverURL = URL(string: serverURLString) else {
-                // Can't send without server URL — delete stale entry
-                modelContext.delete(message)
-                continue
+        let dueItems: [DueItem] = await Task.detached(priority: .utility) {
+            let backgroundContext = ModelContext(modelContext.container)
+            let now = Date()
+            let descriptor = FetchDescriptor<PendingScheduledMessage>()
+            let allMessages = (try? backgroundContext.fetch(descriptor)) ?? []
+            let due = allMessages.filter { $0.scheduledAt <= now }
+
+            // Drop stale entries (no server URL) right here on the background
+            // context, then return sendable scalars for the genuinely-due ones.
+            var items: [DueItem] = []
+            var deletedStale = false
+            for message in due {
+                let serverURLString = message.serverURLString
+                guard !serverURLString.isEmpty, URL(string: serverURLString) != nil else {
+                    backgroundContext.delete(message)
+                    deletedStale = true
+                    continue
+                }
+                items.append(DueItem(
+                    serverURLString: serverURLString,
+                    sessionId: message.sessionId,
+                    sessionTitle: message.sessionTitle,
+                    draftText: message.draftText,
+                    scheduleKey: message.scheduleKey
+                ))
             }
+            if deletedStale {
+                try? backgroundContext.save()
+            }
+            return items
+        }.value
 
+        guard !dueItems.isEmpty else { return }
+
+        for item in dueItems {
+            let serverURL = URL(string: item.serverURLString)!
             let apiClient = APIClient(baseURL: serverURL)
 
             // If no sessionId, create a new session first
-            var targetSessionId = message.sessionId
+            var targetSessionId = item.sessionId
             if targetSessionId.isEmpty {
                 do {
                     let response = try await apiClient.createSession(
@@ -1213,7 +1256,7 @@ final class SessionListViewModel {
                     )
                     targetSessionId = response.session?.sessionId ?? ""
                     if !targetSessionId.isEmpty,
-                       let title = message.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       let title = item.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
                        !title.isEmpty {
                         _ = try? await apiClient.renameSession(id: targetSessionId, title: title)
                     }
@@ -1226,21 +1269,25 @@ final class SessionListViewModel {
             do {
                 _ = try await apiClient.startChat(
                     sessionID: targetSessionId,
-                    message: message.draftText,
+                    message: item.draftText,
                     workspace: nil,
                     model: nil
                 )
-                // Capture scalars BEFORE deleting the row — the model must not
-                // be touched after delete.
-                let scheduleKey = message.scheduleKey
-                let srv = message.serverURLString
-                modelContext.delete(message)
-                try? modelContext.save()
-                // Cancel the server timer so the message is NOT re-sent at its
-                // scheduled time by the scheduled-endpoint dispatcher.
+                // Delete the dispatched row off-main, then cancel the server timer
+                // so it is NOT re-sent at the scheduled time by the dispatcher.
+                let scheduleKey = item.scheduleKey
+                await Task.detached(priority: .utility) {
+                    let backgroundContext = ModelContext(modelContext.container)
+                    let descriptor = FetchDescriptor<PendingScheduledMessage>()
+                    let rows = (try? backgroundContext.fetch(descriptor)) ?? []
+                    if let row = rows.first(where: { $0.scheduleKey == scheduleKey }) {
+                        backgroundContext.delete(row)
+                        try? backgroundContext.save()
+                    }
+                }.value
                 await PendingScheduledMessage.deleteFromServer(
                     scheduleKey: scheduleKey,
-                    serverURLString: srv
+                    serverURLString: item.serverURLString
                 )
             } catch {
                 // Skip, retry next cycle
