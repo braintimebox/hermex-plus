@@ -6,7 +6,35 @@ enum MarkdownMathSegment: Equatable {
 }
 
 struct MarkdownMathSegmenter {
+    /// Memoized last result. `segments(in:)` is a pure function of `content`,
+    /// but it does an O(N) `Array(content)` copy plus a full protection-mask
+    /// scan on every call — and it runs inside `body` (both the static and
+    /// streaming renderers call it per token flush, ~16ms). Caching by the last
+    /// content string mirrors StreamingMarkdownBlockSplitter and removes the
+    /// repeated O(N) work from the streaming hot path; a single-entry cache is
+    /// correct here because the same message's content only ever grows (append).
+    private static let cacheLock = NSLock()
+    private static var cachedContent: String?
+    private static var cachedResult: [MarkdownMathSegment]?
+
     static func segments(in content: String) -> [MarkdownMathSegment] {
+        cacheLock.lock()
+        if let cachedContent, cachedContent == content, let cachedResult {
+            cacheLock.unlock()
+            return cachedResult
+        }
+        cacheLock.unlock()
+
+        let result = computeSegments(in: content)
+
+        cacheLock.lock()
+        cachedContent = content
+        cachedResult = result
+        cacheLock.unlock()
+        return result
+    }
+
+    private static func computeSegments(in content: String) -> [MarkdownMathSegment] {
         let characters = Array(content)
         guard characters.count >= 4 else {
             return [.markdown(MarkdownMathFormatter.replacingInlineMath(in: content))]

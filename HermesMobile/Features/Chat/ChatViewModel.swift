@@ -4553,22 +4553,50 @@ final class ChatViewModel {
             toolCallAnchorMessageID = messageID
         }
 
-        if let index = messages.firstIndex(where: { $0.messageId == messageID }) {
+        // Fast path: the streaming assistant message is always the LAST element
+        // (ensureStreamingAssistantMessage appends it). `firstIndex(where:)` is an
+        // O(n) scan over every message on every token flush (~20-50/s) — the exact
+        // per-token O(n) cost the hot path must avoid. Fall back to the scan only
+        // when the message isn't last (e.g. an odd replay/reorder edge).
+        let index: Int?
+        if let last = messages.last, last.messageId == messageID {
+            index = messages.index(before: messages.endIndex)
+        } else {
+            index = messages.firstIndex(where: { $0.messageId == messageID })
+        }
+
+        if let index, messages.indices.contains(index) {
+            // In-place append: mutate the existing message's `content`, not a
+            // full ChatMessage rebuild. `messages[index] = ChatMessage(...)` copies
+            // the whole accumulated string (O(n) per flush) and forces a COW array
+            // copy + array-wide retain of every ChatMessage content — exactly the
+            // `swift_retain` / `TranscriptMessage` value-witness copy seen in the
+            // freeze stacks. Mutating `content` in place changes only the one
+            // string storage; the didSet → transcript recompute still catches it.
             let existing = messages[index]
-            messages[index] = ChatMessage(
-                role: existing.role,
-                content: (existing.content ?? "") + appendedContent,
-                timestamp: existing.timestamp,
-                messageId: existing.messageId,
-                name: existing.name,
-                toolCallId: existing.toolCallId,
-                toolUseId: existing.toolUseId,
-                toolCalls: existing.toolCalls,
-                contentParts: existing.contentParts,
-                reasoning: existing.reasoning,
-                attachments: existing.attachments,
-                turnTps: existing.turnTps
-            )
+            if existing.messageId == messageID {
+                messages[index].content = (existing.content ?? "") + appendedContent
+                // In-place subscript mutation does NOT fire `didSet` on `messages`
+                // (the array is not reassigned), so the transcript memo would go
+                // stale. Recompute explicitly — same effect as the didSet path.
+                recomputeDisplayedTranscriptMessages()
+            } else {
+                // Defensive: id changed unexpectedly — rebuild rather than corrupt.
+                messages[index] = ChatMessage(
+                    role: existing.role,
+                    content: (existing.content ?? "") + appendedContent,
+                    timestamp: existing.timestamp,
+                    messageId: messageID,
+                    name: existing.name,
+                    toolCallId: existing.toolCallId,
+                    toolUseId: existing.toolUseId,
+                    toolCalls: existing.toolCalls,
+                    contentParts: existing.contentParts,
+                    reasoning: existing.reasoning,
+                    attachments: existing.attachments,
+                    turnTps: existing.turnTps
+                )
+            }
             return true
         }
 

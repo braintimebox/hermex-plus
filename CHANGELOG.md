@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.8 — 2026-08-18
+
+### Fixed
+- **Streaming hot-path (round 2):** two more per-token costs in the assistant-flush path removed. (1) `messages.firstIndex(where:)` — an O(n) scan over every message on each ~16ms flush — replaced with a `messages.last` fast path (the streaming message is always appended last). (2) In-place `content` append instead of rebuilding the whole `ChatMessage` and rewriting `messages[index]`; the rebuild copied the full accumulated string and forced a copy-on-write array copy with an array-wide retain on every flush — exactly the `swift_retain` / `TranscriptMessage` value-witness frames appearing in freeze stacks.
+- **Markdown math segmentation:** `MarkdownMathSegmenter.segments(in:)` is now memoized by last content (mirroring `StreamingMarkdownBlockSplitter`). It ran inside `body` for both static and streaming renderers, doing an O(n) `Array(content)` copy plus a full math-protection mask scan on every token change.
+
 ## 1.6.7 — 2026-08-16
 
 ### Changed

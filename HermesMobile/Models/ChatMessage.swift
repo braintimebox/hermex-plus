@@ -6,7 +6,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     }
 
     let role: String?
-    let content: String?
+    var content: String?
     let timestamp: Double?
     let messageId: String?
     let name: String?
