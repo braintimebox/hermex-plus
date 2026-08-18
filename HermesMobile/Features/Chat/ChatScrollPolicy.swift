@@ -15,9 +15,14 @@ enum ChatScrollPolicy {
 
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while the app still
-    /// owns follow-latest intent; return nil as soon as the reader scrolls away.
-    static func sizeChangeAnchor(shouldFollowLatestMessage: Bool) -> UnitPoint? {
-        shouldFollowLatestMessage ? .bottom : nil
+    /// owns follow-latest intent AND the user is not mid-scroll; return nil as
+    /// soon as the reader scrolls away (or during the settle cooldown) so a
+    /// streaming bubble's size growth can never yank the viewport back down.
+    static func sizeChangeAnchor(
+        shouldFollowLatestMessage: Bool,
+        isAutoScrollPaused: Bool
+    ) -> UnitPoint? {
+        (shouldFollowLatestMessage && !isAutoScrollPaused) ? .bottom : nil
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as

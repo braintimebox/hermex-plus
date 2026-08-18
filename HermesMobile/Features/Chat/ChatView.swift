@@ -1211,6 +1211,7 @@ struct ChatView: View {
             showsCompressingStatus: viewModel.isCompressingContext,
             showsScrollToBottomButton: showsScrollToBottomButton,
             shouldFollowLatestMessage: shouldFollowLatestMessage,
+            isAutoScrollPaused: isAutoFollowScrollPaused,
             latestTranscriptMessageRole: latestTranscriptMessageRole,
             isScrolledNearBottom: isScrolledNearBottom,
             activeStreamID: viewModel.activeStreamID,

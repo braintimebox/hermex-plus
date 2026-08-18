@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1 — 2026-08-18
+
+### Fixed
+- **Scroll no longer yanks during streaming.** The `.sizeChanges` scroll anchor now
+  also respects the user-scroll pause/cooldown, not just follow-latest intent. A
+  growing bubble during an active response could previously tug the viewport back
+  down while you were reading older messages ("jumps back ~0.5 s").
+- **Continuous streaming reveal restored.** Removed the ~120 ms accumulation throttle
+  from 1.6.9 — text now appears continuously (native "letters appear" feel) instead
+  of arriving in delayed chunks. Smoothness is preserved by the 2.0.0 O(1) transcript
+  hot path + memoized segmentation, not by delaying the render.
+
 ## 2.0.0 — 2026-08-18
 
 ### Performance / architecture (smoothness refactor)

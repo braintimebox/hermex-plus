@@ -32,6 +32,7 @@ struct ChatTranscriptView: View {
     let showsCompressingStatus: Bool
     let showsScrollToBottomButton: Bool
     let shouldFollowLatestMessage: Bool
+    let isAutoScrollPaused: Bool
     let latestTranscriptMessageRole: String?
     let isScrolledNearBottom: Bool
     let activeStreamID: String?
@@ -137,7 +138,8 @@ struct ChatTranscriptView: View {
                     )
                     .defaultScrollAnchor(
                         ChatScrollPolicy.sizeChangeAnchor(
-                            shouldFollowLatestMessage: shouldFollowLatestMessage
+                            shouldFollowLatestMessage: shouldFollowLatestMessage,
+                            isAutoScrollPaused: isAutoScrollPaused
                         ),
                         for: .sizeChanges
                     )
