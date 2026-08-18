@@ -105,7 +105,16 @@ struct StreamingMarkdownRenderer: View {
             }
         }
         .task(id: content) {
-            await Task.yield()
+            // Throttle the markdown re-parse: `Markdown(content)` (MarkdownUI)
+            // rebuilds the full AST + view tree on every content change, and the
+            // server stream delivers tokens ~20-50/s — so an immediate re-render
+            // is quadratic work on the main thread and the text visibly stutters
+            // ("low fps while typing"). Instead, accumulate tokens and re-render
+            // at a fixed ~120ms cadence: the reveal is still near-instant but the
+            // heavy parse runs ~8x less often, matching the smooth feel of a
+            // native client. A cancelled task (next token) discards this deadline,
+            // so the render always reflects the *latest* content.
+            try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             guard displayedContent != content else { return }
             displayedContent = content

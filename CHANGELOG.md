@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.9 — 2026-08-18
+
+### Fixed
+- **Smooth streaming (no more "low fps" text):** the streaming markdown renderer now throttles its re-parse to a ~120ms cadence instead of re-rendering on every token. MarkdownUI's `Markdown(content)` rebuilds the full AST and view tree on each content change, and the stream delivers ~20–50 tokens/s — that quadratic rebuild on the main thread is what made typed text look stuttery/choppy compared to a native client. Tokens now accumulate and the heavy parse runs ~8× less often, so streaming is fluid while still appearing near-instant.
+
 ## 1.6.8 — 2026-08-18
 
 ### Fixed
