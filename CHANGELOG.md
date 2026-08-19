@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.9 — 2026-08-19
+
+### Fixed
+- **Primary icon now uses the polished `MonochromeDark` asset.** The 2.0.8 icon was
+  a threshold-masked re-paint (2 colours, no anti-aliasing) and looked jagged. The
+  primary icon now copies the existing high-quality `hermex_monochrome_dark_icon`
+  (black background, soft light glyph, proper anti-aliasing) into both light and
+  dark appearance slots, so the home screen and SideStore no longer show the rough
+  "Light" variant.
+
 ## 2.0.8 — 2026-08-19
 
 ### Changed
