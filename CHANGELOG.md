@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.8 — 2026-08-19
+
+### Changed
+- **Primary app icon → monochrome (black background, white glyph).** Replaced the
+  previous amber-on-white/dark primary icon with a crisp black-and-white version
+  (both light and dark appearances), so the home-screen and SideStore icon read
+  clearly on any wallpaper. Alternate icons (light/dark/monochrome/gradient) are
+  unchanged.
+
 ## 2.0.7 — 2026-08-19
 
 ### Fixed
