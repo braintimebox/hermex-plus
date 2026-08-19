@@ -8,12 +8,17 @@ import UIKit
 struct MarkdownRenderer: View {
     let content: String
     let isStreaming: Bool
+    /// Lab-only override: when non-nil, forces the glyph fade on/off regardless
+    /// of the user's `StreamedTextAnimationSettings` value. Production callers
+    /// leave it nil so behaviour stays driven by the settings switch.
+    var forceFadeDisabled: Bool?
 
     @Environment(\.colorScheme) private var colorScheme
 
-    init(content: String, isStreaming: Bool = false) {
+    init(content: String, isStreaming: Bool = false, forceFadeDisabled: Bool? = nil) {
         self.content = content
         self.isStreaming = isStreaming
+        self.forceFadeDisabled = forceFadeDisabled
     }
 
     /// Keeps the streaming renderer mounted briefly after streaming ends so
@@ -24,7 +29,7 @@ struct MarkdownRenderer: View {
     var body: some View {
         Group {
             if isStreaming || lingersAfterStreaming {
-                StreamingMarkdownRenderer(content: content)
+                StreamingMarkdownRenderer(content: content, forceFadeDisabled: forceFadeDisabled)
             } else if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(verbatim: " ")
             } else if let fallbackReason = MarkdownContentRenderingPolicy.fallbackReason(for: content) {
@@ -82,12 +87,14 @@ struct MarkdownRenderer: View {
 
 struct StreamingMarkdownRenderer: View {
     let content: String
+    var forceFadeDisabled: Bool?
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var displayedContent: String
 
-    init(content: String) {
+    init(content: String, forceFadeDisabled: Bool? = nil) {
         self.content = content
+        self.forceFadeDisabled = forceFadeDisabled
         _displayedContent = State(initialValue: content)
     }
 
@@ -128,7 +135,8 @@ struct StreamingMarkdownRenderer: View {
                         if !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             StreamingMarkdownChunkedView(
                                 content: markdown,
-                                colorScheme: colorScheme
+                                colorScheme: colorScheme,
+                                forceFadeDisabled: forceFadeDisabled
                             )
                         }
                     case .displayMath(let latex):
@@ -139,7 +147,8 @@ struct StreamingMarkdownRenderer: View {
         } else {
             StreamingMarkdownChunkedView(
                 content: MarkdownMathFormatter.replacingInlineMath(in: displayedContent),
-                colorScheme: colorScheme
+                colorScheme: colorScheme,
+                forceFadeDisabled: forceFadeDisabled
             )
         }
     }
@@ -149,9 +158,18 @@ struct StreamingMarkdownRenderer: View {
 private struct StreamingMarkdownChunkedView: View {
     let content: String
     let colorScheme: ColorScheme
+    var forceFadeDisabled: Bool?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(StreamedTextAnimationSettings.isEnabledKey) private var isStreamedTextAnimationEnabled = true
+
+    /// Whether glyph fade is active for this rendering: the lab can force it
+    /// off (mode C) regardless of the user setting; otherwise the user setting
+    /// (plus Reduce Motion) decides.
+    private var fadeEnabled: Bool {
+        if let forced = forceFadeDisabled { return !forced }
+        return !reduceMotion && isStreamedTextAnimationEnabled
+    }
 
     /// First block ordinal still in the fade window. Starts at `Int.max`
     /// (everything solid) until `onAppear` anchors it at the current block,
@@ -178,7 +196,7 @@ private struct StreamingMarkdownChunkedView: View {
             firstFadeOrdinal: StreamedTextAnimationSettings.effectiveFirstFadeOrdinal(
                 firstFadeOrdinal,
                 reduceMotion: reduceMotion,
-                isEnabled: isStreamedTextAnimationEnabled
+                isEnabled: fadeEnabled
             )
         )
 

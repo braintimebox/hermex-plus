@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.5 — 2026-08-19
+
+### Added
+- **Streaming Lab A/B modes (DEBUG-only, no production impact).** The Streaming
+  Lab now isolates the two variables behind the "smooth stream" feel with three
+  replay modes: **A — current Hermes** (glyph fade, no geometry transition),
+  **B — fade + smooth geometry** (glyph fade plus an animated height growth),
+  **C — no fade + smooth geometry** (geometry transition only). `MarkdownRenderer`
+  gained an optional `forceFadeDisabled` override (nil in production, behaviour
+  unchanged) so the lab can toggle the glyph fade without writing the user's
+  settings. Goal: decide which minimal change actually produces smoothness —
+  glyph fade, geometry transition, or both — before touching production.
+
 ## 2.0.4 — 2026-08-19
 
 ### Fixed

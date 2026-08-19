@@ -15,6 +15,19 @@ struct StreamingLabView: View {
     // textSelection dead-cascade hunt).
     @AppStorage(StreamedTextAnimationSettings.isEnabledKey) private var isStreamedTextAnimationEnabled = true
 
+    /// A/B experiment modes (no production impact — lab only). Isolates which
+    /// variable actually produces the "smooth" feel:
+    ///   .currentHermes — glyph fade ON, geometry growth NOT animated (prod parity)
+    ///   .fadeAndGeometry — glyph fade ON + animated height growth
+    ///   .geometryOnly — glyph fade OFF + animated height growth
+    enum LabMode: String, CaseIterable, Identifiable {
+        case currentHermes = "A · current Hermes (fade, no geometry)"
+        case fadeAndGeometry = "B · fade + smooth geometry"
+        case geometryOnly = "C · no fade + smooth geometry"
+        var id: String { rawValue }
+    }
+    @State private var labMode: LabMode = .currentHermes
+
     @State private var wordsPerSecond = StreamingLabReplay.defaultWordsPerSecond
     @State private var fadeDuration = StreamingTextFadeLab.shared.fadeDuration
     @State private var glyphStagger = StreamingTextFadeLab.shared.glyphStagger
@@ -35,7 +48,16 @@ struct StreamingLabView: View {
             }
             .onChange(of: displayedContent) { _, _ in
                 guard followsTail else { return }
-                proxy.scrollTo(Self.tailAnchorID, anchor: .bottom)
+                // Scroll-follow axis: mode A scrolls instantly (prod parity);
+                // modes B and C scroll with an ease-out so the jump is
+                // interpolated rather than discrete.
+                if let geo = geometryTransition {
+                    withAnimation(geo) {
+                        proxy.scrollTo(Self.tailAnchorID, anchor: .bottom)
+                    }
+                } else {
+                    proxy.scrollTo(Self.tailAnchorID, anchor: .bottom)
+                }
             }
         }
         .background(Color(.systemBackground))
@@ -50,6 +72,16 @@ struct StreamingLabView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Picker("A/B mode", selection: $labMode) {
+                ForEach(LabMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: labMode) { _, _ in
+                replayID += 1
+            }
+
             HStack(spacing: 12) {
                 Button {
                     replayID += 1
@@ -168,8 +200,40 @@ struct StreamingLabView: View {
     }
 
     private var transcript: some View {
-        MarkdownRenderer(content: displayedContent, isStreaming: isStreaming)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        MarkdownRenderer(
+            content: displayedContent,
+            isStreaming: isStreaming,
+            forceFadeDisabled: glyphFadeEnabledForMode ? nil : true
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+            // Geometry transition axis: animate the *height growth* of the text
+            // block between word reveals. This is the variable being isolated —
+            // current production Hermes does NOT animate this (height jumps
+            // discretely each re-layout), which is the leading hypothesis for
+            // the "вырвиглаз" feel. Modes B and C enable it.
+            .animation(geometryTransition, value: displayedContent)
+    }
+
+    /// The geometry-growth animation, or nil in mode A (current Hermes parity).
+    private var geometryTransition: Animation? {
+        switch labMode {
+        case .currentHermes:
+            return nil
+        case .fadeAndGeometry, .geometryOnly:
+            return .easeOut(duration: 0.12)
+        }
+    }
+
+    /// Whether glyph-level fade should be active for the current mode.
+    /// Modes A and B fade; mode C (geometry-only) disables the glyph fade to
+    /// isolate the geometry transition's contribution alone.
+    private var glyphFadeEnabledForMode: Bool {
+        switch labMode {
+        case .currentHermes, .fadeAndGeometry:
+            return true
+        case .geometryOnly:
+            return false
+        }
     }
 
     /// Local word-cadence appender standing in for the server stream: reveals
