@@ -2228,7 +2228,14 @@ struct ChatView: View {
 
         Task { @MainActor in
             await Task.yield()
-            try? await Task.sleep(nanoseconds: 16_000_000)
+            // Streaming follow fires on every token flush (~20-50/s). Sleeping here
+            // queues a fresh Task per flush that then has to jump back onto MainActor,
+            // which accumulates into visible scroll lag while the response streams.
+            // The sleep only benefits the animated non-streaming follow (letting a
+            // queued animation retarget), which no longer happens during streaming.
+            if viewModel.activeStreamID == nil {
+                try? await Task.sleep(nanoseconds: 16_000_000)
+            }
             guard !Task.isCancelled, generation == followScrollGeneration else { return }
             // Re-check at fire time: a gesture may have begun during the delay.
             if !isUserInitiated, isAutoFollowScrollPaused { return }
@@ -2237,17 +2244,20 @@ struct ChatView: View {
             // taller server transcript replacing the cached one doesn't animate a jump
             // (#289). Evaluated at fire time so it's robust to onChange ordering.
             let isCacheFirstSnapWindow = cacheFirstSnapUntil.map { Date() < $0 } ?? false
-            if animated, !isCacheFirstSnapWindow {
-                // While streaming, follow with the short cadence-synced curve so
-                // back-to-back triggers retarget smoothly; otherwise keep the
-                // regular follow-scroll feel.
-                let animation = viewModel.activeStreamID != nil
-                    ? ChatMotion.streamingFollow(reduceMotion: reduceMotion)
-                    : ChatMotion.scrollToLatest(reduceMotion: reduceMotion)
-                withAnimation(animation) {
+            let isStreaming = viewModel.activeStreamID != nil
+            if animated, !isStreaming, !isCacheFirstSnapWindow {
+                // Non-streaming follow: keep the short follow-scroll curve so explicit
+                // scroll-to-latest still glides. The animation is skipped while a
+                // response streams (below) to avoid the per-token animation race.
+                withAnimation(ChatMotion.scrollToLatest(reduceMotion: reduceMotion)) {
                     proxy.scrollTo(targetID, anchor: anchor)
                 }
             } else {
+                // Streaming or snap window: snap WITHOUT animation. Animating the
+                // follow on every token flush (~20-50/s) retargets the previous
+                // animation each time — the animations cancel/restart and produce the
+                // visible "jitter". A hard glue to the bottom per flush reads as
+                // smooth continuous growth, matching Telegram/chat sites.
                 proxy.scrollTo(targetID, anchor: anchor)
             }
         }

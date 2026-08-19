@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.4 — 2026-08-19
+
+### Fixed
+- **Smooth streaming scroll (no more jitter/lag).** The follow-scroll animated on
+  every token flush (~20–50/s), so each new token retargeted the previous animation
+  — animations cancelled/restarted constantly, reading as rough, jerky scrolling
+  while the agent types. Streaming follow now snaps to the bottom without animation
+  (a hard glue per flush reads as smooth continuous growth, like Telegram), while
+  explicit scroll-to-latest outside streaming keeps its glide.
+- **Reduced streaming scroll latency.** Removed the 16 ms pre-scroll sleep on the
+  streaming hot path; it queued a new Task per flush that had to hop back onto the
+  main actor, accumulating into lag during long replies.
+- **Dark gap below the last message.** The overscroll/bounce region past the tail
+  could flash dark in dark mode; the scroll backdrop is now painted explicitly so
+  the bounce zone matches the theme.
+
 ## 2.0.3 — 2026-08-19
 
 ### Changed

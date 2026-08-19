@@ -181,6 +181,14 @@ struct ChatTranscriptView: View {
                 }
                 .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsScrollToBottomButton)
                 .background(Color(.systemBackground))
+                .background {
+                    // Overscroll / bounce region below the last message is not
+                    // covered by the transcript background in dark mode — scrolling
+                    // past the tail (or the .sizeChanges anchor gluing to the bottom
+                    // during streaming) can flash a dark gap. Paint the scroll area's
+                    // backdrop explicitly so the bounce zone matches the theme.
+                    Color(.systemBackground).ignoresSafeArea()
+                }
                 .onChange(of: messages.count) {
                     guard shouldFollowLatestMessage else { return }
 
