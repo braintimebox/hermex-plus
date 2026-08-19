@@ -1358,14 +1358,7 @@ final class ChatViewModel {
         let renderedCacheFirst = !cacheFirstPlaceholder.isEmpty
 
         do {
-            let response = try await client.session(
-                id: sessionID,
-                includeMessages: true,
-                messageLimit: Self.messagePageLimit,
-                // Cold load only: widen the window to renderable-dense (upstream #3790) so a
-                // tool-heavy session opens populated. "Load earlier" keeps the raw cap.
-                expandRenderable: true
-            )
+            let response = try await clientSessionWithRetry(sessionID: sessionID)
             let session = response.session
             let loadedMessages = session?.messages ?? []
             let loadedActiveStreamID = session?.activeStreamId?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1513,6 +1506,57 @@ final class ChatViewModel {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Fetches a session's messages, retrying transient connectivity failures a
+    /// few times with short backoff — the same policy as `fetchSessionsWithRetry`
+    /// on the session list. On a cold open the network/tunnel may not be ready the
+    /// instant the chat is pushed, so a single `client.session` that fails with
+    /// `.cannotConnectToHost`/`.networkConnectionLost` previously surfaced a bare
+    /// "Could not connect" with no self-recovery. Only retries failures the cache
+    /// policy classes as connectivity/transient (GET, no side effect to duplicate);
+    /// auth, decoding, and real 5xx errors fall straight through to the catch.
+    private func clientSessionWithRetry(sessionID: String) async throws -> SessionResponse {
+        var attempt = 0
+        let maxAttempts = 5
+        while true {
+            do {
+                return try await client.session(
+                    id: sessionID,
+                    includeMessages: true,
+                    messageLimit: Self.messagePageLimit,
+                    // Cold load only: widen the window to renderable-dense (upstream #3790) so a
+                    // tool-heavy session opens populated. "Load earlier" keeps the raw cap.
+                    expandRenderable: true
+                )
+            } catch {
+                guard CacheFallbackPolicy.shouldUseCache(for: error),
+                      attempt < maxAttempts - 1,
+                      !isCancellationError(error) else {
+                    throw error
+                }
+                attempt += 1
+                // Exponential backoff (1s, 2s, 4s, 8s ≈ 15s total), mirroring the
+                // session-list retry so a still-coming-up tunnel gets time to connect.
+                try? await Task.sleep(for: .seconds(pow(2.0, Double(attempt - 1))))
+            }
+        }
+    }
+
+    private func isCancellationError(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        let underlying: Error
+        if case APIError.network(let wrapped) = error {
+            underlying = wrapped
+        } else {
+            underlying = error
+        }
+
+        guard let urlError = underlying as? URLError else { return false }
+        return urlError.code == .cancelled
     }
 
     /// Performs only the fast, local portion of an existing session's first

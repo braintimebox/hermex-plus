@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.7 — 2026-08-19
+
+### Fixed
+- **Message load now retries transient connection failures.** Opening a chat on a
+  cold start (network/tunnel still coming up) previously made the single
+  `client.session` call surface a bare "Could not connect" with no self-recovery.
+  The message load now retries connectivity/transient failures with exponential
+  backoff (1s → 2s → 4s → 8s, ~15s total), mirroring the session-list retry.
+  Non-transient errors (auth, decoding, real 5xx) still fail fast.
+
 ## 2.0.6 — 2026-08-19
 
 ### Fixed
