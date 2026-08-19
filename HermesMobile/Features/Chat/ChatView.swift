@@ -2355,7 +2355,14 @@ struct ChatView: View {
                     isReadingOlderTranscript = false
                 }
             }
-        } else if metrics.isUserInteracting {
+        } else if !isNearBottom {
+            // Scrolled away from the tail — drop follow-latest intent regardless
+            // of whether the gesture is still active. Previously this only fired
+            // while `metrics.isUserInteracting` was true, so a quick flick up that
+            // ended before the next metrics sample left `shouldFollowLatestMessage`
+            // true; once the 0.25s cooldown lapsed, the next streaming size change
+            // (`.sizeChanges` anchor = .bottom) yanked the viewport back down. The
+            // intent must follow the *position*, not the touch state.
             shouldFollowLatestMessage = false
             if !isReadingOlderTranscript,
                ChatScrollPolicy.shouldEnterReadingOlder(

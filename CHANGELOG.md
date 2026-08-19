@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.6 — 2026-08-19
+
+### Fixed
+- **No more yank-to-bottom after scrolling up.** `shouldFollowLatestMessage` was
+  only cleared while `metrics.isUserInteracting` was true, so a quick upward flick
+  that ended before the next metrics sample left follow-latest armed. Once the
+  0.25s cooldown lapsed, the next streaming size change (`.sizeChanges` anchor =
+  bottom) yanked the viewport back down. Follow intent now tracks the scroll
+  *position* (dropped whenever the viewport leaves the bottom region), not the
+  momentary touch state.
+
 ## 2.0.5 — 2026-08-19
 
 ### Added
