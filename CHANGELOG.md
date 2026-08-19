@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.3 — 2026-08-19
+
+### Changed
+- **Scroll-to-bottom button moved to the bottom-right and enlarged.** The button was
+  a small (32 pt) circle centred at the bottom of the transcript, easy to miss.
+  It is now pinned to the trailing edge with a 12 pt inset from the right, and
+  grown to 36 pt (icon 13 → 15 pt) so it reads clearly against the composer.
+
 ## 2.0.2 — 2026-08-18
 
 ### Changed

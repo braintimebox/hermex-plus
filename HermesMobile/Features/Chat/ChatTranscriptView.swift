@@ -166,12 +166,16 @@ struct ChatTranscriptView: View {
                     )
 
                     if showsScrollToBottomButton {
-                        ChatScrollToBottomButton(
-                            bottomPadding: scrollToBottomButtonBottomPadding,
-                            onTap: {
-                                onScrollToBottom(proxy)
-                            }
-                        )
+                        HStack {
+                            Spacer()
+                            ChatScrollToBottomButton(
+                                bottomPadding: scrollToBottomButtonBottomPadding,
+                                onTap: {
+                                    onScrollToBottom(proxy)
+                                }
+                            )
+                        }
+                        .padding(.trailing, 12)
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
                     }
                 }
@@ -748,8 +752,8 @@ private struct ChatScrollToBottomButton: View {
     var body: some View {
         Button(action: onTap) {
             Image(systemName: "arrow.down")
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 32, height: 32)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 36, height: 36)
                 .foregroundStyle(.primary)
                 .adaptiveGlass(
                     .regular,
