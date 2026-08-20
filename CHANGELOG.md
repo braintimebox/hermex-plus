@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.10 — 2026-08-20
+
+### Fixed
+- **Idle reading no longer snaps the viewport back to the bottom.** The system
+  `.defaultScrollAnchor(for: .sizeChanges)` was returning `.bottom` whenever
+  `shouldFollowLatestMessage` was `true` — including while idle, because a pass
+  through the ~80pt "near bottom" zone re-armed the flag and the flag is reset
+  only by deferred (async) scroll metrics. Any incidental size change in that
+  one-frame window (a `LazyVStack` row re-measuring, an image decoding, markdown
+  finishing layout) made the system silently re-glue the viewport to the bottom,
+  overriding the user's scroll — the "scroll won't listen" jump. The
+  `.sizeChanges` anchor is now restricted to streaming only (`isStreaming`), where
+  smooth bubble growth actually needs it. Idle follow-latest remains driven
+  explicitly by `onChange(of: messages.count)`.
+
 ## 2.0.9 — 2026-08-19
 
 ### Fixed

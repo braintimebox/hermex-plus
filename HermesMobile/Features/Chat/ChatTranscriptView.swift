@@ -139,7 +139,8 @@ struct ChatTranscriptView: View {
                     .defaultScrollAnchor(
                         ChatScrollPolicy.sizeChangeAnchor(
                             shouldFollowLatestMessage: shouldFollowLatestMessage,
-                            isAutoScrollPaused: isAutoScrollPaused
+                            isAutoScrollPaused: isAutoScrollPaused,
+                            isStreaming: activeStreamID != nil
                         ),
                         for: .sizeChanges
                     )

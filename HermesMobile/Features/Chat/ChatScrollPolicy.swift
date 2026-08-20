@@ -18,11 +18,24 @@ enum ChatScrollPolicy {
     /// owns follow-latest intent AND the user is not mid-scroll; return nil as
     /// soon as the reader scrolls away (or during the settle cooldown) so a
     /// streaming bubble's size growth can never yank the viewport back down.
+    ///
+    /// When idle (no stream), the system `.sizeChanges` anchor must stay nil
+    /// entirely: idle follow-latest is already driven explicitly by
+    /// `onChange(of: messages.count)` → `scrollToLatestContent`. A `.bottom`
+    /// anchor here only competes with that path — and worse, outruns the async
+    /// scroll-metrics that reset `shouldFollowLatestMessage`. The metrics
+    /// arrive deferred (DispatchQueue.main.async), so the flag can linger
+    /// `true` for a frame or two after the reader scrolled back up; any
+    /// incidental size change in that window (a LazyVStack row re-measuring, an
+    /// image decoding, markdown finishing layout) makes the system silently
+    /// re-glue the viewport to the bottom — the "scroll won't listen" jump.
+    /// Restricting the anchor to streaming only removes that idle race.
     static func sizeChangeAnchor(
         shouldFollowLatestMessage: Bool,
-        isAutoScrollPaused: Bool
+        isAutoScrollPaused: Bool,
+        isStreaming: Bool
     ) -> UnitPoint? {
-        (shouldFollowLatestMessage && !isAutoScrollPaused) ? .bottom : nil
+        (isStreaming && shouldFollowLatestMessage && !isAutoScrollPaused) ? .bottom : nil
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as
