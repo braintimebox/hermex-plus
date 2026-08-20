@@ -2182,11 +2182,22 @@ struct ChatView: View {
         // Deliberate jump to the latest content. Snap without animation while a
         // response is streaming so the tap lands immediately instead of racing
         // the short follow animations already chasing incoming tokens.
-        scrollToLatestContent(
-            proxy,
-            animated: viewModel.activeStreamID == nil,
-            isUserInitiated: true
-        )
+        //
+        // When idle, target the last *message* (not the 1pt bottom marker): the
+        // marker sits above the composer inset, so anchoring `.bottom` on it left
+        // the viewport a full composer-height short of the newest message — the
+        // "↓ button goes to *almost* bottom" bug. Anchoring the last message puts
+        // it flush above the composer. While streaming, keep the marker target so
+        // the glue-to-bottom growth still lands on the actual content tail.
+        if viewModel.activeStreamID == nil, let latestTranscriptMessageID {
+            scrollToLatestTranscriptMessage(proxy, animated: true, isUserInitiated: true)
+        } else {
+            scrollToLatestContent(
+                proxy,
+                animated: viewModel.activeStreamID == nil,
+                isUserInitiated: true
+            )
+        }
     }
 
     private func scrollToLatestTranscriptMessage(

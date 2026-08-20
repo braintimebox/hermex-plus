@@ -193,14 +193,19 @@ final class ServerRegistry: @unchecked Sendable {
         var identityToMirror: ServerAccount?
         let result: ServerAccount = storage.withLock { snapshot in
             if let existing = snapshot.servers.first(where: { $0.id == id }) {
-                // Already registered: only flip the active selection + write
-                // through when it actually changes, so the launch path
-                // (restoreSavedServer → activate for the already-active server)
-                // doesn't do a redundant synchronous Keychain write every start.
+                // Already registered: flip the active selection (writing through
+                // only when it actually changes) and ALWAYS mirror the stored
+                // identity back into the global defaults. The mirror is what the
+                // @AppStorage-backed UI (avatar, header tint, initials) reads, and
+                // UserDefaults is wiped on reinstall while the Keychain snapshot
+                // survives — if we mirror only on an active-ID *change*, the
+                // launch path (restoreSavedServer → activate for the already-active
+                // server) never re-populates the defaults, so the avatar stays
+                // blank after a reinstall even though its data is in the Keychain.
+                identityToMirror = existing
                 if snapshot.activeServerID != id {
                     snapshot.activeServerID = id
                     persist(snapshot)
-                    identityToMirror = existing
                 }
                 return existing
             }

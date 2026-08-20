@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.12 — 2026-08-20
+
+### Fixed
+- **⬇️ button now scrolls to the actual last message, not "almost" bottom.** When
+  idle, the tap targets `latestTranscriptMessageID` (the newest message) instead of
+  the 1pt `bottomAnchorID` marker that sits above the composer inset — anchoring on
+  that marker left the viewport a full composer-height short of the tail. Streaming
+  keeps the marker target so glue-to-bottom growth is unchanged.
+- **Profile avatar now survives reinstall.** The avatar lives in the Keychain
+  (inside `ServerAccount`) but the UI reads it via a UserDefaults mirror that is
+  wiped on reinstall. `ServerRegistry.activate` only re-mirrored the stored identity
+  when the active ID *changed*, so the launch path (already-active server) never
+  re-populated the mirror after a reinstall — the avatar stayed blank. It now
+  always mirrors the registered server's identity back into the defaults.
+- **Kanban and Active Profile sections now default to hidden** on fresh installs
+  (`sectionVisibility.kanban` / `sectionVisibility.activeProfile` default to off).
+
+### Added
+- **Plugins / Hooks screen** — a dedicated tab under Skills with two placeholder
+  lists (Plugins on top, Hooks below). The Hermes server has no `/api/plugins` or
+  `/api/hooks` endpoint yet, so both render as empty states to wire up later.
+
 ## 2.0.11 — 2026-08-20
 
 ### Fixed

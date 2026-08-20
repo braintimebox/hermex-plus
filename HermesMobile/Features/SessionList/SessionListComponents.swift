@@ -199,6 +199,12 @@ struct SessionSidebarUtilityRows: View {
                 }
             }
 
+            if sectionVisibility.skills {
+                SidebarNavButton(title: String(localized: "Plugins / Hooks"), assetImage: "LucidePuzzle") {
+                    openDestination(.pluginsHooks)
+                }
+            }
+
             if sectionVisibility.memory {
                 SidebarNavButton(title: String(localized: "Memory"), assetImage: "LucideBrain") {
                     openDestination(.memory)

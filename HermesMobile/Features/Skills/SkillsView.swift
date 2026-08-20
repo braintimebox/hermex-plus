@@ -478,3 +478,60 @@ struct SkillLinkedFileView: View {
 extension String: @retroactive Identifiable {
     public var id: String { self }
 }
+
+/// Placeholder screen for server plugins and hooks — listed in two visual
+/// sections (Plugins on top, Hooks below) with no live data yet. The Hermes
+/// server does not currently expose `/api/plugins` or `/api/hooks`, so both
+/// lists render as empty states; wiring real endpoints later keeps the same
+/// two-section layout.
+struct PluginsHooksView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                section(
+                    title: "Plugins",
+                    icon: "puzzlepiece.extension",
+                    emptyText: "Plugins from the Hermes server will appear here."
+                )
+
+                section(
+                    title: "Hooks",
+                    icon: "link",
+                    emptyText: "Hooks from the Hermes server will appear here."
+                )
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color(.systemBackground))
+        .navigationTitle("Plugins / Hooks")
+        .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
+    }
+
+    private func section(title: String, icon: String, emptyText: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Image(systemName: "tray")
+                        .foregroundStyle(.tertiary)
+                    Text(emptyText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 16)
+                .padding(.horizontal, 12)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.secondarySystemBackground))
+            )
+        }
+    }
+}

@@ -55,11 +55,11 @@ struct SessionListView: View {
     @AppStorage(SessionRowDisplaySettings.showSubagentSessionsKey)
     private var showsSubagentSessions = SessionRowDisplaySettings.defaultShowsSubagentSessions
     @AppStorage(SectionVisibilitySettings.tasksKey) private var showsTasksSection = true
-    @AppStorage(SectionVisibilitySettings.kanbanKey) private var showsKanbanSection = true
+    @AppStorage(SectionVisibilitySettings.kanbanKey) private var showsKanbanSection = false
     @AppStorage(SectionVisibilitySettings.skillsKey) private var showsSkillsSection = true
     @AppStorage(SectionVisibilitySettings.memoryKey) private var showsMemorySection = true
     @AppStorage(SectionVisibilitySettings.insightsKey) private var showsInsightsSection = true
-    @AppStorage(SectionVisibilitySettings.activeProfileKey) private var showsActiveProfileSection = true
+    @AppStorage(SectionVisibilitySettings.activeProfileKey) private var showsActiveProfileSection = false
     @AppStorage(SectionVisibilitySettings.projectsKey) private var showsProjectsSection = true
     @AppStorage("sidebar_shows_saved_section") private var showsSavedSection = true
     // Per-server key (#19): the CLI toggle mirrors the active server's
@@ -483,6 +483,8 @@ struct SessionListView: View {
                 KanbanView(server: server, onAPIError: authManager.handleAPIError)
             case .skills:
                 SkillsView(server: server, onAPIError: authManager.handleAPIError)
+            case .pluginsHooks:
+                PluginsHooksView()
             case .memory:
                 MemoryView(server: server, onAPIError: authManager.handleAPIError)
             case .insights:
@@ -1559,6 +1561,7 @@ enum SessionListUtilityDestination: Hashable, Identifiable {
     case tasks
     case kanban
     case skills
+    case pluginsHooks
     case memory
     case insights
     /// Archived sessions screen (issue #17), also reachable from Settings.
