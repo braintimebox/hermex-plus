@@ -321,17 +321,25 @@ final class MainThreadWatchdog {
             )
         } else if elapsed >= stutterThreshold && !wasFrozen {
             // Sub-hang main-thread stall (1-3s): report rate-limited so a
-            // stream of micro-hangs doesn't spam the log.
+            // stream of micro-hangs doesn't spam the log. Capture the main
+            // thread's stack too — same Mach `thread_get_state` read as the
+            // freeze path, run from this background queue so it never adds
+            // work to the thread it's diagnosing. A 1-3s stall is long enough
+            // that this single sample lands with high probability on the heavy
+            // render call (the "black screen while scrolling during stream"
+            // and post-send delay share this signature).
             lock.lock()
             let shouldReport = now.timeIntervalSince(lastStutterReport) >= stutterRateLimit
             if shouldReport { lastStutterReport = now }
             lock.unlock()
             if shouldReport {
+                let mainStack = MainThreadStackCapture.capture()
                 HermexLogger.shared.log(
                     type: "stutter",
                     durationMs: elapsed * 1000,
                     screen: screen,
-                    message: "main thread stalled \(Int(elapsed))s"
+                    message: "main thread stalled \(Int(elapsed))s",
+                    extras: ["stack": mainStack]
                 )
             }
         }
