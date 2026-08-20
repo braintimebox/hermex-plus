@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.11 — 2026-08-20
+
+### Fixed
+- **Composer no longer jumps / flashes the "home default" folder + profile bar
+  when scrolling back down or tapping ⬇️.** The composer's compact "reading"
+  chrome (`isComposerChromeCompact`) was driven solely by `isReadingOlderTranscript`,
+  which the scroll path reset whenever the viewport returned near the bottom —
+  so a scroll down or the ⬇️ button silently re-expanded the composer, showing the
+  secondary bar (workspace directory + profile + git) and shifting the whole
+  transcript. Compact chrome is now also gated on `!composerIsFocused`, and the
+  reading flag is cleared only on explicit write intent (composer focus, or send via
+  `prepareTranscriptForExplicitSend`) — never as a side effect of scrolling.
+
 ## 2.0.10 — 2026-08-20
 
 ### Fixed

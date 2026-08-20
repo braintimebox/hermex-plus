@@ -629,6 +629,17 @@ struct ChatView: View {
                     applyInitialComposerFocusPolicyIfNeeded()
                 }
             }
+            .onChange(of: composerIsFocused) {
+                // Focusing the composer is explicit write intent — clear the
+                // "reading older transcript" compact mode so the secondary bar
+                // (workspace dir + profile + git) re-expands only on the user's own
+                // tap, never on scroll/⬇️. Keeps composer state consistent.
+                if composerIsFocused, isReadingOlderTranscript {
+                    withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                        isReadingOlderTranscript = false
+                    }
+                }
+            }
             .onChange(of: showsLiveActivityResponseExcerpts) {
                 viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
             }
@@ -1402,7 +1413,13 @@ struct ChatView: View {
     }
 
     private var isComposerChromeCompact: Bool {
-        isReadingOlderTranscript && !viewModel.messages.isEmpty
+        // Compact chrome is a *reading* mode triggered by scrolling up into older
+        // messages. Focusing the composer (intent to write) and sending always
+        // re-expand it, so the secondary bar (workspace dir + profile + git) only
+        // appears on an explicit write action — never as a side effect of scrolling
+        // back down or tapping ⬇️. Decoupling this from scroll prevents the
+        // "composer jumps / folder+profile flash" when the transcript re-anchors.
+        isReadingOlderTranscript && !composerIsFocused && !viewModel.messages.isEmpty
     }
 
     private var transcriptBottomInsetHeight: CGFloat {
@@ -2222,7 +2239,6 @@ struct ChatView: View {
         }
 
         shouldFollowLatestMessage = true
-        isReadingOlderTranscript = false
         followScrollGeneration += 1
         let generation = followScrollGeneration
 
@@ -2347,13 +2363,15 @@ struct ChatView: View {
             // follow-latest stays off until the user explicitly taps the
             // scroll-to-bottom button (or sends a message), matching how Telegram
             // and chat sites behave: no auto-glue, a manual "↓" button instead.
+            //
+            // NOTE: isReadingOlderTranscript is intentionally NOT reset here.
+            // Resetting it on scroll-to-bottom made the composer chrome re-expand
+            // (secondary bar with workspace dir + profile + git appearing) purely
+            // because the transcript re-anchored — the "composer jumps when I tap ↓"
+            // bug. Reading mode now clears only on explicit write intent (composer
+            // focus / send), keeping the composer stable while scrolling.
             if !isStreaming {
                 shouldFollowLatestMessage = true
-            }
-            if isReadingOlderTranscript {
-                withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                    isReadingOlderTranscript = false
-                }
             }
         } else if !isNearBottom {
             // Scrolled away from the tail — drop follow-latest intent regardless
