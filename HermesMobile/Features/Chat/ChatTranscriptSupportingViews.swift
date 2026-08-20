@@ -150,8 +150,8 @@ struct ChatScrollObserver: UIViewRepresentable {
 
         func detach() {
             observations.removeAll()
-            if let cancelDecelerationObserver {
-                NotificationCenter.default.removeObserver(cancelDecelerationObserver)
+            if let observer = cancelDecelerationObserver {
+                NotificationCenter.default.removeObserver(observer)
                 cancelDecelerationObserver = nil
             }
             lastMetrics = nil
