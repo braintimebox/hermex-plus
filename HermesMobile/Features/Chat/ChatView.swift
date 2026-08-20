@@ -2355,8 +2355,15 @@ struct ChatView: View {
             distanceFromBottom: metrics.distanceFromBottom,
             isStreaming: isStreaming
         )
-        isScrolledNearBottom = isNearBottom
-        isUserInteractingWithScroll = metrics.isUserInteracting
+        // Only assign when the value actually flips — reassigning an identical
+        // Bool still fans a @State write through the whole ChatView body, which
+        // is exactly the per-tick re-render churn this method exists to avoid.
+        if isScrolledNearBottom != isNearBottom {
+            isScrolledNearBottom = isNearBottom
+        }
+        if isUserInteractingWithScroll != metrics.isUserInteracting {
+            isUserInteractingWithScroll = metrics.isUserInteracting
+        }
 
         // Touching the scroll view pauses auto-follow for a short window so
         // streaming layout growth cannot yank the viewport mid-gesture.

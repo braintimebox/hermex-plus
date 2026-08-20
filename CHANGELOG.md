@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.14 — 2026-08-20
+
+### Performance
+- **Scroll metrics no longer re-render the whole chat on every pixel.** The scroll
+  observer now quantizes `distanceFromBottom` to an 8pt grid, and the metrics handler
+  only writes its `@State` flags when they actually flip. On a 120Hz display the old
+  path delivered a metric tick on every sub-point offset change, each one invalidating
+  the entire `ChatView` body — the visible "janky scroll" at 48–64 fps and the 1s
+  main-thread stalls. Threshold behavior (near-bottom 80/160pt, reading-older +64pt
+  hysteresis) is unchanged; only redundant deliveries are dropped.
+
 ## 2.0.13 — 2026-08-20
 
 ### Changed

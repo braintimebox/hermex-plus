@@ -143,7 +143,15 @@ struct ChatScrollObserver: UIViewRepresentable {
 
             let currentOffset = scrollView.contentOffset.y + inset.top
             let maximumOffset = scrollView.contentSize.height - visibleHeight
-            let distanceFromBottom = max(0, maximumOffset - currentOffset)
+            let rawDistance = max(0, maximumOffset - currentOffset)
+            // Quantize the bottom distance so the metrics observer only fires on
+            // a meaningful positional change, not on every sub-point scroll tick.
+            // `distanceFromBottom` drives boolean thresholds (near-bottom at 80/160pt,
+            // reading-older at +64pt hysteresis) that are tens of points apart, so
+            // single-pixel precision buys nothing while paying a full ChatView
+            // re-render per tick on a 120Hz display. Rounding to an 8pt grid lets
+            // the equality guard below drop ~90% of redundant metric deliveries.
+            let distanceFromBottom = (rawDistance / 8).rounded(.down) * 8
             let metrics = ChatScrollMetrics(
                 distanceFromBottom: distanceFromBottom,
                 isUserInteracting: scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
