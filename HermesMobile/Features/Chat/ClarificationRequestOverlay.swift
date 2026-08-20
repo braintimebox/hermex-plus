@@ -96,25 +96,32 @@ struct ClarificationRequestCard: View {
     }
 
     private var question: some View {
-        Text(prompt.question)
-            .font(.subheadline)
-            .foregroundStyle(.primary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(questionBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.primary.opacity(0.06), lineWidth: 1)
-            )
+        ScrollView(.vertical) {
+            Text(prompt.question)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 220)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(questionBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 
     private var choicesList: some View {
-        VStack(spacing: 8) {
-            ForEach(prompt.choices, id: \.self) { choice in
-                choiceButton(choice)
+        ScrollView(.vertical) {
+            VStack(spacing: 8) {
+                ForEach(prompt.choices, id: \.self) { choice in
+                    choiceButton(choice)
+                }
             }
         }
+        .frame(maxHeight: 240)
     }
 
     private var responseField: some View {

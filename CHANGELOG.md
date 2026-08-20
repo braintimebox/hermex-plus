@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.16 — 2026-08-20
+
+### Fixed
+- **Clarification card no longer expands to fill the whole screen.** When the
+  agent asked a long clarification question (or offered many choices), the card
+  grew without bound and covered the rest of the app. The question text and the
+  choices list are now capped in height (each scrolls internally), so the card
+  stays compact and the chat underneath stays reachable.
+
 ## 2.0.15 — 2026-08-20
 
 ### Fixed
