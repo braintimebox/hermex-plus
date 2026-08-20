@@ -278,3 +278,48 @@ struct SkillLinkedFileResponse: Decodable, Equatable {
     let content: String?
     let path: String?
 }
+
+/// Read-only plugin visibility response from `GET /api/plugins` (hermes-webui).
+/// The server surfaces plain user-facing metadata for each loaded plugin plus
+/// the lifecycle hooks it registers; no source paths or callback internals.
+struct PluginsResponse: Decodable, Equatable {
+    let plugins: [PluginSummary]?
+    let empty: Bool?
+    let supportedHooks: [String]?
+    let readOnly: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case plugins
+        case empty
+        case supportedHooks = "supported_hooks"
+        case readOnly = "read_only"
+    }
+}
+
+/// One plugin row as returned by `/api/plugins`. All fields optional for
+/// tolerant decoding (server may add/rename fields).
+struct PluginSummary: Decodable, Equatable, Identifiable {
+    var id: String { key ?? name ?? UUID().uuidString }
+
+    let name: String?
+    let key: String?
+    let version: String?
+    let description: String?
+    let enabled: Bool?
+    let kind: String?
+    let activation: String?
+    let hooks: [String]?
+    let isActiveProvider: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case key
+        case version
+        case description
+        case enabled
+        case kind
+        case activation
+        case hooks
+        case isActiveProvider = "is_active_provider"
+    }
+}

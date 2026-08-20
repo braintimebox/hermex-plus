@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.13 — 2026-08-20
+
+### Changed
+- **Plugins / Hooks screen now shows live server data** instead of placeholders.
+  The screen fetches the read-only `GET /api/plugins` endpoint (hermes-webui),
+  which returns each loaded plugin's name, version, description, activation state,
+  and the lifecycle hooks it registers — plus the `supported_hooks` list. Plugins
+  render one row each (top); Hooks render grouped by hook name with the plugins
+  that register each (below). Loading/error/empty states handled.
+
 ## 2.0.12 — 2026-08-20
 
 ### Fixed

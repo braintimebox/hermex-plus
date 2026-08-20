@@ -16,5 +16,9 @@ extension APIClient {
             body: ToggleSkillRequest(name: name, enabled: enabled)
         )
     }
+
+    func plugins() async throws -> PluginsResponse {
+        try await send(endpoint: .plugins, method: "GET")
+    }
 }
 

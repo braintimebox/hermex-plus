@@ -479,59 +479,269 @@ extension String: @retroactive Identifiable {
     public var id: String { self }
 }
 
-/// Placeholder screen for server plugins and hooks — listed in two visual
-/// sections (Plugins on top, Hooks below) with no live data yet. The Hermes
-/// server does not currently expose `/api/plugins` or `/api/hooks`, so both
-/// lists render as empty states; wiring real endpoints later keeps the same
-/// two-section layout.
+/// Two-section screen: Plugins (top) and Hooks (below), fed live from the
+/// Hermes server's read-only `GET /api/plugins` endpoint. Plugins render one
+/// row each (name, version, kind/activation badge, description). Hooks are the
+/// union of lifecycle hooks registered across plugins, grouped by hook name.
+@MainActor
 struct PluginsHooksView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                section(
-                    title: "Plugins",
-                    icon: "puzzlepiece.extension",
-                    emptyText: "Plugins from the Hermes server will appear here."
-                )
+    let server: URL
+    let onAPIError: (Error) -> Void
 
-                section(
-                    title: "Hooks",
-                    icon: "link",
-                    emptyText: "Hooks from the Hermes server will appear here."
-                )
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 32)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(Color(.systemBackground))
-        .navigationTitle("Plugins / Hooks")
-        .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
+    @State private var viewModel: PluginsHooksViewModel
+
+    init(server: URL, onAPIError: @escaping (Error) -> Void) {
+        self.server = server
+        self.onAPIError = onAPIError
+        _viewModel = State(initialValue: PluginsHooksViewModel(server: server))
     }
 
-    private func section(title: String, icon: String, emptyText: String) -> some View {
+    var body: some View {
+        content
+            .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
+            .navigationTitle("Plugins / Hooks")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await load() }
+                    } label: {
+                        if viewModel.isLoading {
+                            ProgressView()
+                        } else {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(viewModel.isLoading)
+                }
+            }
+            .task {
+                await load()
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if viewModel.isLoading && viewModel.plugins.isEmpty {
+            ProgressView("Loading plugins...")
+        } else if let error = viewModel.errorMessage, viewModel.plugins.isEmpty {
+            ContentUnavailableView {
+                Label("Could Not Load Plugins", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Try Again") { Task { await load() } }
+            }
+        } else if viewModel.plugins.isEmpty {
+            ContentUnavailableView {
+                Label("No Plugins", systemImage: "puzzlepiece.extension")
+            } description: {
+                Text("Plugins and hooks from the Hermes server will appear here.")
+            }
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    pluginsSection
+                    hooksSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .refreshable {
+                await load()
+            }
+            .background(Color(.systemBackground))
+        }
+    }
+
+    private var pluginsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon)
+            Label("Plugins", systemImage: "puzzlepiece.extension")
                 .font(.headline)
                 .foregroundStyle(.primary)
 
             VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    Image(systemName: "tray")
-                        .foregroundStyle(.tertiary)
-                    Text(emptyText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(Array(viewModel.plugins.enumerated()), id: \.element.id) { index, plugin in
+                    PluginRow(plugin: plugin)
+                    if index < viewModel.plugins.count - 1 {
+                        Divider()
+                    }
                 }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 12)
             }
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color(.secondarySystemBackground))
             )
         }
+    }
+
+    @ViewBuilder
+    private var hooksSection: some View {
+        let grouped = viewModel.groupedHooks
+        if !grouped.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Hooks", systemImage: "link")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(grouped.enumerated()), id: \.element.hook) { index, entry in
+                        HookRow(hook: entry.hook, providers: entry.providers)
+                        if index < grouped.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                )
+            }
+        }
+    }
+
+    private func load() async {
+        await viewModel.load()
+        if let error = viewModel.lastError {
+            onAPIError(error)
+        }
+    }
+}
+
+/// Aggregated hook → list of plugin names that register it.
+struct HookEntry: Identifiable {
+    let hook: String
+    let providers: [String]
+    var id: String { hook }
+}
+
+@MainActor
+@Observable
+final class PluginsHooksViewModel {
+    private(set) var plugins: [PluginSummary] = []
+    private(set) var supportedHooks: [String] = []
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+    private(set) var lastError: Error?
+
+    private let client: APIClient
+
+    init(server: URL) {
+        client = APIClient(baseURL: server)
+    }
+
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        lastError = nil
+        defer { isLoading = false }
+
+        do {
+            let response = try await client.plugins()
+            plugins = response.plugins ?? []
+            supportedHooks = response.supportedHooks ?? []
+        } catch {
+            lastError = error
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Hooks grouped by name (server's `supported_hooks` order first), each
+    /// listing the plugins that register it. A plugin's `hooks` array carries
+    /// the names it registers.
+    var groupedHooks: [HookEntry] {
+        var order: [String] = supportedHooks
+        var byHook: [String: [String]] = [:]
+
+        for plugin in plugins {
+            let pluginName = plugin.name ?? plugin.key ?? plugin.id
+            for hook in plugin.hooks ?? [] {
+                let trimmed = hook.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                if !byHook.keys.contains(trimmed) {
+                    byHook[trimmed] = []
+                    if !order.contains(trimmed) {
+                        order.append(trimmed)
+                    }
+                }
+                byHook[trimmed, default: []].append(pluginName)
+            }
+        }
+
+        return order.compactMap { hook in
+            guard let providers = byHook[hook] else { return nil }
+            return HookEntry(hook: hook, providers: providers.sorted())
+        }
+    }
+}
+
+private struct PluginRow: View {
+    let plugin: PluginSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(plugin.name ?? plugin.key ?? "Unnamed Plugin")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if let version = plugin.version, !version.isEmpty {
+                    Text("v\(version)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                activationBadge
+            }
+
+            if let description = plugin.description, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var activationBadge: some View {
+        let activation = plugin.activation ?? (plugin.enabled == true ? "enabled" : "disabled")
+        Text(activation.capitalized)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(activation == "enabled" || activation == "provider" ? Color.green : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Color(.tertiarySystemFill), in: Capsule())
+    }
+}
+
+private struct HookRow: View {
+    let hook: String
+    let providers: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(hook)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            if !providers.isEmpty {
+                Text(providers.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

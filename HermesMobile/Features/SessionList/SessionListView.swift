@@ -484,7 +484,7 @@ struct SessionListView: View {
             case .skills:
                 SkillsView(server: server, onAPIError: authManager.handleAPIError)
             case .pluginsHooks:
-                PluginsHooksView()
+                PluginsHooksView(server: server, onAPIError: authManager.handleAPIError)
             case .memory:
                 MemoryView(server: server, onAPIError: authManager.handleAPIError)
             case .insights:
