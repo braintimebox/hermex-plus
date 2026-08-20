@@ -2183,6 +2183,12 @@ struct ChatView: View {
         // response is streaming so the tap lands immediately instead of racing
         // the short follow animations already chasing incoming tokens.
         //
+        // Cancel any in-flight deceleration first: while the user's flick is still
+        // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the ↓ button
+        // appeared dead until the scroll fully settled. The observer re-pins the
+        // offset in place (no jump), then the programmatic scroll below takes over.
+        NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
+        //
         // When idle, target the last *message* (not the 1pt bottom marker): the
         // marker sits above the composer inset, so anchoring `.bottom` on it left
         // the viewport a full composer-height short of the newest message — the

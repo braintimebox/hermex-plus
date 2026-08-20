@@ -82,6 +82,7 @@ struct ChatScrollObserver: UIViewRepresentable {
 
         private weak var scrollView: UIScrollView?
         private var observations: [NSKeyValueObservation] = []
+        private var cancelDecelerationObserver: NSObjectProtocol?
         private var metricContext: MetricContext
         private var lastMetrics: ChatScrollMetrics?
         private var pendingMetrics: ChatScrollMetrics?
@@ -123,11 +124,36 @@ struct ChatScrollObserver: UIViewRepresentable {
                 }
             ]
 
+            // Programmatic scroll commands (the ↓ button) must pre-empt an active
+            // deceleration, otherwise `ScrollViewProxy.scrollTo` is silently ignored
+            // until the user's flick fully stops. Listen for the explicit request and
+            // cancel the inertia by re-pinning to the current offset with no animation.
+            cancelDecelerationObserver = NotificationCenter.default.addObserver(
+                forName: .hermexCancelTranscriptInertia,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.stopDeceleration()
+            }
+
             reportMetrics(delivery: delivery)
+        }
+
+        /// Kills any in-flight deceleration so the next programmatic `scrollTo`
+        /// takes effect immediately instead of being ignored mid-flick. Re-pinning to
+        /// the current offset with no animation cancels the UIScrollView's own
+        /// momentum in place — no jump, no visual change, just "stop coasting".
+        func stopDeceleration() {
+            guard let scrollView, scrollView.isDecelerating else { return }
+            scrollView.setContentOffset(scrollView.contentOffset, animated: false)
         }
 
         func detach() {
             observations.removeAll()
+            if let cancelDecelerationObserver {
+                NotificationCenter.default.removeObserver(cancelDecelerationObserver)
+                cancelDecelerationObserver = nil
+            }
             lastMetrics = nil
             pendingMetrics = nil
             hasScheduledMetricDelivery = false
@@ -701,4 +727,12 @@ struct PinnedLocalNoticeStack: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(notices.joined(separator: "\n"))
     }
+}
+
+extension Notification.Name {
+    /// Posted on the main queue when a programmatic scroll (the ↓ button) is about
+    /// to run, so the transcript's underlying UIScrollView can cancel any active
+    /// deceleration first. Without this, `ScrollViewProxy.scrollTo` is ignored while
+    /// the user's flick is still coasting — the "↓ does nothing until scroll stops".
+    static let hermexCancelTranscriptInertia = Notification.Name("hermex.cancelTranscriptInertia")
 }

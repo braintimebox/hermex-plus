@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.15 — 2026-08-20
+
+### Fixed
+- **↓ button now responds immediately, even mid-flick.** While the transcript was
+  still decelerating from a user flick, `ScrollViewProxy.scrollTo` was silently
+  ignored, so the button appeared dead until the scroll fully settled. The scroll
+  observer now cancels in-flight deceleration (re-pins the current offset with no
+  animation) on demand, so the tap scrolls right away.
+
 ## 2.0.14 — 2026-08-20
 
 ### Performance
