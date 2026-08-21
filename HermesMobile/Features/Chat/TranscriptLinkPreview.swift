@@ -1,6 +1,16 @@
 import Foundation
 
 enum TranscriptLinkPreviewExtractor {
+    /// A web URL, captured in full (scheme through host/path), for link previews.
+    /// Used instead of `NSDataDetector` (DataDetectorsCore): doing the detector's
+    /// heuristic whole-text scan on the main thread per message per render caused
+    /// multi-second `DDScannerScanQuery` freezes during streaming (see
+    /// `TranscriptLinkPreviewEligibility` callers in `MessageBubbleView`, which
+    /// run in body evaluation). A lightweight regex is a deterministic O(line)
+    /// match and preserves the "first plausible web URL" contract.
+    private static let webURLPattern =
+        #"https?:\/\/[^\s<>"'\u{2028}\u{2029}\[\]\{\}\\]"#
+
     static func firstWebURL(in text: String) -> URL? {
         for segment in searchableSegments(in: text) {
             if let url = firstWebURL(inSearchableSegment: segment) {
@@ -42,22 +52,27 @@ enum TranscriptLinkPreviewExtractor {
     }
 
     private static func firstWebURL(inSearchableSegment segment: String) -> URL? {
-        guard let linkDetector else { return nil }
-
-        let range = NSRange(segment.startIndex..<segment.endIndex, in: segment)
-        let matches = linkDetector.matches(in: segment, options: [], range: range)
-
-        for match in matches {
-            guard let url = match.url,
-                  isWebURL(url)
-            else {
-                continue
-            }
-
-            return url
+        guard let range = segment.range(
+            of: webURLPattern,
+            options: [.regularExpression, .caseInsensitive]
+        ) else {
+            return nil
         }
 
-        return nil
+        let raw = String(segment[range])
+        guard var url = URL(string: raw) else { return nil }
+
+        // Trim trailing punctuation that regex greedily swallowed (e.g. a period
+        // closing a sentence right after the URL path). DataDetector did this
+        // weighting internally; we do it explicitly and cheaply.
+        while url.host?.isEmpty != false || url.path?.last.flatMap({ ".,;:!?".contains($0) }) == true {
+            guard raw.count > "https://".count else { break }
+            let trimmedRaw = String(raw.dropLast())
+            guard let trimmedURL = URL(string: trimmedRaw) else { break }
+            url = trimmedURL
+        }
+
+        return isWebURL(url) ? url : nil
     }
 
     private static func nonInlineCodeSegments(in line: String) -> [String] {
@@ -212,10 +227,6 @@ enum TranscriptLinkPreviewExtractor {
 
         return url.host?.isEmpty == false
     }
-
-    private static let linkDetector = try? NSDataDetector(
-        types: NSTextCheckingResult.CheckingType.link.rawValue
-    )
 }
 
 enum TranscriptLinkPreviewEligibility {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.19 — 2026-08-21
+
+### Fixed
+- **Multi-second freeze from link-preview detection eliminated.** `TranscriptLinkPreviewExtractor`
+  used `NSDataDetector` (`DataDetectorsCore`) to find the first URL in each finished
+  message, scanning the full text on the main thread every time a bubble re-evaluated
+  during scroll or after a stream ended — the profiler stack was
+  `DDScannerScanQuery → CFArrayGetCount` blocking the main thread for ~3s. Replaced with
+  a lightweight deterministic web-URL regex that returns the same "first plausible web
+  link" without the heavy heuristic scanner, removing the stall while keeping previews.
+
 ## 2.0.18 — 2026-08-21
 
 ### Fixed
