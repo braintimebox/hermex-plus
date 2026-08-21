@@ -2195,7 +2195,18 @@ struct ChatView: View {
         // "↓ button goes to *almost* bottom" bug. Anchoring the last message puts
         // it flush above the composer. While streaming, keep the marker target so
         // the glue-to-bottom growth still lands on the actual content tail.
-        if viewModel.activeStreamID == nil, let latestTranscriptMessageID {
+        //
+        // Robustness: `latestTranscriptMessageID` is the last message's
+        // *positional* renderID. After a structural shift (compaction, pagination,
+        // cache-first reconcile) that id may not be present in the rendered
+        // transcript, or the row may not be mounted by the LazyVStack — and
+        // `proxy.scrollTo` on an absent id is silently ignored, which read as a
+        // "dead" ↓ button. Guard against it: only target the message when its
+        // renderID is actually in the current transcript; otherwise fall back to
+        // the always-mounted bottom marker so the tap always scrolls.
+        if viewModel.activeStreamID == nil,
+           let latestTranscriptMessageID,
+           displayedTranscriptMessages.contains(where: { $0.renderID == latestTranscriptMessageID }) {
             scrollToLatestTranscriptMessage(proxy, animated: true, isUserInitiated: true)
         } else {
             scrollToLatestContent(

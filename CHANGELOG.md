@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.17 — 2026-08-21
+
+### Fixed
+- **↓ button no longer dead after compaction/pagination.** The button targeted the
+  last message's *positional* renderID; after a structural shift (compaction,
+  loading older messages) that id could vanish from the scroll tree and
+  `proxy.scrollTo` was silently ignored — the tap did nothing. The button now
+  verifies the target renderID is actually present in the current transcript and
+  falls back to the always-mounted bottom marker otherwise, so the tap always
+  scrolls to the latest content.
+
 ## 2.0.16 — 2026-08-20
 
 ### Fixed
