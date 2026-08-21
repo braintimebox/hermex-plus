@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.19 — 2026-08-21
+## 2.1.0 — 2026-08-21
 
 ### Fixed
 - **Multi-second freeze from link-preview detection eliminated.** `TranscriptLinkPreviewExtractor`
