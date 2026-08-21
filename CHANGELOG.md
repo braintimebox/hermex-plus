@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.18 — 2026-08-21
+
+### Fixed
+- **Streaming text layout freeze & black screen elimination.** `StreamingTextFadeTailSplitter`
+  previously executed an unmemoized O(N) line boundary scan across the entire
+  message 3+ times per token during active streaming (body eval, `advanceFadeWindow`,
+  and `anchorFadeWindowAtCurrentBlock`), repeatedly starving the main thread inside
+  CoreText measurement and rendering (producing 1-2s UI stalls and black screens).
+  Boundary detection is now memoized by text content using safe portable UTF-8 byte
+  offsets, drastically cutting main-thread re-layout work and delivering smooth,
+  non-blocking rendering on 120Hz displays without artificial pacing delays.
+
 ## 2.0.17 — 2026-08-21
 
 ### Fixed

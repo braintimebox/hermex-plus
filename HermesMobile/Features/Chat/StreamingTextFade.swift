@@ -288,7 +288,58 @@ enum StreamingTextFadeTailSplitter {
         let boundaryCount: Int
     }
 
+    /// Memoized last boundary scan. During streaming, `split` is called on a
+    /// freshly-appended `text` every token, and the expensive part is the O(N)
+    /// line scan that finds block boundaries — it also runs *several* times per
+    /// token (body evaluation + `advanceFadeWindow` + `anchorFadeWindowAtCurrentBlock`,
+    /// plus `StreamingTextFadeWindow` on the frame path). `firstFadeOrdinal`
+    /// changes every token, so caching the full result on that key would never
+    /// hit; instead we memoize only the boundary list (a pure function of the
+    /// text) and re-slice the cheap head/window tail each call. This removes the
+    /// repeated main-thread line scan that feeds the CoreText-backed black-screen
+    /// stall on long streams.
+    ///
+    /// Boundaries are stored as UTF-8 byte offsets, NOT `String.Index` — the
+    /// latter is tied to a specific `String` instance's representation and is
+    /// not safely reusable across distinct instances that merely compare equal
+    /// by value. Offsets convert back to `String.Index` via `String.Index(utf8Offset:in:)`,
+    /// which is always valid because the memo key is the exact text content and
+    /// any line boundary falls on a character start in that content.
+    private static let cacheLock = NSLock()
+    private static var cachedBoundariesText: String?
+    private static var cachedBoundaries: [Int]?
+
     static func split(_ text: String, firstFadeOrdinal: Int) -> BlockSplit {
+        let boundaries = scanBoundaries(text)
+        return slice(text, boundaries: boundaries, firstFadeOrdinal: firstFadeOrdinal)
+    }
+
+    /// Line-scan for block boundaries, memoized on the exact text. Returns the
+    /// boundaries as UTF-8 byte offsets, portable across equal-valued strings.
+    private static func scanBoundaries(_ text: String) -> [String.Index] {
+        cacheLock.lock()
+        if let cachedBoundariesText, cachedBoundariesText == text, let cachedBoundaries {
+            let utf8View = text.utf8
+            let start = text.startIndex
+            let indices = cachedBoundaries.compactMap { offset -> String.Index? in
+                utf8View.index(start, offsetBy: offset, limitedBy: text.endIndex)
+            }
+            cacheLock.unlock()
+            return indices
+        }
+        cacheLock.unlock()
+
+        let result = computeBoundaries(text)
+
+        cacheLock.lock()
+        cachedBoundariesText = text
+        let start = text.startIndex
+        cachedBoundaries = result.map { text.utf8.distance(from: start, to: $0) }
+        cacheLock.unlock()
+        return result
+    }
+
+    private static func computeBoundaries(_ text: String) -> [String.Index] {
         var boundaries: [String.Index] = []
         // A completed item line's boundary is provisional: it vanishes if the
         // next line turns out to be indented (a nested child or continuation
@@ -333,6 +384,18 @@ enum StreamingTextFadeTailSplitter {
             boundaries.append(pending)
         }
 
+        return boundaries
+    }
+
+    /// Slices boundaries into the solid head plus the fade-window blocks. Cheap
+    /// relative to the boundary scan (the active tail is short once stable
+    /// chunks are sealed away), and depends on `firstFadeOrdinal` which shifts
+    /// every token — so it is intentionally not memoized.
+    private static func slice(
+        _ text: String,
+        boundaries: [String.Index],
+        firstFadeOrdinal: Int
+    ) -> BlockSplit {
         // firstFadeOrdinal == boundaryCount + 1 (e.g. Int.max for Reduce
         // Motion) puts everything, including the current block, in the head.
         let firstKept = max(0, min(firstFadeOrdinal, boundaries.count + 1))
