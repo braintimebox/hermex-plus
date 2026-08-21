@@ -2189,23 +2189,15 @@ struct ChatView: View {
         // offset in place (no jump), then the programmatic scroll below takes over.
         NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
         //
-        // When idle, target the last *message* (not the 1pt bottom marker): the
-        // marker sits above the composer inset, so anchoring `.bottom` on it left
-        // the viewport a full composer-height short of the newest message — the
-        // "↓ button goes to *almost* bottom" bug. Anchoring the last message puts
-        // it flush above the composer. While streaming, keep the marker target so
-        // the glue-to-bottom growth still lands on the actual content tail.
-        //
-        // Robustness: `latestTranscriptMessageID` is the last message's
-        // *positional* renderID. After a structural shift (compaction, pagination,
-        // cache-first reconcile) that id may not be present in the rendered
-        // transcript, or the row may not be mounted by the LazyVStack — and
-        // `proxy.scrollTo` on an absent id is silently ignored, which read as a
-        // "dead" ↓ button. Guard against it: only target the message when its
-        // renderID is actually in the current transcript; otherwise fall back to
-        // the always-mounted bottom marker so the tap always scrolls.
-        if viewModel.activeStreamID == nil,
-           let latestTranscriptMessageID,
+        // Target selection: always prefer the LAST MOUNTED MESSAGE over the 1pt
+        // `bottomAnchorID`. Anchoring the marker (sitting at the very bottom of the
+        // content, growing upward while a response streams) forces a re-layout of
+        // the whole streaming tail on the main thread — which, combined with the
+        // per-token MarkdownUI layout, is what produced the black screen when the
+        // ↓ button is tapped mid-stream. Scrolling to the last mounted message is
+        // equivalent UX (the newest content is at its bottom) and avoids re-anchoring
+        // the growing tail. Fall back to the marker only when no message is mounted.
+        if let latestTranscriptMessageID,
            displayedTranscriptMessages.contains(where: { $0.renderID == latestTranscriptMessageID }) {
             scrollToLatestTranscriptMessage(proxy, animated: true, isUserInitiated: true)
         } else {

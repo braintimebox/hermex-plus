@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.0 — 2026-08-21
+
+### Fixed
+- **↓ button mid-stream now targets the last mounted message, not the growing
+  bottom marker.** Previously, tapping ↓ while a response streamed anchored the
+  1pt `bottomAnchorID` at the bottom of the content; since that marker grows
+  upward as the response appends, the tap forced a main-thread re-layout of the
+  streaming tail (compounded by per-token MarkdownUI layout) — producing the
+  black screen. The button now always prefers the last mounted transcript message
+  (falling back to the marker only when nothing is mounted), so mid-stream taps
+  land immediately and do not re-anchor the growing tail.
+
 ## 2.1.0 — 2026-08-21
 
 ### Fixed
