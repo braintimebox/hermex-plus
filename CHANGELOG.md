@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0 — 2026-08-21
+
+### Fixed
+- **↓ button now rides to the true bottom during streaming.** A single `scrollTo`
+  towards the last message lands at that message's height *at call time*; as the
+  response keeps appending the tail grows past it, leaving the viewport short
+  ("↓ not always to the bottom"). A user-initiated ↓ tap now re-pins to the target
+  a few times while the stream continues (bounded, ~50ms apart — not per-token,
+  which caused the earlier jitter), so the ride reaches the newest token.
+
 ## 2.2.0 — 2026-08-21
 
 ### Fixed
