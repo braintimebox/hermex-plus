@@ -65,7 +65,7 @@ enum TranscriptLinkPreviewExtractor {
         // Trim trailing punctuation that regex greedily swallowed (e.g. a period
         // closing a sentence right after the URL path). DataDetector did this
         // weighting internally; we do it explicitly and cheaply.
-        while url.host?.isEmpty != false || url.path?.last.flatMap({ ".,;:!?".contains($0) }) == true {
+        while url.host?.isEmpty != false || url.path.last.flatMap({ ".,;:!?".contains($0) }) == true {
             guard raw.count > "https://".count else { break }
             let trimmedRaw = String(raw.dropLast())
             guard let trimmedURL = URL(string: trimmedRaw) else { break }
