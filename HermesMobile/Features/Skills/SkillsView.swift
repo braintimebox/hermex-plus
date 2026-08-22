@@ -611,28 +611,15 @@ struct PluginsHooksView: View {
             }
     }
 
-    /// Single-line breadcrumb title in the nav bar: `Plugins / Hooks › Personal`
-    /// (or `› Built-in`). One line, not two — title primary, muted "›" + bucket.
-    /// Only the first visible bucket is shown.
+    /// Simple single-line nav-bar title. The origin breadcrumbs (`Plugins ›
+    /// Personal` etc.) now live as section headers inside the list, so the top
+    /// bar just names the screen.
     private var pluginsTitleHeader: some View {
-        HStack(spacing: 5) {
-            Text("Plugins / Hooks")
-                .foregroundStyle(.primary)
-            Text("›")
-                .foregroundStyle(.tertiary)
-            Text(originSubtitle)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-        }
-        .font(.headline)
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-    }
-
-    private var originSubtitle: String {
-        let titles = viewModel.originGroupedPlugins.map(\.title)
-        guard let first = titles.first else { return "" }
-        return first
+        Text("Plugins / Hooks")
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     @ViewBuilder
@@ -676,8 +663,8 @@ struct PluginsHooksView: View {
         }
     }
 
-    /// One plugin origin bucket (Personal / Built-in). Collapsible: a thin
-    /// native caption header (gray UPPERCASE + chevron) toggles the rows.
+    /// One plugin origin bucket (Personal / Built-in). Collapsible, with a
+    /// breadcrumb header reading `Plugins › Personal` / `Plugins › Built-in`.
     @ViewBuilder
     private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
         let isCollapsed = collapsedSections.contains(section.title)
@@ -692,10 +679,13 @@ struct PluginsHooksView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
+                    Text("Plugins")
+                        .foregroundStyle(.secondary)
+                    Text("›")
+                        .foregroundStyle(.tertiary)
                     Text(section.title)
-                        .textCase(.uppercase)
-                        .font(.caption.weight(.semibold))
+                        .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
 
                     Spacer(minLength: 0)
@@ -705,6 +695,7 @@ struct PluginsHooksView: View {
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isCollapsed ? 90 : 0))
                 }
+                .font(.caption.weight(.semibold))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
