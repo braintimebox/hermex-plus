@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.4 — 2026-08-22
+
+### Changed
+- **Personal / Built-in sections are now visually pinned and separated.** Each
+  origin header sticks to the top while its section scrolls (sticky) and carries
+  a bold divider, so the Personal → Built-in boundary stays legible even in a
+  long flat skills list. Plugins/Hooks gets the same distinct Personal/Built-in
+  sub-headers. The collapsible toggle (from 2.3.3) now drives the same sticky
+  headers — tap to collapse/expand.
+
 ## 2.3.3 — 2026-08-22
 
 ### Added

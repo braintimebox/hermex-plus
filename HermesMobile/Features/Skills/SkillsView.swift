@@ -83,9 +83,13 @@ struct SkillsView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
+                LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
                     ForEach(filteredSections, id: \.title) { section in
-                        originSection(section)
+                        Section {
+                            originSectionContent(section)
+                        } header: {
+                            originSectionHeader(section.title)
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -114,31 +118,54 @@ struct SkillsView: View {
         }
     }
 
-    /// One origin section (Personal / Built-in). When the collapsible feature
-    /// is on it renders as a `DisclosureGroup` — Personal expanded, Built-in
-    /// collapsed by default, tappable header; off → always expanded (flat).
-    @ViewBuilder
-    private func originSection(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
-        if collapsibleSections {
-            DisclosureGroup(isExpanded: Binding(
-                get: { expandedSections[section.title] ?? initialExpanded(section.title) },
-                set: { expandedSections[section.title] = $0 }
-            )) {
-                sectionGroups(section.groups)
-                    .padding(.top, 8)
-            } label: {
-                Text(section.title)
-                    .font(.title3.weight(.semibold))
+    /// Sticky, visually distinct header for one origin section (Personal / Built-in).
+    /// Always pinned while its section scrolls; carries a bold divider so the
+    /// Personal→Built-in boundary is obvious in a long flat list. When the
+    /// collapsible feature is on, tapping the header toggles the section.
+    private func originSectionHeader(_ title: String) -> some View {
+        let isExpanded = expandedSections[title] ?? initialExpanded(title)
+
+        return Button {
+            guard collapsibleSections else { return }
+            expandedSections[title] = !isExpanded
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(.primary)
+
+                Spacer(minLength: 0)
+
+                if collapsibleSections {
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemBackground))
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            // Bold boundary divider separating the two origin sections.
+            Rectangle()
+                .fill(Color(.separator))
+                .frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func originSectionContent(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
+        if collapsibleSections && !(expandedSections[section.title] ?? initialExpanded(section.title)) {
+            EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 16) {
-                Text(section.title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 4)
                 sectionGroups(section.groups)
             }
+            .padding(.top, 8)
         }
     }
 
@@ -594,8 +621,18 @@ struct PluginsHooksView: View {
             }
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    pluginsSection
+                LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
+                                pluginOriginSection(section)
+                            }
+                        }
+                    } header: {
+                        pluginsHeader
+                    }
+
+                    hooksHeader
                     hooksSection
                 }
                 .padding(.horizontal, 20)
@@ -607,6 +644,29 @@ struct PluginsHooksView: View {
                 await load()
             }
             .background(Color(.systemBackground))
+        }
+    }
+
+    private var pluginsHeader: some View {
+        Label("Plugins", systemImage: "puzzlepiece.extension")
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private var hooksHeader: some View {
+        if !viewModel.groupedHooks.isEmpty {
+            Label("Hooks", systemImage: "link")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.systemBackground))
         }
     }
 
@@ -622,30 +682,38 @@ struct PluginsHooksView: View {
         }
     }
 
-    /// One plugins origin bucket (Personal / Built-in). Collapsible when the
+    /// One plugins origin bucket (Personal / Built-in): a visually distinct
+    /// header (bold + divider) over its rows. Collapsible via tap when the
     /// feature is on — Personal expanded, Built-in collapsed by default.
     @ViewBuilder
     private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
-        let rows = pluginRows(section.plugins)
+        let isExpanded = expandedSections[section.title] ?? initialExpanded(section.title)
 
-        if collapsibleSections {
-            DisclosureGroup(isExpanded: Binding(
-                get: { expandedSections[section.title] ?? initialExpanded(section.title) },
-                set: { expandedSections[section.title] = $0 }
-            )) {
-                rows.padding(.top, 8)
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                guard collapsibleSections else { return }
+                expandedSections[section.title] = !isExpanded
             } label: {
-                Text(section.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(section.title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 0)
+
+                    if collapsibleSections {
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                    }
+                }
+                .padding(.horizontal, 4)
             }
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(section.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-                rows
+            .buttonStyle(.plain)
+
+            if !collapsibleSections || isExpanded {
+                pluginRows(section.plugins)
             }
         }
     }
