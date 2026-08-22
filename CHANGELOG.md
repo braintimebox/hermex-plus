@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.8 — 2026-08-22
+
+### Fixed
+- **Resolved the memory-overflow freezes ("hang until restart").** Both
+  in-memory decoded-image caches — `TranscriptMediaImageCache` (transcript
+  media) and `AttachmentImageCache` (bubble attachments) — grew without bound
+  as `[Key: UIImage]` dictionaries, retaining every decoded image for the
+  app's lifetime. On a media-heavy chat this drove the footprint to ~1.2 GB,
+  past the iOS Jetsam limit, producing the long freezes that only a restart
+  cleared. Both now use `NSCache` with a ~40 MB cost cap and a 60-item count
+  limit, so they self-evict under memory pressure and never exceed a bounded
+  worst case. Request deduplication (the `inFlight` map) is preserved.
+
 ## 2.3.7 — 2026-08-22
 
 ### Changed

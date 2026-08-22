@@ -595,8 +595,23 @@ private struct TranscriptMediaUnavailableChip: View {
 private actor TranscriptMediaImageCache {
     static let shared = TranscriptMediaImageCache()
 
-    private var cache: [TranscriptMediaImageCacheKey: UIImage] = [:]
+    /// Bounded decoded-image cache. `NSCache` self-evicts under memory pressure
+    /// (which is exactly what a media-heavy transcript needs to survive the
+    /// Jetsam limit) and the explicit `totalCostLimit`/`countLimit` cap the
+    /// worst case so a long session can't accumulate every decoded `UIImage`
+    /// in memory — the unbounded `[Key: UIImage]` dictionary this replaced was
+    /// the driver of the app's 1.2 GB footprint and the resulting "hang until
+    /// restart" freezes.
+    private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [TranscriptMediaImageCacheKey: Task<UIImage?, Never>] = [:]
+
+    init() {
+        // ~40 MB of decoded pixels and a hard row cap. Decoded still frames are
+        // the expensive allocation, so cap cost (bytes) primarily; the count
+        // floor is a backstop against many tiny images.
+        cache.totalCostLimit = 40 * 1_024 * 1_024
+        cache.countLimit = 60
+    }
 
     func image(
         for reference: TranscriptMediaReference,
@@ -604,7 +619,7 @@ private actor TranscriptMediaImageCache {
         loadMediaImage: @escaping (TranscriptMediaReference) async -> Data?
     ) async -> UIImage? {
         let key = TranscriptMediaImageCacheKey(namespace: cacheNamespace, reference: reference)
-        if let cached = cache[key] {
+        if let cached = cache.object(forKey: key.nsKey) {
             return cached
         }
 
@@ -624,7 +639,10 @@ private actor TranscriptMediaImageCache {
         inFlight[key] = nil
 
         if let image {
-            cache[key] = image
+            // Cost = decoded byte size (pixel bytes), a fair proxy for the
+            // memory this UIImage actually occupies.
+            let bytes = image.size.width * image.size.height * 4
+            cache.setObject(image, forKey: key.nsKey, cost: Int(bytes))
         }
         return image
     }
@@ -637,6 +655,13 @@ struct TranscriptMediaImageCacheKey: Hashable {
     init(namespace: String, reference: TranscriptMediaReference) {
         self.namespace = namespace
         referenceID = reference.id
+    }
+
+    /// Stable NSString key for `NSCache`. `String` already bridges to
+    /// `NSString`, but a dedicated computed property keeps the two stores in
+    /// lockstep with one source of truth.
+    var nsKey: NSString {
+        "\(namespace)\u{0}\(referenceID)" as NSString
     }
 }
 

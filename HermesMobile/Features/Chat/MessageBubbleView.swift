@@ -678,14 +678,24 @@ private struct RemoteAttachmentImage: View {
 private actor AttachmentImageCache {
     static let shared = AttachmentImageCache()
 
-    private var cache: [String: UIImage] = [:]
+    /// Bounded decoded-image cache. `NSCache` self-evicts under memory pressure
+    /// so a media-heavy chat can't accumulate every decoded attachment `UIImage`
+    /// in memory — the unbounded `[String: UIImage]` this replaced contributed
+    /// to the app's Jetsam-limit footprint and the "hang until restart" freezes.
+    private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
+
+    init() {
+        cache.totalCostLimit = 40 * 1_024 * 1_024
+        cache.countLimit = 60
+    }
 
     func image(
         for path: String,
         loadAttachmentImage: @escaping (String) async -> Data?
     ) async -> UIImage? {
-        if let cached = cache[path] {
+        let key = path as NSString
+        if let cached = cache.object(forKey: key) {
             return cached
         }
 
@@ -709,7 +719,8 @@ private actor AttachmentImageCache {
         inFlight[path] = nil
 
         if let image {
-            cache[path] = image
+            let bytes = image.size.width * image.size.height * 4
+            cache.setObject(image, forKey: key, cost: Int(bytes))
         }
         return image
     }
