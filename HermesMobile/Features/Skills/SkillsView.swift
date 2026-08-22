@@ -118,10 +118,10 @@ struct SkillsView: View {
         }
     }
 
-    /// Compact hierarchical breadcrumb header: "Skills › Personal" / "Skills ›
-    /// Built-in". The parent level is secondary, the child (origin) bold — no
-    /// sticker plate, no divider; reads as a native section path. The chevron
-    /// (a collapse affordance) only shows when the collapsible feature is on.
+    /// Native iOS section header (small gray UPPERCASE) for one origin bucket.
+    /// No parent breadcrumb ("Skills" is already the screen title) and no
+    /// sticker plate — just the origin name, so "Personal" / "Built-in" read as
+    /// clean section labels at the top of the list. Tap toggles when collapsible.
     private func originSectionHeader(_ title: String) -> some View {
         let isExpanded = expandedSections[title] ?? initialExpanded(title)
 
@@ -129,24 +129,20 @@ struct SkillsView: View {
             guard collapsibleSections else { return }
             expandedSections[title] = !isExpanded
         } label: {
-            HStack(spacing: 4) {
-                Text("Skills")
-                    .foregroundStyle(.secondary)
-                Text("›")
-                    .foregroundStyle(.tertiary)
+            HStack(spacing: 6) {
                 Text(title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .textCase(.uppercase)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
                 if collapsibleSections {
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
             }
-            .font(.subheadline)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemBackground))
@@ -643,9 +639,11 @@ struct PluginsHooksView: View {
     @ViewBuilder
     private var hooksHeader: some View {
         if !viewModel.groupedHooks.isEmpty {
-            Label("Hooks", systemImage: "link")
-                .font(.headline)
-                .foregroundStyle(.primary)
+            Text("Hooks")
+                .textCase(.uppercase)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 6)
         }
     }
 
@@ -661,24 +659,21 @@ struct PluginsHooksView: View {
                 guard collapsibleSections else { return }
                 expandedSections[section.title] = !isExpanded
             } label: {
-                HStack(spacing: 4) {
-                    Text("Plugins")
-                        .foregroundStyle(.secondary)
-                    Text("›")
-                        .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
                     Text(section.title)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
+                        .textCase(.uppercase)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
                     if collapsibleSections {
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
                             .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     }
                 }
-                .font(.subheadline)
+                .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
 

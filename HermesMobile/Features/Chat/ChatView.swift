@@ -286,6 +286,11 @@ struct ChatView: View {
     @State private var isScrolledNearBottom = true
     @State private var isReadingOlderTranscript = false
     @State private var shouldFollowLatestMessage = true
+    /// Set when the user taps ↓ during an active stream: follow-latest stays
+    /// armed until the stream ends, so the viewport keeps riding to the true
+    /// bottom as text grows instead of going stale after a single snap (the
+    /// "must tap ↓ a hundred times" bug). Cleared when the stream finishes.
+    @State private var streamFollowRequestedByUser = false
     @State private var followScrollGeneration = 0
     @State private var isUserInteractingWithScroll = false
     @State private var userScrollCooldownUntil: Date?
@@ -2087,6 +2092,10 @@ struct ChatView: View {
             activeStreamStatusRefreshTask?.cancel()
             activeStreamStatusRefreshTask = nil
 
+            // Stream finished — clear the ↓-tap follow request so the next
+            // stream starts clean (no stale auto-follow).
+            streamFollowRequestedByUser = false
+
             if responseCompletionNotificationTracker.shouldEndBackgroundTaskOnStreamInactive(
                 completionTrigger: viewModel.responseCompletionHapticTrigger
             ) {
@@ -2188,6 +2197,17 @@ struct ChatView: View {
         // appeared dead until the scroll fully settled. The observer re-pins the
         // offset in place (no jump), then the programmatic scroll below takes over.
         NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
+        // A deliberate ↓ tap while a response streams re-arms follow-latest for
+        // the rest of the stream: otherwise a single snap lands at the text's
+        // height at tap time, the tail keeps growing, and the viewport goes
+        // stale — forcing repeated taps to "get to the bottom". This flag keeps
+        // follow riding until the stream ends, without the old re-pin loop that
+        // caused the black screen.
+        if viewModel.activeStreamID != nil {
+            streamFollowRequestedByUser = true
+            shouldFollowLatestMessage = true
+            userScrollCooldownUntil = nil
+        }
         //
         // Target selection: always prefer the LAST MOUNTED MESSAGE over the 1pt
         // `bottomAnchorID`. Anchoring the marker (sitting at the very bottom of the
@@ -2414,7 +2434,17 @@ struct ChatView: View {
             // true; once the 0.25s cooldown lapsed, the next streaming size change
             // (`.sizeChanges` anchor = .bottom) yanked the viewport back down. The
             // intent must follow the *position*, not the touch state.
-            shouldFollowLatestMessage = false
+            //
+            // Exception: a deliberate ↓ tap during an active stream arms
+            // `streamFollowRequestedByUser`, which keeps follow riding to the
+            // true bottom as the tail grows — so a single ↓ tap reaches the
+            // bottom instead of going stale partway (the "tap a hundred times"
+            // bug). That request survives until the stream completes.
+            if isStreaming && streamFollowRequestedByUser {
+                shouldFollowLatestMessage = true
+            } else {
+                shouldFollowLatestMessage = false
+            }
             if !isReadingOlderTranscript,
                ChatScrollPolicy.shouldEnterReadingOlder(
                    distanceFromBottom: metrics.distanceFromBottom,

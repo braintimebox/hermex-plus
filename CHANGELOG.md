@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.6 — 2026-08-22
+
+### Changed
+- **Personal / Built-in section headers are now native iOS-style labels.** The
+  parent breadcrumb ("Skills ›", "Plugins ›") and the duplicated "Hooks" heading
+  are gone from the list body — each origin bucket shows a small gray UPPERCASE
+  caption (`PERSONAL` / `BUILT-IN`), matching the Settings-list idiom, with the
+  screen title already carrying the parent context.
+
+### Fixed
+- **A single ↓ tap now rides to the true bottom during streaming.** Previously
+  the viewport snapped to the text's height at tap time and went stale as the
+  tail kept growing, forcing repeated taps. A ↓ tap during a stream now arms a
+  follow-latest request that stays active until the stream ends, so the view
+  keeps gluing to the newest content without the old re-pin loop (which caused
+  the black screen).
+
 ## 2.3.5 — 2026-08-22
 
 ### Changed
