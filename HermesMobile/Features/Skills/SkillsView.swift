@@ -7,6 +7,11 @@ struct SkillsView: View {
     @State private var viewModel: SkillsViewModel
     @State private var selectedSkill: SkillSummary?
     @State private var searchText = ""
+    /// Collapsed state per origin section title ("Personal" / "Built-in"). Both
+    /// start expanded; tapping the lightweight section header toggles. Persisted
+    /// nowhere — it's a per-visit convenience, defaulting to everything visible.
+    @State private var collapsedSections: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -100,7 +105,7 @@ struct SkillsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(filteredSections, id: \.title) { section in
-                        originSectionContent(section)
+                        originSection(section)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -129,12 +134,47 @@ struct SkillsView: View {
         }
     }
 
+    /// A collapsible origin bucket. The header is a thin, native iOS caption —
+    /// small gray UPPERCASE with a trailing chevron, no "Skills ›" breadcrumb,
+    /// no sticker plate — mirroring the previous "native section header" idiom
+    /// while remaining tappable to collapse/expand the bucket.
     @ViewBuilder
-    private func originSectionContent(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionGroups(section.groups)
+    private func originSection(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
+        let isCollapsed = collapsedSections.contains(section.title)
+
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
+                    if isCollapsed {
+                        collapsedSections.remove(section.title)
+                    } else {
+                        collapsedSections.insert(section.title)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(section.title)
+                        .textCase(.uppercase)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isCollapsed ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if !isCollapsed {
+                VStack(alignment: .leading, spacing: 16) {
+                    sectionGroups(section.groups)
+                }
+            }
         }
-        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -532,6 +572,10 @@ struct PluginsHooksView: View {
     let onAPIError: (Error) -> Void
 
     @State private var viewModel: PluginsHooksViewModel
+    /// Collapsed state for the "Personal" / "Built-in" plugin buckets and the
+    /// "Hooks" group. All expanded by default; tap the caption to toggle.
+    @State private var collapsedSections: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -628,11 +672,43 @@ struct PluginsHooksView: View {
         }
     }
 
-    /// One plugins origin bucket (Personal / Built-in). The split is now shown
-    /// in the nav-bar subtitle, so the list body renders just the plugin rows.
+    /// One plugin origin bucket (Personal / Built-in). Collapsible: a thin
+    /// native caption header (gray UPPERCASE + chevron) toggles the rows.
     @ViewBuilder
     private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
-        pluginRows(section.plugins)
+        let isCollapsed = collapsedSections.contains(section.title)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
+                    if isCollapsed {
+                        collapsedSections.remove(section.title)
+                    } else {
+                        collapsedSections.insert(section.title)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(section.title)
+                        .textCase(.uppercase)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isCollapsed ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if !isCollapsed {
+                pluginRows(section.plugins)
+            }
+        }
     }
 
     @ViewBuilder
@@ -655,23 +731,49 @@ struct PluginsHooksView: View {
     private var hooksSection: some View {
         let grouped = viewModel.groupedHooks
         if !grouped.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Hooks", systemImage: "link")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+            let isCollapsed = collapsedSections.contains("Hooks")
 
-                VStack(spacing: 0) {
-                    ForEach(Array(grouped.enumerated()), id: \.element.hook) { index, entry in
-                        HookRow(hook: entry.hook, providers: entry.providers)
-                        if index < grouped.count - 1 {
-                            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
+                        if isCollapsed {
+                            collapsedSections.remove("Hooks")
+                        } else {
+                            collapsedSections.insert("Hooks")
                         }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Hooks")
+                            .textCase(.uppercase)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isCollapsed ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
-                )
+                .buttonStyle(.plain)
+
+                if !isCollapsed {
+                    VStack(spacing: 0) {
+                        ForEach(Array(grouped.enumerated()), id: \.element.hook) { index, entry in
+                            HookRow(hook: entry.hook, providers: entry.providers)
+                            if index < grouped.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                }
             }
         }
     }

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.3.9 — 2026-08-22
+
+### Fixed
+- **↓ black screen (idle chat) regression.** The 2.3.7 "animated ↓ ride" made an
+  explicit scroll-to-bottom tap animate. Animating the ride to the bottom over a
+  large lazy transcript forces a re-layout of the markdown tree, which rendered
+  a black screen even in a chat where nothing was printing. An explicit ↓ tap is
+  again a snap (no animation); only non-streaming *auto*-follow keeps the short
+  glide.
+- **Pinned-message preview for arbitrarily long messages.** The one-line pin
+  banner now strips inline Markdown (fences, links, bold/italic, headings,
+  blockquotes, list markers) so a long or heavily-formatted message no longer
+  shows a dangling ``` or half-open `**`, truncates on a grapheme-cluster
+  boundary (no split emoji), appends an ellipsis, and falls back to the raw
+  text when a message is *only* markup.
+
+### Added
+- **Collapsible Personal / Built-in / Hooks sections restored.** On Skills and
+  Plugins/Hooks, each bucket now has a thin native caption header (gray UPPERCASE
+  with a chevron) that collapses/expands its rows — no "Skills ›" breadcrumb, no
+  sticker plate, everything expanded by default.
+
 ## 2.3.8 — 2026-08-22
 
 ### Fixed

@@ -1379,14 +1379,49 @@ struct ChatView: View {
     }
 
     /// Collapses a message body to a single-line preview, normalising newlines
-    /// so a long multi-paragraph message doesn't balloon the banner.
+    /// and stripping inline Markdown so a long multi-paragraph message doesn't
+    /// balloon the banner and a code-fenced / bolded / linked message doesn't
+    /// render a dangling `` ``` `` or half-open `**` in the one-line preview.
     static func pinnedPreview(for content: String?) -> String {
         let raw = content ?? ""
-        let singleLine = raw
-            .split(whereSeparator: \.isNewline)
+
+        // Collapse whitespace (including newlines) to single spaces first.
+        let collapsed = raw
+            .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
-        let trimmed = singleLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(trimmed.prefix(120))
+
+        // Strip inline Markdown so the preview reads as plain text:
+        // fenced code, links, images, bold/italic/strikethrough, headings,
+        // blockquotes, and list markers.
+        var plain = collapsed
+            .replacingOccurrences(of: #"```[^`]*```"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"!\[[^\]]*\]\([^)]*\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\[([^\]]+)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"[*_~]{1,3}([^*_~]+)[*_~]{1,3}"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"^#{1,6}\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^>\s?"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^([-*+]|\d+[.)])\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+
+        plain = plain.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // A message that is *only* markup (e.g. a lone code fence) strips to
+        // empty — fall back to the collapsed raw text so the banner always
+        // shows something rather than a blank row.
+        if plain.isEmpty {
+            plain = collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Truncate to ~120 characters on a grapheme-cluster boundary so an
+        // emoji or other multi-scalar glyph is never cut in half.
+        if plain.count > 120 {
+            let endIndex = plain.index(plain.startIndex, offsetBy: 120)
+            plain = String(plain[..<endIndex]).trimmingCharacters(in: .whitespaces)
+            plain += "…"
+        }
+
+        return plain
     }
 
     /// The chat-canvas layout direction. Driven by the manual Settings → Chat
@@ -2189,23 +2224,22 @@ struct ChatView: View {
         // offset in place (no jump), then the programmatic scroll below takes over.
         NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
         //
-        // Target selection:
-        // - While streaming, target the true bottom (`bottomAnchorID`) so the
-        //   tap lands on the actual tail, which keeps growing as the response
-        //   streams — targeting the last *message* left the viewport short of
-        //   the newest token (the "must tap a hundred times" bug). A single
-        //   animated ride to the anchor is soft and sufficient; no re-pin loop.
-        // - When idle, target the last mounted message (cheaper, avoids the
-        //   re-layout of a growing tail that once produced the black screen).
-        if viewModel.activeStreamID != nil {
-            scrollToLatestContent(proxy, animated: true, isUserInitiated: true)
-        } else if let latestTranscriptMessageID,
-                  displayedTranscriptMessages.contains(where: { $0.renderID == latestTranscriptMessageID }) {
-            scrollToLatestTranscriptMessage(proxy, animated: true, isUserInitiated: true)
+        // Target selection: always prefer the LAST MOUNTED MESSAGE over the 1pt
+        // `bottomAnchorID`. Anchoring the marker (sitting at the very bottom of the
+        // content, growing upward while a response streams) forces a re-layout of
+        // the whole streaming tail on the main thread — the original source of the
+        // black screen when ↓ is tapped, mid-stream or, in a long idle chat, on any
+        // large lazy transcript. The last mounted message is the same UX (newest
+        // content is at its bottom) without re-anchoring the growing tail. Fall back
+        // to the marker only when no message is mounted.
+        if let latestTranscriptMessageID,
+           displayedTranscriptMessages.contains(where: { $0.renderID == latestTranscriptMessageID }) {
+            // Explicit ↓ tap is always a snap (no animation) — see scheduleFollowScroll.
+            scrollToLatestTranscriptMessage(proxy, animated: false, isUserInitiated: true)
         } else {
             scrollToLatestContent(
                 proxy,
-                animated: true,
+                animated: false,
                 isUserInitiated: true
             )
         }
@@ -2283,31 +2317,23 @@ struct ChatView: View {
             // (#289). Evaluated at fire time so it's robust to onChange ordering.
             let isCacheFirstSnapWindow = cacheFirstSnapUntil.map { Date() < $0 } ?? false
             let isStreaming = viewModel.activeStreamID != nil
-            // An explicit ↓ tap may animate even mid-stream: it is a single
-            // deliberate ride to the bottom, not the per-token auto-follow that
-            // animating would make jitter. Auto-follow stays snap-glued, the tap
-            // glides. Both stay off during the cache-first reconcile window.
-            let allowAnimation = animated && isUserInitiated && !isCacheFirstSnapWindow
-            if allowAnimation || (animated && !isStreaming && !isCacheFirstSnapWindow) {
-                // Non-streaming follow: keep the short follow-scroll curve so explicit
-                // scroll-to-latest still glides. The animation is skipped while a
-                // response streams (below) to avoid the per-token animation race.
+            if animated, !isStreaming, !isCacheFirstSnapWindow, !isUserInitiated {
+                // Non-streaming *auto*-follow keeps the short curve so it still
+                // glides. An explicit ↓ tap is always a snap: animating the tap's
+                // ride to the bottom over a large lazy transcript forces a re-layout
+                // of the markdown tree, which is what rendered a black screen mid-tap
+                // (both mid-stream and, worse, in an idle long chat where nothing was
+                // printing). Snap glues instantly and never re-lays-out the tail.
                 withAnimation(ChatMotion.scrollToLatest(reduceMotion: reduceMotion)) {
                     proxy.scrollTo(targetID, anchor: anchor)
                 }
             } else {
-                // Streaming or snap window: snap WITHOUT animation. Animating the
-                // follow on every token flush (~20-50/s) retargets the previous
-                // animation each time — the animations cancel/restart and produce the
-                // visible "jitter". A hard glue to the bottom per flush reads as
-                // smooth continuous growth, matching Telegram/chat sites.
+                // Streaming, snap window, or explicit ↓ tap: snap WITHOUT animation.
+                // A hard glue to the bottom per flush reads as smooth continuous
+                // growth (matches Telegram/chat sites); animating the per-token
+                // follow retargets the prior animation every flush and produces
+                // visible "jitter".
                 proxy.scrollTo(targetID, anchor: anchor)
-                // NOTE: the earlier "re-pin a few times" loop (3× 50ms) was removed.
-                // Re-issuing scrollTo repeatedly against a still-growing markdown
-                // tail forced a main-thread re-layout each time, which is what made
-                // the ↓ button flash a black screen mid-stream and visibly "jump".
-                // A single target snap is stable; the follow-scroll onChange keeps
-                // riding to the newest token without the repeated re-anchor.
             }
         }
     }
