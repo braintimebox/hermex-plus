@@ -46,28 +46,30 @@ struct SkillsView: View {
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
     }
 
-    /// Two-line title in the nav bar: "Skills" (parent) with the current
-    /// Personal/Built-in level beneath it as a small secondary caption. Keeps
-    /// the origin context pinned at the very top, next to "Skills", instead of
-    /// as a section header in the middle of the scrolling list.
+    /// Two-line title in the nav bar reading as a breadcrumb: "Skills" (title)
+    /// over "› Personal" / "› Built-in" (the current bucket, secondary). The
+    /// "›" separator makes it read as `Skills › Personal`, not two unrelated
+    /// words. Only the first visible bucket is shown — never both at once.
     private var originTitleHeader: some View {
         VStack(spacing: 1) {
             Text("Skills")
                 .font(.headline)
                 .foregroundStyle(.primary)
-            Text(originSubtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(originSubtitle)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption2)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)
     }
 
     /// The single origin ("Personal" or "Built-in") currently shown in the
-    /// list, shown as the subtitle under "Skills". Only the first section's
-    /// title is used — never all at once — matching "most important at top,
-    /// one bucket per line". When only one bucket has visible content (e.g.
-    /// the other is collapsed), that bucket is the subtitle.
+    /// list; prefixed with "›" by `originTitleHeader` to form the breadcrumb.
     private var originSubtitle: String {
         let titles = filteredSections.map(\.title)
         guard let first = titles.first else { return "" }
@@ -612,17 +614,23 @@ struct PluginsHooksView: View {
             }
     }
 
-    /// Two-line title in the nav bar: "Plugins / Hooks" with the origin
-    /// summary (Personal · Built-in) beneath it — keeps the split pinned at the
-    /// top instead of as section headers inside the scrolling list.
+    /// Two-line title in the nav bar reading as a breadcrumb: "Plugins / Hooks"
+    /// over "› Personal" / "› Built-in" (the current bucket, secondary). The
+    /// "›" separator makes it read as `Plugins › Personal`, matching the Skills
+    /// breadcrumb. Only the first visible bucket is shown.
     private var pluginsTitleHeader: some View {
         VStack(spacing: 1) {
             Text("Plugins / Hooks")
                 .font(.headline)
                 .foregroundStyle(.primary)
-            Text(originSubtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(originSubtitle)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption2)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)

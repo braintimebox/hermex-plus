@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.10 — 2026-08-22
+
+### Changed
+- **Nav-bar breadcrumb title.** The subtitle under "Skills" and "Plugins /
+  Hooks" now renders with an explicit "›" separator over the bucket name, so it
+  reads `Skills › Personal` (and the plugins equivalent) rather than two
+  unrelated lines "Skills" + "Personal".
+
 ## 2.3.9 — 2026-08-22
 
 ### Fixed
