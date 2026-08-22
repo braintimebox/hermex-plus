@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.3.5 — 2026-08-22
+
+### Changed
+- **Personal / Built-in now render as compact breadcrumb headers**, not sticker
+  plates: "Skills › Personal", "Skills › Built-in", "Plugins › Personal". The
+  parent level is secondary, the origin level bold — a native section-path look
+  with no background plate or heavy divider.
+
+### Fixed
+- **↓ button no longer flashes a black screen or "jumps" mid-stream.** The
+  earlier "re-pin a few times" loop (3×, 50ms apart) re-issued `scrollTo` against
+  a still-growing markdown tail, forcing a main-thread re-layout per re-pin —
+  which intermittently blacked out the view and made the button visibly jerk.
+  Removed in favour of a single stable target snap; the follow-scroll keeps
+  riding to the newest token without the repeated re-anchor.
+
 ## 2.3.4 — 2026-08-22
 
 ### Changed

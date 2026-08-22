@@ -118,10 +118,10 @@ struct SkillsView: View {
         }
     }
 
-    /// Sticky, visually distinct header for one origin section (Personal / Built-in).
-    /// Always pinned while its section scrolls; carries a bold divider so the
-    /// Personal→Built-in boundary is obvious in a long flat list. When the
-    /// collapsible feature is on, tapping the header toggles the section.
+    /// Compact hierarchical breadcrumb header: "Skills › Personal" / "Skills ›
+    /// Built-in". The parent level is secondary, the child (origin) bold — no
+    /// sticker plate, no divider; reads as a native section path. The chevron
+    /// (a collapse affordance) only shows when the collapsible feature is on.
     private func originSectionHeader(_ title: String) -> some View {
         let isExpanded = expandedSections[title] ?? initialExpanded(title)
 
@@ -129,32 +129,29 @@ struct SkillsView: View {
             guard collapsibleSections else { return }
             expandedSections[title] = !isExpanded
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Text("Skills")
+                    .foregroundStyle(.secondary)
+                Text("›")
+                    .foregroundStyle(.tertiary)
                 Text(title)
-                    .font(.title3.weight(.bold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(.primary)
 
-                Spacer(minLength: 0)
-
                 if collapsibleSections {
+                    Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .font(.subheadline)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemBackground))
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .bottom) {
-            // Bold boundary divider separating the two origin sections.
-            Rectangle()
-                .fill(Color(.separator))
-                .frame(height: 1)
-        }
     }
 
     @ViewBuilder
@@ -621,15 +618,11 @@ struct PluginsHooksView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
-                                pluginOriginSection(section)
-                            }
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
+                            pluginOriginSection(section)
                         }
-                    } header: {
-                        pluginsHeader
                     }
 
                     hooksHeader
@@ -647,44 +640,18 @@ struct PluginsHooksView: View {
         }
     }
 
-    private var pluginsHeader: some View {
-        Label("Plugins", systemImage: "puzzlepiece.extension")
-            .font(.headline)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemBackground))
-    }
-
     @ViewBuilder
     private var hooksHeader: some View {
         if !viewModel.groupedHooks.isEmpty {
             Label("Hooks", systemImage: "link")
                 .font(.headline)
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.systemBackground))
         }
     }
 
-    private var pluginsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Plugins", systemImage: "puzzlepiece.extension")
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
-                pluginOriginSection(section)
-            }
-        }
-    }
-
-    /// One plugins origin bucket (Personal / Built-in): a visually distinct
-    /// header (bold + divider) over its rows. Collapsible via tap when the
-    /// feature is on — Personal expanded, Built-in collapsed by default.
+    /// One plugins origin bucket (Personal / Built-in): a compact breadcrumb
+    /// header ("Plugins › Personal") over its rows. Collapsible via tap when
+    /// the feature is on — Personal expanded, Built-in collapsed by default.
     @ViewBuilder
     private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
         let isExpanded = expandedSections[section.title] ?? initialExpanded(section.title)
@@ -694,21 +661,24 @@ struct PluginsHooksView: View {
                 guard collapsibleSections else { return }
                 expandedSections[section.title] = !isExpanded
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    Text("Plugins")
+                        .foregroundStyle(.secondary)
+                    Text("›")
+                        .foregroundStyle(.tertiary)
                     Text(section.title)
-                        .font(.subheadline.weight(.bold))
+                        .fontWeight(.semibold)
                         .foregroundStyle(.primary)
 
-                    Spacer(minLength: 0)
-
                     if collapsibleSections {
+                        Spacer(minLength: 0)
                         Image(systemName: "chevron.down")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     }
                 }
-                .padding(.horizontal, 4)
+                .font(.subheadline)
             }
             .buttonStyle(.plain)
 

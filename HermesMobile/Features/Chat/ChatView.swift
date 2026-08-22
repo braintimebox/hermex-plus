@@ -2295,23 +2295,12 @@ struct ChatView: View {
                 // visible "jitter". A hard glue to the bottom per flush reads as
                 // smooth continuous growth, matching Telegram/chat sites.
                 proxy.scrollTo(targetID, anchor: anchor)
-
-                // "↓ goes all the way" fix: a single scrollTo while the response is
-                // still appending lands at the target's height *at call time*; the
-                // tail keeps growing right after, so the viewport ends up short of
-                // the newest token ("not always to the bottom"). For a user-initiated
-                // tap specifically, re-pin to the target a couple of times as the
-                // stream continues, so the ride reaches the true tail. Bounded and
-                // short — not per-token (that was the jitter source).
-                if isUserInitiated, isStreaming {
-                    for _ in 0..<3 {
-                        guard !Task.isCancelled, generation == followScrollGeneration else { return }
-                        try? await Task.sleep(nanoseconds: 50_000_000)
-                        let stillStreaming = viewModel.activeStreamID != nil
-                        proxy.scrollTo(targetID, anchor: anchor)
-                        if !stillStreaming { break }
-                    }
-                }
+                // NOTE: the earlier "re-pin a few times" loop (3× 50ms) was removed.
+                // Re-issuing scrollTo repeatedly against a still-growing markdown
+                // tail forced a main-thread re-layout each time, which is what made
+                // the ↓ button flash a black screen mid-stream and visibly "jump".
+                // A single target snap is stable; the follow-scroll onChange keeps
+                // riding to the newest token without the repeated re-anchor.
             }
         }
     }
