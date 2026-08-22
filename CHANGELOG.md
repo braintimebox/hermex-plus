@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.1 — 2026-08-22
+
+### Added
+- **Skills and Plugins/Hooks now split into Personal vs Built-in.** Each screen
+  groups entries under a top-level "Personal" / "Built-in" header instead of one
+  flat list, so user-authored items stand out from bundled ones. Provenance is
+  relayed by the server (skills: `origin` frontmatter; plugins: `PluginManifest.source`)
+  and the client only renders the two buckets — it never classifies on its own.
+  Skills stay tappable for full content; plugins remain metadata-only (black box).
+
 ## 2.3.0 — 2026-08-21
 
 ### Fixed

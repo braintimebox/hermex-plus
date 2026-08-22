@@ -16,6 +16,10 @@ struct SkillSummary: Decodable, Equatable, Identifiable {
     let disabled: Bool?
     let tags: [String]?
     let relatedSkills: [String]?
+    /// Provenance passed through by the server. `"user"` (or any non-empty
+    /// value) marks a user-authored skill; `nil`/absent means builtin. Server
+    /// does not classify — it only relays the `origin` frontmatter field.
+    let origin: String?
 
     init(
         name: String?,
@@ -24,7 +28,8 @@ struct SkillSummary: Decodable, Equatable, Identifiable {
         path: String?,
         disabled: Bool? = nil,
         tags: [String]? = nil,
-        relatedSkills: [String]? = nil
+        relatedSkills: [String]? = nil,
+        origin: String? = nil
     ) {
         self.name = name
         self.category = category
@@ -33,6 +38,7 @@ struct SkillSummary: Decodable, Equatable, Identifiable {
         self.disabled = disabled
         self.tags = tags
         self.relatedSkills = relatedSkills
+        self.origin = origin
     }
 }
 
@@ -310,6 +316,9 @@ struct PluginSummary: Decodable, Equatable, Identifiable {
     let activation: String?
     let hooks: [String]?
     let isActiveProvider: Bool?
+    /// Provenance relayed by the server from PluginManifest.source:
+    /// "user" / "project" / "bundled" / "entrypoint" ("" = unknown/builtin).
+    let origin: String?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -321,5 +330,6 @@ struct PluginSummary: Decodable, Equatable, Identifiable {
         case activation
         case hooks
         case isActiveProvider = "is_active_provider"
+        case origin
     }
 }

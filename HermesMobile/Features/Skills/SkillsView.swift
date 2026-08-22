@@ -38,8 +38,8 @@ struct SkillsView: View {
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
     }
 
-    private var filteredGroups: [(category: String, skills: [SkillSummary])] {
-        viewModel.filteredGroupedSkills(searchText: searchText)
+    private var filteredSections: [(title: String, groups: [(category: String, skills: [SkillSummary])])] {
+        viewModel.filteredOriginGroupedSections(searchText: searchText)
     }
 
     @ViewBuilder
@@ -62,7 +62,7 @@ struct SkillsView: View {
             } description: {
                 Text("Skills from the Hermes server will appear here.")
             }
-        } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && filteredGroups.isEmpty {
+        } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && filteredSections.isEmpty {
             ContentUnavailableView {
                 Label("No Results", systemImage: "magnifyingglass")
             } description: {
@@ -71,17 +71,27 @@ struct SkillsView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    ForEach(filteredGroups, id: \.category) { group in
-                        SkillCategorySection(
-                            category: group.category,
-                            skills: group.skills,
-                            server: server,
-                            togglingSkillNames: viewModel.togglingSkillNames,
-                            onToggleSkill: { skill, enabled in
-                                await toggle(skill: skill, enabled: enabled)
-                            },
-                            onAPIError: onAPIError
-                        )
+                    ForEach(filteredSections, id: \.title) { section in
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Top-level provenance header (Personal / Built-in).
+                            Text(section.title)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 4)
+
+                            ForEach(section.groups, id: \.category) { group in
+                                SkillCategorySection(
+                                    category: group.category,
+                                    skills: group.skills,
+                                    server: server,
+                                    togglingSkillNames: viewModel.togglingSkillNames,
+                                    onToggleSkill: { skill, enabled in
+                                        await toggle(skill: skill, enabled: enabled)
+                                    },
+                                    onAPIError: onAPIError
+                                )
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -556,23 +566,32 @@ struct PluginsHooksView: View {
     }
 
     private var pluginsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Label("Plugins", systemImage: "puzzlepiece.extension")
                 .font(.headline)
                 .foregroundStyle(.primary)
 
-            VStack(spacing: 0) {
-                ForEach(Array(viewModel.plugins.enumerated()), id: \.element.id) { index, plugin in
-                    PluginRow(plugin: plugin)
-                    if index < viewModel.plugins.count - 1 {
-                        Divider()
+            ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(section.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(section.plugins.enumerated()), id: \.element.id) { index, plugin in
+                            PluginRow(plugin: plugin)
+                            if index < section.plugins.count - 1 {
+                                Divider()
+                            }
+                        }
                     }
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
-            )
         }
     }
 
@@ -645,6 +664,28 @@ final class PluginsHooksViewModel {
             lastError = error
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Two top-level buckets — Personal (origin == "user") and Built-in
+    /// (everything else). The server relays `PluginManifest.source` as `origin`:
+    /// "user" (personal), "project"/"bundled"/"entrypoint"/"" (builtin/default).
+    /// Plugins stay a black box: only metadata is shown, never source content.
+    var originGroupedPlugins: [(title: String, plugins: [PluginSummary])] {
+        let personal = plugins.filter { isPersonal($0) }
+        let builtin = plugins.filter { !isPersonal($0) }
+
+        var sections: [(title: String, plugins: [PluginSummary])] = []
+        if !personal.isEmpty {
+            sections.append((title: String(localized: "Personal"), plugins: personal))
+        }
+        if !builtin.isEmpty {
+            sections.append((title: String(localized: "Built-in"), plugins: builtin))
+        }
+        return sections
+    }
+
+    private func isPersonal(_ plugin: PluginSummary) -> Bool {
+        (plugin.origin?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) == "user"
     }
 
     /// Hooks grouped by name (server's `supported_hooks` order first), each
