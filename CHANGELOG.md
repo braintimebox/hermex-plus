@@ -21,6 +21,9 @@
   Plugins/Hooks, each bucket now has a thin native caption header (gray UPPERCASE
   with a chevron) that collapses/expands its rows — no "Skills ›" breadcrumb, no
   sticker plate, everything expanded by default.
+- **Nav-bar subtitle shows a single bucket.** The subtitle under "Skills" and
+  "Plugins / Hooks" now reads one origin ("Personal" or "Built-in") rather than
+  "Personal · Built-in", keeping the most-relevant grouping at the top.
 
 ## 2.3.8 — 2026-08-22
 

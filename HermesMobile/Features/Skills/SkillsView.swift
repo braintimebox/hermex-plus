@@ -63,12 +63,15 @@ struct SkillsView: View {
         .minimumScaleFactor(0.8)
     }
 
-    /// "Personal · Built-in" — a compact summary of the two sections, shown as
-    /// the subtitle under "Skills".
+    /// The single origin ("Personal" or "Built-in") currently shown in the
+    /// list, shown as the subtitle under "Skills". Only the first section's
+    /// title is used — never all at once — matching "most important at top,
+    /// one bucket per line". When only one bucket has visible content (e.g.
+    /// the other is collapsed), that bucket is the subtitle.
     private var originSubtitle: String {
         let titles = filteredSections.map(\.title)
-        guard !titles.isEmpty else { return "" }
-        return titles.joined(separator: " · ")
+        guard let first = titles.first else { return "" }
+        return first
     }
 
     private var filteredSections: [(title: String, groups: [(category: String, skills: [SkillSummary])])] {
@@ -627,8 +630,8 @@ struct PluginsHooksView: View {
 
     private var originSubtitle: String {
         let titles = viewModel.originGroupedPlugins.map(\.title)
-        guard !titles.isEmpty else { return "" }
-        return titles.joined(separator: " · ")
+        guard let first = titles.first else { return "" }
+        return first
     }
 
     @ViewBuilder
