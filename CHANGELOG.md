@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.2 — 2026-08-22
+
+### Changed
+- **Streamed text now reveals at a calm, even pace (smoothness over speed).**
+  The word-drain quota previously scaled *proportionally* with the backlog, so a
+  fast model flooding the buffer triggered a multi-word burst that read as a
+  "page-flip". It now ramps sub-linearly (square root), producing a gentle,
+  ever-smoother trickle; the word cadence is slower (48ms → 70ms) and the lag
+  bound relaxed (1s → 2s), so text flows continuously instead of pulsing in
+  jerks. Glyph fade-in is unchanged.
+
 ## 2.3.1 — 2026-08-22
 
 ### Added

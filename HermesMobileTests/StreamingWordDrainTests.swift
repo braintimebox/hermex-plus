@@ -97,14 +97,19 @@ final class StreamingWordDrainTests: XCTestCase {
         )
     }
 
-    func testDrainQuotaScalesWithBacklogToStayWithinLagBound() {
-        // 1000 words × 48ms = 48s of backlog; quota must scale to drain in ~1s.
-        let quota = StreamingWordDrain.drainQuota(
-            backlogUnitCount: 1000,
-            cadenceNanoseconds: 48_000_000,
-            maxLagNanoseconds: 1_000_000_000
+    func testDrainQuotaScalesSublinearlyWithBacklog() {
+        // 1000 words × 48ms = 48s of backlog. The smooth (√) ramp yields
+        // √(48_000_000_000 / 1_000_000_000) = √48 ≈ 7 words per tick — a
+        // gentle trickle instead of the old proportional 48-word burst, so
+        // reveal stays smooth while still relaxing as the backlog grows.
+        XCTAssertEqual(
+            StreamingWordDrain.drainQuota(
+                backlogUnitCount: 1000,
+                cadenceNanoseconds: 48_000_000,
+                maxLagNanoseconds: 1_000_000_000
+            ),
+            7
         )
-        XCTAssertEqual(quota, 48)
     }
 
     func testDrainQuotaNeverExceedsBacklog() {

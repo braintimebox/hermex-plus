@@ -64,6 +64,12 @@ enum StreamingWordDrain {
     /// backlog would take longer than `maxLagNanoseconds` to drain at
     /// `cadenceNanoseconds` per word, the quota scales up proportionally so the
     /// display catches up to the live stream within the lag bound.
+    ///
+    /// Smoothness over speed (Oleksandr): the quota grows sub-linearly (square
+    /// root) instead of a straight proportional ramp, so a fast model flooding
+    /// the buffer yields a gentle, ever-smoother catch-up rather than a sudden
+    /// multi-word "page-flip" burst. Large backlogs still drain fully — just a
+    /// little later — so the display never falls behind a fast stream forever.
     static func drainQuota(
         backlogUnitCount: Int,
         cadenceNanoseconds: UInt64,
@@ -73,7 +79,12 @@ enum StreamingWordDrain {
         guard cadenceNanoseconds > 0, maxLagNanoseconds > 0 else { return backlogUnitCount }
 
         let drainNanoseconds = Double(backlogUnitCount) * Double(cadenceNanoseconds)
-        let quota = Int((drainNanoseconds / Double(maxLagNanoseconds)).rounded(.up))
+        let overshoot = drainNanoseconds / Double(maxLagNanoseconds)
+        // Sub-linear ramp: quota = √overshoot when there is a real backlog,
+        // clamped to at least 1 and at most the backlog size. A 1000-word
+        // backlog (~48s at 48ms) yields √48 ≈ 7 words/tick instead of 48 — an
+        // even trickle that still relaxes as the backlog grows.
+        let quota = Int(overshoot.squareRoot().rounded(.up))
         return min(backlogUnitCount, max(1, quota))
     }
 }
