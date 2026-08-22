@@ -7,31 +7,21 @@ struct SkillsView: View {
     @State private var viewModel: SkillsViewModel
     @State private var selectedSkill: SkillSummary?
     @State private var searchText = ""
-    @AppStorage(SectionVisibilitySettings.collapsibleSectionsKey) private var collapsibleSections = false
-    /// Expansion state per section title (only meaningful when collapsible is on).
-    @State private var expandedSections: [String: Bool] = [:]
 
-    /// Determines the initial expansion state of each origin section. With the
-    /// collapsible toggle off, everything is force-expanded (flat, as before).
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
         self.onAPIError = onAPIError
         _viewModel = State(initialValue: SkillsViewModel(server: server))
     }
 
-    /// Whether a section is expanded now. `Personal` starts open, `Built-in`
-    /// starts collapsed when the collapsible feature is on; off → always open.
-    private func initialExpanded(_ title: String) -> Bool {
-        guard collapsibleSections else { return true }
-        // Personal = first section is expanded; anything else (Built-in) collapsed.
-        return title == String(localized: "Personal")
-    }
-
     var body: some View {
         content
             .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
-            .navigationTitle("Skills")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    originTitleHeader
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await loadSkills() }
@@ -49,6 +39,31 @@ struct SkillsView: View {
                 await loadSkills()
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
+    }
+
+    /// Two-line title in the nav bar: "Skills" (parent) with the current
+    /// Personal/Built-in level beneath it as a small secondary caption. Keeps
+    /// the origin context pinned at the very top, next to "Skills", instead of
+    /// as a section header in the middle of the scrolling list.
+    private var originTitleHeader: some View {
+        VStack(spacing: 1) {
+            Text("Skills")
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text(originSubtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+
+    /// "Personal · Built-in" — a compact summary of the two sections, shown as
+    /// the subtitle under "Skills".
+    private var originSubtitle: String {
+        let titles = filteredSections.map(\.title)
+        guard !titles.isEmpty else { return "" }
+        return titles.joined(separator: " · ")
     }
 
     private var filteredSections: [(title: String, groups: [(category: String, skills: [SkillSummary])])] {
@@ -83,13 +98,9 @@ struct SkillsView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(filteredSections, id: \.title) { section in
-                        Section {
-                            originSectionContent(section)
-                        } header: {
-                            originSectionHeader(section.title)
-                        }
+                        originSectionContent(section)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -118,48 +129,12 @@ struct SkillsView: View {
         }
     }
 
-    /// Native iOS section header (small gray UPPERCASE) for one origin bucket.
-    /// No parent breadcrumb ("Skills" is already the screen title) and no
-    /// sticker plate — just the origin name, so "Personal" / "Built-in" read as
-    /// clean section labels at the top of the list. Tap toggles when collapsible.
-    private func originSectionHeader(_ title: String) -> some View {
-        let isExpanded = expandedSections[title] ?? initialExpanded(title)
-
-        return Button {
-            guard collapsibleSections else { return }
-            expandedSections[title] = !isExpanded
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                    .textCase(.uppercase)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                if collapsibleSections {
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-            }
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemBackground))
-        }
-        .buttonStyle(.plain)
-    }
-
     @ViewBuilder
     private func originSectionContent(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
-        if collapsibleSections && !(expandedSections[section.title] ?? initialExpanded(section.title)) {
-            EmptyView()
-        } else {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionGroups(section.groups)
-            }
-            .padding(.top, 8)
+        VStack(alignment: .leading, spacing: 16) {
+            sectionGroups(section.groups)
         }
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -557,8 +532,6 @@ struct PluginsHooksView: View {
     let onAPIError: (Error) -> Void
 
     @State private var viewModel: PluginsHooksViewModel
-    @AppStorage(SectionVisibilitySettings.collapsibleSectionsKey) private var collapsibleSections = false
-    @State private var expandedSections: [String: Bool] = [:]
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -566,16 +539,14 @@ struct PluginsHooksView: View {
         _viewModel = State(initialValue: PluginsHooksViewModel(server: server))
     }
 
-    private func initialExpanded(_ title: String) -> Bool {
-        guard collapsibleSections else { return true }
-        return title == String(localized: "Personal")
-    }
-
     var body: some View {
         content
             .adaptiveReadableScrollContent(maxWidth: AdaptiveReadableContentWidth.secondaryDestination)
-            .navigationTitle("Plugins / Hooks")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    pluginsTitleHeader
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await load() }
@@ -592,6 +563,28 @@ struct PluginsHooksView: View {
             .task {
                 await load()
             }
+    }
+
+    /// Two-line title in the nav bar: "Plugins / Hooks" with the origin
+    /// summary (Personal · Built-in) beneath it — keeps the split pinned at the
+    /// top instead of as section headers inside the scrolling list.
+    private var pluginsTitleHeader: some View {
+        VStack(spacing: 1) {
+            Text("Plugins / Hooks")
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text(originSubtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+
+    private var originSubtitle: String {
+        let titles = viewModel.originGroupedPlugins.map(\.title)
+        guard !titles.isEmpty else { return "" }
+        return titles.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -621,7 +614,6 @@ struct PluginsHooksView: View {
                         }
                     }
 
-                    hooksHeader
                     hooksSection
                 }
                 .padding(.horizontal, 20)
@@ -636,51 +628,11 @@ struct PluginsHooksView: View {
         }
     }
 
-    @ViewBuilder
-    private var hooksHeader: some View {
-        if !viewModel.groupedHooks.isEmpty {
-            Text("Hooks")
-                .textCase(.uppercase)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 6)
-        }
-    }
-
-    /// One plugins origin bucket (Personal / Built-in): a compact breadcrumb
-    /// header ("Plugins › Personal") over its rows. Collapsible via tap when
-    /// the feature is on — Personal expanded, Built-in collapsed by default.
+    /// One plugins origin bucket (Personal / Built-in). The split is now shown
+    /// in the nav-bar subtitle, so the list body renders just the plugin rows.
     @ViewBuilder
     private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
-        let isExpanded = expandedSections[section.title] ?? initialExpanded(section.title)
-
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                guard collapsibleSections else { return }
-                expandedSections[section.title] = !isExpanded
-            } label: {
-                HStack(spacing: 6) {
-                    Text(section.title)
-                        .textCase(.uppercase)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    if collapsibleSections {
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    }
-                }
-                .padding(.vertical, 6)
-            }
-            .buttonStyle(.plain)
-
-            if !collapsibleSections || isExpanded {
-                pluginRows(section.plugins)
-            }
-        }
+        pluginRows(section.plugins)
     }
 
     @ViewBuilder

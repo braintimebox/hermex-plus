@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.7 — 2026-08-22
+
+### Changed
+- **Personal / Built-in now live in the nav-bar subtitle.** The split is shown
+  as a small "Personal · Built-in" caption directly under the "Skills" and
+  "Plugins / Hooks" titles at the very top, instead of as section headers inside
+  the scrolling list. The list body is clean — no "Skills ›", "Plugins ›", or
+  "Hooks" duplication. The now-unused collapsible-sections toggle was removed
+  from Settings.
+
+### Fixed
+- **↓ button softened.** A deliberate ↓ tap now does a single *animated* ride to
+  the true bottom (targeting the live anchor while streaming, so it actually
+  reaches the newest token), instead of the aggressive hard-follow that glitched
+  the viewport. Auto-follow during streaming still snap-glues as before; only the
+  explicit tap glides.
+
 ## 2.3.6 — 2026-08-22
 
 ### Changed
