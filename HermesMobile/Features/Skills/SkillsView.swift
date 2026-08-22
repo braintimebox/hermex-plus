@@ -46,30 +46,27 @@ struct SkillsView: View {
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
     }
 
-    /// Two-line title in the nav bar reading as a breadcrumb: "Skills" (title)
-    /// over "› Personal" / "› Built-in" (the current bucket, secondary). The
-    /// "›" separator makes it read as `Skills › Personal`, not two unrelated
-    /// words. Only the first visible bucket is shown — never both at once.
+    /// Single-line breadcrumb title in the nav bar: `Skills › Personal` (or
+    /// `Skills › Built-in`). One line, not two — "Skills" primary, then a muted
+    /// "›" separator and the current bucket. Only the first visible bucket is
+    /// shown, never both at once.
     private var originTitleHeader: some View {
-        VStack(spacing: 1) {
+        HStack(spacing: 5) {
             Text("Skills")
-                .font(.headline)
                 .foregroundStyle(.primary)
-            HStack(spacing: 4) {
-                Text("›")
-                    .foregroundStyle(.tertiary)
-                Text(originSubtitle)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-            }
-            .font(.caption2)
+            Text("›")
+                .foregroundStyle(.tertiary)
+            Text(originSubtitle)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
         }
+        .font(.headline)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
     }
 
     /// The single origin ("Personal" or "Built-in") currently shown in the
-    /// list; prefixed with "›" by `originTitleHeader` to form the breadcrumb.
+    /// list, joined to "Skills" by "›" to form the one-line breadcrumb.
     private var originSubtitle: String {
         let titles = filteredSections.map(\.title)
         guard let first = titles.first else { return "" }
@@ -614,24 +611,20 @@ struct PluginsHooksView: View {
             }
     }
 
-    /// Two-line title in the nav bar reading as a breadcrumb: "Plugins / Hooks"
-    /// over "› Personal" / "› Built-in" (the current bucket, secondary). The
-    /// "›" separator makes it read as `Plugins › Personal`, matching the Skills
-    /// breadcrumb. Only the first visible bucket is shown.
+    /// Single-line breadcrumb title in the nav bar: `Plugins / Hooks › Personal`
+    /// (or `› Built-in`). One line, not two — title primary, muted "›" + bucket.
+    /// Only the first visible bucket is shown.
     private var pluginsTitleHeader: some View {
-        VStack(spacing: 1) {
+        HStack(spacing: 5) {
             Text("Plugins / Hooks")
-                .font(.headline)
                 .foregroundStyle(.primary)
-            HStack(spacing: 4) {
-                Text("›")
-                    .foregroundStyle(.tertiary)
-                Text(originSubtitle)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-            }
-            .font(.caption2)
+            Text("›")
+                .foregroundStyle(.tertiary)
+            Text(originSubtitle)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
         }
+        .font(.headline)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
     }

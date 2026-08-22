@@ -18,13 +18,22 @@ except FileNotFoundError:
     print("VERSION file not found, creating with 1.4.0")
     current = "1.4.0"
 
-# Parse and bump patch
-parts = current.split(".")
-if len(parts) == 3:
-    parts[2] = str(int(parts[2]) + 1)
-else:
-    parts = ["1", "4", "0"]
-new_version = ".".join(parts)
+# Parse and bump the patch segment WITH base-10 carry, so the sequence reads
+# naturally: ...2.3.8 → 2.3.9 → 2.4.0 → 2.4.1. A version segment is NOT a
+# decimal fraction: after x.y.9 the next release is x.y+1.0 (carry), never
+# x.y.10 — "2.3.10" reads as "two-three-ten" and breaks the human mental model.
+parts = [int(p) for p in current.split(".")] if "." in current else [1, 4, 0]
+while len(parts) < 3:
+    parts.append(0)
+
+parts[2] += 1  # bump patch
+# Carry overflowing segments toward the more significant positions.
+for i in reversed(range(1, len(parts))):
+    if parts[i] >= 10:
+        parts[i] = 0
+        parts[i - 1] += 1
+
+new_version = ".".join(str(p) for p in parts)
 
 # Write VERSION
 with open(VERSION_FILE, "w") as f:

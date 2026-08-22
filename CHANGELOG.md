@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.0 — 2026-08-22
+
+### Changed
+- **Nav-bar breadcrumb title on one line.** "Skills › Personal" and "Plugins /
+  Hooks › Personal" now render as a single line (muted "›" + bucket following
+  the title), not a title over a separate subtitle line.
+- **Version-numbering carry.** `bump-version.py` now carries overflowing
+  segments instead of appending multi-digit tail numbers: after `2.3.9` comes
+  `2.4.0`, never `2.3.10`.
+
 ## 2.3.10 — 2026-08-22
 
 ### Changed
