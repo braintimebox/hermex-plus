@@ -46,31 +46,15 @@ struct SkillsView: View {
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
     }
 
-    /// Single-line breadcrumb title in the nav bar: `Skills › Personal` (or
-    /// `Skills › Built-in`). One line, not two — "Skills" primary, then a muted
-    /// "›" separator and the current bucket. Only the first visible bucket is
-    /// shown, never both at once.
+    /// Simple nav-bar title. The changing bucket breadcrumb (`Personal` /
+    /// `Built-in`) is the sticky section header inside the list, so the top bar
+    /// just names the screen.
     private var originTitleHeader: some View {
-        HStack(spacing: 5) {
-            Text("Skills")
-                .foregroundStyle(.primary)
-            Text("›")
-                .foregroundStyle(.tertiary)
-            Text(originSubtitle)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-        }
-        .font(.headline)
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-    }
-
-    /// The single origin ("Personal" or "Built-in") currently shown in the
-    /// list, joined to "Skills" by "›" to form the one-line breadcrumb.
-    private var originSubtitle: String {
-        let titles = filteredSections.map(\.title)
-        guard let first = titles.first else { return "" }
-        return first
+        Text("Skills")
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     private var filteredSections: [(title: String, groups: [(category: String, skills: [SkillSummary])])] {
@@ -105,13 +89,16 @@ struct SkillsView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     ForEach(filteredSections, id: \.title) { section in
-                        originSection(section)
+                        Section {
+                            originSectionContent(section)
+                        } header: {
+                            originSectionHeader(section)
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
                 .padding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -136,46 +123,58 @@ struct SkillsView: View {
         }
     }
 
-    /// A collapsible origin bucket. The header is a thin, native iOS caption —
-    /// small gray UPPERCASE with a trailing chevron, no "Skills ›" breadcrumb,
-    /// no sticker plate — mirroring the previous "native section header" idiom
-    /// while remaining tappable to collapse/expand the bucket.
+    /// Sticky origin header that changes as the list scrolls: while the
+    /// "Personal" bucket is on screen it reads `Skills › Personal`, then flips
+    /// to `Skills › Built-in` as you scroll into the next bucket. Tapping the
+    /// breadcrumb collapses/expands that bucket.
     @ViewBuilder
-    private func originSection(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
+    private func originSectionHeader(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
         let isCollapsed = collapsedSections.contains(section.title)
 
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
-                    if isCollapsed {
-                        collapsedSections.remove(section.title)
-                    } else {
-                        collapsedSections.insert(section.title)
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(section.title)
-                        .textCase(.uppercase)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 0)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isCollapsed ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if !isCollapsed {
-                VStack(alignment: .leading, spacing: 16) {
-                    sectionGroups(section.groups)
+        Button {
+            withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
+                if isCollapsed {
+                    collapsedSections.remove(section.title)
+                } else {
+                    collapsedSections.insert(section.title)
                 }
             }
+        } label: {
+            HStack(spacing: 5) {
+                Text("Skills")
+                    .foregroundStyle(.secondary)
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(section.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? 90 : 0))
+            }
+            .font(.footnote.weight(.semibold))
+            .padding(.vertical, 8)
+            .padding(.horizontal, 2)
+            .background(.bar)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The skill rows of one origin bucket (Personal / Built-in), shown when
+    /// the bucket is expanded.
+    @ViewBuilder
+    private func originSectionContent(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
+        if !collapsedSections.contains(section.title) {
+            VStack(alignment: .leading, spacing: 20) {
+                sectionGroups(section.groups)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 8)
         }
     }
 
@@ -642,17 +641,18 @@ struct PluginsHooksView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
-                            pluginOriginSection(section)
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
+                        Section {
+                            pluginOriginContent(section)
+                        } header: {
+                            pluginOriginHeader(section)
                         }
                     }
 
                     hooksSection
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
                 .padding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -663,46 +663,54 @@ struct PluginsHooksView: View {
         }
     }
 
-    /// One plugin origin bucket (Personal / Built-in). Collapsible, with a
-    /// breadcrumb header reading `Plugins › Personal` / `Plugins › Built-in`.
+    /// Sticky plugin-origin header that changes as the list scrolls: reads
+    /// `Plugins › Personal` then flips to `Plugins › Built-in` as you scroll.
+    /// Tapping collapses/expands the bucket.
     @ViewBuilder
-    private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
+    private func pluginOriginHeader(_ section: (title: String, plugins: [PluginSummary])) -> some View {
         let isCollapsed = collapsedSections.contains(section.title)
 
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
-                    if isCollapsed {
-                        collapsedSections.remove(section.title)
-                    } else {
-                        collapsedSections.insert(section.title)
-                    }
+        Button {
+            withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
+                if isCollapsed {
+                    collapsedSections.remove(section.title)
+                } else {
+                    collapsedSections.insert(section.title)
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text("Plugins")
-                        .foregroundStyle(.secondary)
-                    Text("›")
-                        .foregroundStyle(.tertiary)
-                    Text(section.title)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 0)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isCollapsed ? 90 : 0))
-                }
-                .font(.caption.weight(.semibold))
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+        } label: {
+            HStack(spacing: 5) {
+                Text("Plugins")
+                    .foregroundStyle(.secondary)
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(section.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
 
-            if !isCollapsed {
-                pluginRows(section.plugins)
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? 90 : 0))
             }
+            .font(.footnote.weight(.semibold))
+            .padding(.vertical, 8)
+            .padding(.horizontal, 2)
+            .background(.bar)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The plugin rows of one origin bucket, shown when expanded.
+    @ViewBuilder
+    private func pluginOriginContent(_ section: (title: String, plugins: [PluginSummary])) -> some View {
+        if !collapsedSections.contains(section.title) {
+            pluginRows(section.plugins)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
         }
     }
 

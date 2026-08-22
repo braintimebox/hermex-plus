@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.1 — 2026-08-22
+
+### Changed
+- **Sticky, scroll-aware origin breadcrumbs.** On Skills and Plugins/Hooks the
+  `Personal` / `Built-in` breadcrumb is now a pinned section header that changes
+  as you scroll (reads `Skills › Personal` while that bucket is on screen, then
+  flips to `Skills › Built-in`), instead of a static label pinned to the first
+  bucket. Tapping it still collapses/expands the bucket.
+
 ## 2.4.0 — 2026-08-22
 
 ### Changed
