@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.2 — 2026-08-22
+
+### Fixed
+- **↓ button now reaches the true bottom.** The scroll-to-bottom tap always
+  targets the 1pt `bottomAnchorID` marker at the very end of the transcript
+  (previously it aimed at the last *message*, which can stop short of the actual
+  bottom behind trailing padding / the typing indicator, leaving the viewport
+  above the newest content and making the button feel dead). An explicit tap is
+  also no longer cancelable by a newer auto-follow generation.
+- **Nav-bar breadcrumb changes with the list.** On Skills and Plugins, the
+  `Personal` / `Built-in` segment is now a single-line breadcrumb *in the nav
+  bar* (`Skills › Personal`), updating to `Skills › Built-in` as you scroll —
+  never a sticky header inside the scrolling list. The list body is clean again.
+
 ## 2.4.1 — 2026-08-22
 
 ### Changed

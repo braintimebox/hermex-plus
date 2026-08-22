@@ -2214,35 +2214,17 @@ struct ChatView: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        // Deliberate jump to the latest content. Snap without animation while a
-        // response is streaming so the tap lands immediately instead of racing
-        // the short follow animations already chasing incoming tokens.
+        // The ↓ button does exactly one thing: scroll to the very bottom of the
+        // transcript. Target the 1pt `bottomAnchorID` marker that sits at the
+        // true end of the content — NOT the last message, which can stop short of
+        // the actual bottom (trailing padding, typing indicator, etc.), leaving
+        // the viewport above the newest content and making the button feel dead.
         //
-        // Cancel any in-flight deceleration first: while the user's flick is still
-        // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the ↓ button
-        // appeared dead until the scroll fully settled. The observer re-pins the
-        // offset in place (no jump), then the programmatic scroll below takes over.
+        // Cancel in-flight deceleration first: while the user's flick is still
+        // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the button
+        // would otherwise appear dead until the scroll settled.
         NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
-        //
-        // Target selection: always prefer the LAST MOUNTED MESSAGE over the 1pt
-        // `bottomAnchorID`. Anchoring the marker (sitting at the very bottom of the
-        // content, growing upward while a response streams) forces a re-layout of
-        // the whole streaming tail on the main thread — the original source of the
-        // black screen when ↓ is tapped, mid-stream or, in a long idle chat, on any
-        // large lazy transcript. The last mounted message is the same UX (newest
-        // content is at its bottom) without re-anchoring the growing tail. Fall back
-        // to the marker only when no message is mounted.
-        if let latestTranscriptMessageID,
-           displayedTranscriptMessages.contains(where: { $0.renderID == latestTranscriptMessageID }) {
-            // Explicit ↓ tap is always a snap (no animation) — see scheduleFollowScroll.
-            scrollToLatestTranscriptMessage(proxy, animated: false, isUserInitiated: true)
-        } else {
-            scrollToLatestContent(
-                proxy,
-                animated: false,
-                isUserInitiated: true
-            )
-        }
+        scrollToLatestContent(proxy, animated: false, isUserInitiated: true)
     }
 
     private func scrollToLatestTranscriptMessage(
@@ -2305,10 +2287,13 @@ struct ChatView: View {
             // which accumulates into visible scroll lag while the response streams.
             // The sleep only benefits the animated non-streaming follow (letting a
             // queued animation retarget), which no longer happens during streaming.
-            if viewModel.activeStreamID == nil {
+            if viewModel.activeStreamID == nil, !isUserInitiated {
                 try? await Task.sleep(nanoseconds: 16_000_000)
             }
-            guard !Task.isCancelled, generation == followScrollGeneration else { return }
+            // An explicit ↓ tap is unconditional: never let a newer auto-follow
+            // generation cancel it, or the button feels dead if a token flush (or
+            // any background scroll) lands between the tap and this fire.
+            guard !Task.isCancelled, (isUserInitiated || generation == followScrollGeneration) else { return }
             // Re-check at fire time: a gesture may have begun during the delay.
             if !isUserInitiated, isAutoFollowScrollPaused { return }
 

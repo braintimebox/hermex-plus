@@ -7,11 +7,9 @@ struct SkillsView: View {
     @State private var viewModel: SkillsViewModel
     @State private var selectedSkill: SkillSummary?
     @State private var searchText = ""
-    /// Collapsed state per origin section title ("Personal" / "Built-in"). Both
-    /// start expanded; tapping the lightweight section header toggles. Persisted
-    /// nowhere — it's a per-visit convenience, defaulting to everything visible.
-    @State private var collapsedSections: Set<String> = []
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    /// The origin bucket currently scrolled into view, driving the nav-bar
+    /// breadcrumb (`Skills › Personal` ↔ `Skills › Built-in`).
+    @State private var visibleSection: String?
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -43,18 +41,39 @@ struct SkillsView: View {
             .task {
                 await loadSkills()
             }
+            .onAppear {
+                if visibleSection == nil {
+                    visibleSection = filteredSections.first?.title
+                }
+            }
+            .onChange(of: filteredSections.count) { _, _ in
+                if visibleSection == nil {
+                    visibleSection = filteredSections.first?.title
+                }
+            }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search skills...")
     }
 
-    /// Simple nav-bar title. The changing bucket breadcrumb (`Personal` /
-    /// `Built-in`) is the sticky section header inside the list, so the top bar
-    /// just names the screen.
+    /// Single-line breadcrumb in the nav bar: `Skills › Personal` (or
+    /// `› Built-in`), updating as the corresponding bucket scrolls into view.
+    /// Always lives at the very top, never inside the scrolling list.
     private var originTitleHeader: some View {
-        Text("Skills")
-            .font(.headline)
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+        HStack(spacing: 5) {
+            Text("Skills")
+                .foregroundStyle(.primary)
+            if let visible = visibleSection {
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(visible)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.headline)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .contentTransition(.numericText())
+        .animation(.snappy, value: visibleSection)
     }
 
     private var filteredSections: [(title: String, groups: [(category: String, skills: [SkillSummary])])] {
@@ -89,23 +108,52 @@ struct SkillsView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(filteredSections, id: \.title) { section in
-                        Section {
-                            originSectionContent(section)
-                        } header: {
-                            originSectionHeader(section)
+                        VStack(alignment: .leading, spacing: 12) {
+                            sectionGroups(section.groups)
                         }
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: VisibleSectionPreferenceKey.self,
+                                    value: [VisibleSection(
+                                        titles: [section.title],
+                                        minY: geo.frame(in: .named("skillsScroll")).minY,
+                                        maxY: geo.frame(in: .named("skillsScroll")).maxY
+                                    )]
+                                )
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
+                .padding(.top, 18)
                 .padding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .coordinateSpace(name: "skillsScroll")
+            .onPreferenceChange(VisibleSectionPreferenceKey.self) { sections in
+                updateVisibleSection(from: sections)
             }
             .refreshable {
                 await loadSkills()
             }
             .background(Color(.systemBackground))
+        }
+    }
+
+    /// Chooses the bucket whose vertical span currently covers the top of the
+    /// viewport (y == 0 in the scroll's coordinate space), so the nav-bar
+    /// breadcrumb reflects what the user is reading.
+    private func updateVisibleSection(from sections: [VisibleSection]) {
+        let current = sections
+            .filter { $0.minY <= 0 && $0.maxY >= 0 }
+            .sorted { $0.minY > $1.minY }
+            .flatMap(\.titles)
+            .first
+        if let current {
+            visibleSection = current
         }
     }
 
@@ -123,61 +171,6 @@ struct SkillsView: View {
         }
     }
 
-    /// Sticky origin header that changes as the list scrolls: while the
-    /// "Personal" bucket is on screen it reads `Skills › Personal`, then flips
-    /// to `Skills › Built-in` as you scroll into the next bucket. Tapping the
-    /// breadcrumb collapses/expands that bucket.
-    @ViewBuilder
-    private func originSectionHeader(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
-        let isCollapsed = collapsedSections.contains(section.title)
-
-        Button {
-            withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
-                if isCollapsed {
-                    collapsedSections.remove(section.title)
-                } else {
-                    collapsedSections.insert(section.title)
-                }
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Text("Skills")
-                    .foregroundStyle(.secondary)
-                Text("›")
-                    .foregroundStyle(.tertiary)
-                Text(section.title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isCollapsed ? 90 : 0))
-            }
-            .font(.footnote.weight(.semibold))
-            .padding(.vertical, 8)
-            .padding(.horizontal, 2)
-            .background(.bar)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// The skill rows of one origin bucket (Personal / Built-in), shown when
-    /// the bucket is expanded.
-    @ViewBuilder
-    private func originSectionContent(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
-        if !collapsedSections.contains(section.title) {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionGroups(section.groups)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 8)
-        }
-    }
-
     @ViewBuilder
     private func sectionGroups(_ groups: [(category: String, skills: [SkillSummary])]) -> some View {
         ForEach(groups, id: \.category) { group in
@@ -192,6 +185,21 @@ struct SkillsView: View {
                 onAPIError: onAPIError
             )
         }
+    }
+}
+
+/// A vertical slice of an origin bucket, used to work out which bucket the
+/// user is currently reading (drives the nav-bar breadcrumb).
+private struct VisibleSection: Equatable {
+    let titles: [String]
+    let minY: CGFloat
+    let maxY: CGFloat
+}
+
+private struct VisibleSectionPreferenceKey: PreferenceKey {
+    static var defaultValue: [VisibleSection] = []
+    static func reduce(value: inout [VisibleSection], nextValue: () -> [VisibleSection]) {
+        value.append(contentsOf: nextValue())
     }
 }
 
@@ -577,6 +585,9 @@ struct PluginsHooksView: View {
     /// "Hooks" group. All expanded by default; tap the caption to toggle.
     @State private var collapsedSections: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    /// The plugin origin bucket scrolled into view, driving the nav-bar
+    /// breadcrumb (`Plugins › Personal` ↔ `Plugins › Built-in`).
+    @State private var visiblePluginSection: String?
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
@@ -608,17 +619,38 @@ struct PluginsHooksView: View {
             .task {
                 await load()
             }
+            .onAppear {
+                if visiblePluginSection == nil {
+                    visiblePluginSection = viewModel.originGroupedPlugins.first?.title
+                }
+            }
+            .onChange(of: viewModel.originGroupedPlugins.map(\.title)) { _, _ in
+                if visiblePluginSection == nil {
+                    visiblePluginSection = viewModel.originGroupedPlugins.first?.title
+                }
+            }
     }
 
-    /// Simple single-line nav-bar title. The origin breadcrumbs (`Plugins ›
-    /// Personal` etc.) now live as section headers inside the list, so the top
-    /// bar just names the screen.
+    /// Single-line breadcrumb in the nav bar: `Plugins › Personal` (or
+    /// `› Built-in`), updating as the corresponding bucket scrolls into view.
+    /// Always lives at the very top, never inside the scrolling list.
     private var pluginsTitleHeader: some View {
-        Text("Plugins / Hooks")
-            .font(.headline)
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+        HStack(spacing: 5) {
+            Text("Plugins")
+                .foregroundStyle(.primary)
+            if let visible = visiblePluginSection {
+                Text("›")
+                    .foregroundStyle(.tertiary)
+                Text(visible)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.headline)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .contentTransition(.numericText())
+        .animation(.snappy, value: visiblePluginSection)
     }
 
     @ViewBuilder
@@ -641,76 +673,46 @@ struct PluginsHooksView: View {
             }
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
-                        Section {
-                            pluginOriginContent(section)
-                        } header: {
-                            pluginOriginHeader(section)
+                        VStack(alignment: .leading, spacing: 12) {
+                            pluginRows(section.plugins)
                         }
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: VisibleSectionPreferenceKey.self,
+                                    value: [VisibleSection(
+                                        titles: [section.title],
+                                        minY: geo.frame(in: .named("pluginsScroll")).minY,
+                                        maxY: geo.frame(in: .named("pluginsScroll")).maxY
+                                    )]
+                                )
+                            }
+                        )
                     }
 
                     hooksSection
                 }
                 .padding(.horizontal, 20)
+                .padding(.top, 18)
                 .padding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .coordinateSpace(name: "pluginsScroll")
+            .onPreferenceChange(VisibleSectionPreferenceKey.self) { sections in
+                if let current = sections
+                    .filter({ $0.minY <= 0 && $0.maxY >= 0 })
+                    .sorted(by: { $0.minY > $1.minY })
+                    .flatMap(\.titles)
+                    .first {
+                    visiblePluginSection = current
+                }
             }
             .refreshable {
                 await load()
             }
             .background(Color(.systemBackground))
-        }
-    }
-
-    /// Sticky plugin-origin header that changes as the list scrolls: reads
-    /// `Plugins › Personal` then flips to `Plugins › Built-in` as you scroll.
-    /// Tapping collapses/expands the bucket.
-    @ViewBuilder
-    private func pluginOriginHeader(_ section: (title: String, plugins: [PluginSummary])) -> some View {
-        let isCollapsed = collapsedSections.contains(section.title)
-
-        Button {
-            withAnimation(ChatMotion.quickState(reduceMotion: accessibilityReduceMotion)) {
-                if isCollapsed {
-                    collapsedSections.remove(section.title)
-                } else {
-                    collapsedSections.insert(section.title)
-                }
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Text("Plugins")
-                    .foregroundStyle(.secondary)
-                Text("›")
-                    .foregroundStyle(.tertiary)
-                Text(section.title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isCollapsed ? 90 : 0))
-            }
-            .font(.footnote.weight(.semibold))
-            .padding(.vertical, 8)
-            .padding(.horizontal, 2)
-            .background(.bar)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// The plugin rows of one origin bucket, shown when expanded.
-    @ViewBuilder
-    private func pluginOriginContent(_ section: (title: String, plugins: [PluginSummary])) -> some View {
-        if !collapsedSections.contains(section.title) {
-            pluginRows(section.plugins)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
         }
     }
 
