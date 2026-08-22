@@ -317,6 +317,13 @@ enum SectionVisibilitySettings {
     static let chatFilesKey = "sectionVisibility.chatFiles"
     static let chatGitKey = "sectionVisibility.chatGit"
 
+    /// Collapsible Personal/Built-in sections on the Skills and Plugins/Hooks
+    /// screens (opt-in, issue #… ). When on, "Personal" is expanded and
+    /// "Built-in" collapsed by default; each header still taps to toggle.
+    /// Defaults to off so pre-existing installs keep the flat, always-expanded
+    /// layout until the user flips it on in Settings.
+    static let collapsibleSectionsKey = "sections.collapsiblePersonalBuiltIn"
+
     /// Every entry defaults to visible, so an install that predates these toggles
     /// looks exactly as it did before.
     static func isVisible(_ key: String, in defaults: UserDefaults = .standard) -> Bool {

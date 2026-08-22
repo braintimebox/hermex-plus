@@ -7,11 +7,24 @@ struct SkillsView: View {
     @State private var viewModel: SkillsViewModel
     @State private var selectedSkill: SkillSummary?
     @State private var searchText = ""
+    @AppStorage(SectionVisibilitySettings.collapsibleSectionsKey) private var collapsibleSections = false
+    /// Expansion state per section title (only meaningful when collapsible is on).
+    @State private var expandedSections: [String: Bool] = [:]
 
+    /// Determines the initial expansion state of each origin section. With the
+    /// collapsible toggle off, everything is force-expanded (flat, as before).
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
         self.onAPIError = onAPIError
         _viewModel = State(initialValue: SkillsViewModel(server: server))
+    }
+
+    /// Whether a section is expanded now. `Personal` starts open, `Built-in`
+    /// starts collapsed when the collapsible feature is on; off → always open.
+    private func initialExpanded(_ title: String) -> Bool {
+        guard collapsibleSections else { return true }
+        // Personal = first section is expanded; anything else (Built-in) collapsed.
+        return title == String(localized: "Personal")
     }
 
     var body: some View {
@@ -72,26 +85,7 @@ struct SkillsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(filteredSections, id: \.title) { section in
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Top-level provenance header (Personal / Built-in).
-                            Text(section.title)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 4)
-
-                            ForEach(section.groups, id: \.category) { group in
-                                SkillCategorySection(
-                                    category: group.category,
-                                    skills: group.skills,
-                                    server: server,
-                                    togglingSkillNames: viewModel.togglingSkillNames,
-                                    onToggleSkill: { skill, enabled in
-                                        await toggle(skill: skill, enabled: enabled)
-                                    },
-                                    onAPIError: onAPIError
-                                )
-                            }
-                        }
+                        originSection(section)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -117,6 +111,50 @@ struct SkillsView: View {
         await viewModel.setSkill(skill, enabled: enabled)
         if let error = viewModel.lastError {
             onAPIError(error)
+        }
+    }
+
+    /// One origin section (Personal / Built-in). When the collapsible feature
+    /// is on it renders as a `DisclosureGroup` — Personal expanded, Built-in
+    /// collapsed by default, tappable header; off → always expanded (flat).
+    @ViewBuilder
+    private func originSection(_ section: (title: String, groups: [(category: String, skills: [SkillSummary])])) -> some View {
+        if collapsibleSections {
+            DisclosureGroup(isExpanded: Binding(
+                get: { expandedSections[section.title] ?? initialExpanded(section.title) },
+                set: { expandedSections[section.title] = $0 }
+            )) {
+                sectionGroups(section.groups)
+                    .padding(.top, 8)
+            } label: {
+                Text(section.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(section.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 4)
+                sectionGroups(section.groups)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionGroups(_ groups: [(category: String, skills: [SkillSummary])]) -> some View {
+        ForEach(groups, id: \.category) { group in
+            SkillCategorySection(
+                category: group.category,
+                skills: group.skills,
+                server: server,
+                togglingSkillNames: viewModel.togglingSkillNames,
+                onToggleSkill: { skill, enabled in
+                    await toggle(skill: skill, enabled: enabled)
+                },
+                onAPIError: onAPIError
+            )
         }
     }
 }
@@ -499,11 +537,18 @@ struct PluginsHooksView: View {
     let onAPIError: (Error) -> Void
 
     @State private var viewModel: PluginsHooksViewModel
+    @AppStorage(SectionVisibilitySettings.collapsibleSectionsKey) private var collapsibleSections = false
+    @State private var expandedSections: [String: Bool] = [:]
 
     init(server: URL, onAPIError: @escaping (Error) -> Void) {
         self.server = server
         self.onAPIError = onAPIError
         _viewModel = State(initialValue: PluginsHooksViewModel(server: server))
+    }
+
+    private func initialExpanded(_ title: String) -> Bool {
+        guard collapsibleSections else { return true }
+        return title == String(localized: "Personal")
     }
 
     var body: some View {
@@ -572,27 +617,53 @@ struct PluginsHooksView: View {
                 .foregroundStyle(.primary)
 
             ForEach(viewModel.originGroupedPlugins, id: \.title) { section in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(section.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
+                pluginOriginSection(section)
+            }
+        }
+    }
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(section.plugins.enumerated()), id: \.element.id) { index, plugin in
-                            PluginRow(plugin: plugin)
-                            if index < section.plugins.count - 1 {
-                                Divider()
-                            }
-                        }
-                    }
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
-                    )
+    /// One plugins origin bucket (Personal / Built-in). Collapsible when the
+    /// feature is on — Personal expanded, Built-in collapsed by default.
+    @ViewBuilder
+    private func pluginOriginSection(_ section: (title: String, plugins: [PluginSummary])) -> some View {
+        let rows = pluginRows(section.plugins)
+
+        if collapsibleSections {
+            DisclosureGroup(isExpanded: Binding(
+                get: { expandedSections[section.title] ?? initialExpanded(section.title) },
+                set: { expandedSections[section.title] = $0 }
+            )) {
+                rows.padding(.top, 8)
+            } label: {
+                Text(section.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(section.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                rows
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pluginRows(_ plugins: [PluginSummary]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(plugins.enumerated()), id: \.element.id) { index, plugin in
+                PluginRow(plugin: plugin)
+                if index < plugins.count - 1 {
+                    Divider()
                 }
             }
         }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
     }
 
     @ViewBuilder

@@ -96,6 +96,7 @@ struct SettingsView: View {
     @AppStorage("sidebar_shows_saved_section") private var showsSavedSection = true
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsChatFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsChatGitControls = true
+    @AppStorage(SectionVisibilitySettings.collapsibleSectionsKey) private var collapsibleSections = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -377,6 +378,16 @@ struct SettingsView: View {
                         systemImage: "bookmark.fill",
                         isOn: $showsSavedSection
                     )
+
+                    SettingsDivider()
+
+                    SettingsToggleRow(
+                        title: String(localized: "Collapsible Personal / Built-in Sections"),
+                        systemImage: "chevron.up.chevron.down",
+                        isOn: $collapsibleSections
+                    )
+
+                    SettingsFootnote(String(localized: "On the Skills and Plugins/Hooks screens, group Personal and Built-in entries into collapsible sections — Personal open and Built-in collapsed by default."))
 
                     SettingsFootnote(String(localized: "Turn off the entries you never use to shorten the top of the session list. Each one is the only way into its screen, so turn it back on here when you need it again."))
                 }

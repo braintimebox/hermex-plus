@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.3 — 2026-08-22
+
+### Added
+- **Collapsible Personal / Built-in sections (opt-in).** A new Settings toggle
+  ("Main Page → Collapsible Personal / Built-in Sections") turns the Skills and
+  Plugins/Hooks origin buckets into tap-to-collapse sections: "Personal" open and
+  "Built-in" collapsed by default. Off (the default) keeps the previous
+  always-expanded layout unchanged.
+
 ## 2.3.2 — 2026-08-22
 
 ### Changed
