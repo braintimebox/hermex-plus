@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.3 — 2026-08-23
+
+### Fixed
+- **Large file download no longer silently stalls.** The download request had no timeout, so a big `.ipa` through the TLS proxy could hang with no error and no file ("share: 0 reactions"). It now has a 90s cap and surfaces a catchable error (with the response body) instead of stalling forever.
+
 ## 2.5.2 — 2026-08-23
 
 ### Fixed
