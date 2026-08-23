@@ -261,26 +261,16 @@ actor APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        // Large files through the TLS proxy must not hang forever (the "0
-        // reaction" share: no error, no file). A 90s cap is generous for a
-        // 47MB .ipa and still surfaces a catchable error instead of a stall.
-        request.timeoutInterval = 90
-        request.setValue("*/*", forHTTPHeaderField: "Accept")
         customHeaderProvider().apply(to: &request)
-        // Restore Accept after headers (custom header provider shouldn't clobber it).
         request.setValue("*/*", forHTTPHeaderField: "Accept")
 
         let (tempURL, response) = try await session.download(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            try? FileManager.default.removeItem(at: tempURL)
             throw APIError.http(statusCode: -1, body: nil)
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
             try? FileManager.default.removeItem(at: tempURL)
-            throw APIError.http(
-                statusCode: httpResponse.statusCode,
-                body: String(data: (try? Data(contentsOf: tempURL)) ?? Data(), encoding: .utf8)
-            )
+            throw APIError.http(statusCode: httpResponse.statusCode, body: nil)
         }
         return tempURL
     }

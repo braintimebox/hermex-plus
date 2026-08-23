@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.4 — 2026-08-23
+
+### Fixed
+- **Reverted the file-manager export to the working 2.5.0 path.** The 2.5.1/2.5.2/2.5.3 export changes (share-sheet for binary, explicit Download action, download timeout) broke opening/exporting files in the file manager relative to 2.5.0. This reverts `FilePreviewView`/`FilePreviewViewModel`/`FileExportSupport`/`APIClient` to the 2.5.0 behaviour that worked, keeping streaming download (`downloadFile`) but returning to `ExportedFileDocument(data:)` + `fileExporter` for the export UI.
+
 ## 2.5.3 — 2026-08-23
 
 ### Fixed
