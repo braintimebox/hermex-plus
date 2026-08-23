@@ -217,16 +217,16 @@ struct ChatTranscriptView: View {
                 }
                 .onChange(of: pinnedScrollTarget) {
                     guard let target = pinnedScrollTarget else { return }
-                    // Resolve the pinned message id → its transcript anchorID, then
-                    // scroll to it. Rows are Now identified by anchorID (stable —
-                    // the messageId), so a renderID would not resolve to a mounted
-                    // row. A pinned anchor can be stale (e.g. the message was
-                    // compacted away), so scroll only when the row still exists.
-                    let anchorID = displayedTranscriptMessages
-                        .first(where: { $0.message.id == target })?.anchorID
-                    if let anchorID {
+                    // Resolve the pinned message id → its transcript row's ForEach
+                    // identity (messageId ?? renderID), then scroll to it. The
+                    // scroll target MUST match the ForEach `.id(transcriptMessage.id)`
+                    // or `ScrollViewProxy.scrollTo` is silently ignored. A pinned id
+                    // can be stale (e.g. the message was compacted away), so scroll
+                    // only when the row still exists.
+                    let row = displayedTranscriptMessages.first { $0.message.id == target }
+                    if let row {
                         withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                            proxy.scrollTo(anchorID, anchor: .top)
+                            proxy.scrollTo(row.id, anchor: .top)
                         }
                     }
                     onPinnedScrollConsumed()
@@ -304,16 +304,10 @@ struct ChatTranscriptView: View {
                     isMessagePinned: isMessagePinned
                 )
                 .equatable()
-                // ForEach identity uses anchorID (stable — the messageId when one
-                // exists) instead of the positional renderID. renderID is
-                // "transcript:<absoluteIndex>", which shifts on compaction /
-                // pagination / reconcile, re-identifying every row and forcing a
-                // full list diff (AttributeGraph AGGraphGetValue/SetOutputValue)
-                // that stalls the main thread on long chats. Anchor-based IDs keep
-                // existing message rows stable across a structural shift so only
-                // genuinely new/removed rows re-render. renderID stays the
-                // scroll target and the compression-reference anchor.
-                .id(transcriptMessage.anchorID)
+                // ForEach identity uses TranscriptMessage.id (messageId ?? renderID):
+                // unique AND stable, avoiding both the anchorID duplicate-id bug
+                // (2.4.5 regression) and the full-list re-diff of positional renderID.
+                .id(transcriptMessage.id)
 
                 if let compressionReferenceCard,
                    compressionReferenceCard.afterRenderID == transcriptMessage.renderID {
@@ -372,19 +366,20 @@ struct ChatTranscriptView: View {
     }
 
     private func loadOlderMessagesPreservingPosition(proxy: ScrollViewProxy) async {
-        // Anchor on the first transcript row's anchorID (stable). Rows are now
-        // `.id(anchorID)`, so a positional renderID no longer resolves after the
-        // older messages are prepended.
-        let anchorID = displayedTranscriptMessages.first?.anchorID
+        // Anchor on the first transcript row's ForEach identity (messageId ??
+        // renderID). Rows are `.id(transcriptMessage.id)`, so the scroll target
+        // must match that identity to resolve after the older messages are
+        // prepended.
+        let identity = displayedTranscriptMessages.first?.id
         let didLoad = await onLoadOlderMessages()
-        guard didLoad, let anchorID else { return }
+        guard didLoad, let identity else { return }
 
         await Task.yield()
         if reduceMotion {
-            proxy.scrollTo(anchorID, anchor: .top)
+            proxy.scrollTo(identity, anchor: .top)
         } else {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(anchorID, anchor: .top)
+                proxy.scrollTo(identity, anchor: .top)
             }
         }
     }

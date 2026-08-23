@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.7 — 2026-08-23
+
+### Fixed
+- **Bottom scroll no longer breaks after a stream reconnect (regression from 2.4.5).** Transcript row identity now uses `messageId ?? renderID` instead of `anchorID` alone. `anchorID` is not unique when two rows share a messageId (a real case after a stream reconnect or duplicate), which made ForEach unable to distinguish rows and silently swallowed scroll-to-bottom — "can't get to the bottom of the chat, neither by the ↓ button nor by swiping." The new identity is unique (renderID fallback) and stable (messageId-first), so it keeps the long-chat smoothness fix without the duplicate-id breakage. The pinned-message scroll target and load-older position anchor are aligned to the same identity.
+
 ## 2.4.6 — 2026-08-23
 
 ### Fixed
