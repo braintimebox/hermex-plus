@@ -268,9 +268,9 @@ struct FilePreviewView: View {
             } else {
                 let payload = try await viewModel.exportPayload()
                 exportDocument = ExportedFileDocument(data: payload.data)
+                exportContentType = payload.contentType
+                exportFilename = payload.filename
             }
-            exportContentType = nil
-            exportFilename = nil
             isFileExporterPresented = true
         } catch {
             exportErrorMessage = error.localizedDescription
