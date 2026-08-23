@@ -146,6 +146,11 @@ struct ScheduledMessagesView: View {
 
     private func deleteLocal(_ msg: PendingScheduledMessage) {
         modelContext.delete(msg)
+        // Drop it from the in-memory list immediately so the UI reflects the
+        // delete without waiting on the network round-trip to the scheduled
+        // endpoint (deleteScheduledFromServer can be slow or hang, which used to
+        // leave the row visible until the next full load).
+        messages.removeAll { $0.scheduleKey == msg.scheduleKey }
     }
 
     private func deleteScheduledFromServer(msg: PendingScheduledMessage) async {
@@ -385,6 +390,17 @@ fileprivate struct EditScheduledMessageSheet: View {
             }
             .task {
                 await loadSessions()
+                // Restore the currently-attached chat into the picker selection so
+                // editing doesn't silently drop it. destinationIsExistingChat is set
+                // from message.sessionId in onAppear, but pickedSession stays nil
+                // until here — without this, Save() hits the `guard let picked` and
+                // pops the session picker instead of saving (the "can only break
+                // the attachment, can't re-attach" bug).
+                if !message.sessionId.isEmpty,
+                   pickedSession == nil,
+                   let matching = sessions.first(where: { $0.id == message.sessionId }) {
+                    pickedSession = matching
+                }
             }
         }
     }

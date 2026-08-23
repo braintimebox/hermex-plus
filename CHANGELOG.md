@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.6 — 2026-08-23
+
+### Fixed
+- **Editing a scheduled message keeps its attached chat.** The edit sheet now restores the message's current `sessionId` into the chat picker selection, so tapping Save no longer pops the picker or silently drops the attachment — previously the picker selection was left nil, which made Save appear to do nothing ("can only break the attachment, can't re-attach").
+- **Scheduled list updates immediately after a delete.** Deleting a row now removes it from the on-screen list right away instead of waiting on the network round-trip to the scheduled endpoint (which could be slow or hang, leaving the row visible until the next full reload).
+
 ## 2.4.5 — 2026-08-23
 
 ### Fixed
