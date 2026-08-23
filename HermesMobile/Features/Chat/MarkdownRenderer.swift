@@ -91,6 +91,9 @@ struct StreamingMarkdownRenderer: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var displayedContent: String
+    /// Debounce handle for coalescing word-cadence updates into a per-frame
+    /// re-render (see `scheduleContentCommit`).
+    @State private var contentCommitTask: Task<Void, Never>?
 
     init(content: String, forceFadeDisabled: Bool? = nil) {
         self.content = content
@@ -111,15 +114,32 @@ struct StreamingMarkdownRenderer: View {
                 streamingMarkdownContent
             }
         }
-        .task(id: content) {
-            // Render the latest content as soon as it changes — no artificial
-            // accumulation delay. The per-token markdown re-parse is no longer
-            // the bottleneck for smoothness: the O(1) transcript hot path (2.0.0)
-            // + memoized math/block segmentation remove the quadratic rebuild, so
-            // an immediate re-render on each change stays fluid while keeping the
-            // continuous, native "letters appear" feel rather than chunked text.
-            guard displayedContent != content else { return }
-            displayedContent = content
+        .onChange(of: content) { _, newContent in
+            scheduleContentCommit(newContent)
+        }
+        .onDisappear {
+            contentCommitTask?.cancel()
+            contentCommitTask = nil
+        }
+    }
+
+    /// Coalesce `content` updates into a re-render at most once per frame.
+    ///
+    /// `Markdown` in `streamingMarkdownContent` re-parses and re-lays-out the
+    /// ENTIRE accumulated text through CoreText on the main thread each time
+    /// `displayedContent` flips, so committing on every word-cadence tick makes
+    /// a long reply re-layout quadratically — the verified source of the
+    /// `CTLineCreateWithAttributedString` black screen / main-thread stall
+    /// while a long answer streams in. A short debounce (~1 frame) absorbs the
+    /// rapid word-cadence updates (which arrive far faster than the 60 Hz frame
+    /// budget can paint anyway) and always settles on the latest text, so no
+    /// token is ever dropped and the visible reveal stays continuous.
+    private func scheduleContentCommit(_ latestContent: String) {
+        contentCommitTask?.cancel()
+        contentCommitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            displayedContent = latestContent
         }
     }
 

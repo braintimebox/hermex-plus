@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.3 — 2026-08-23
+
+### Fixed
+- **Long answers no longer re-layout quadratically (black screen / main-thread stall while streaming).** `StreamingMarkdownRenderer` committed the whole accumulated markdown on every drain tick (`.task(id: content)` → `displayedContent = content`), so a long reply re-parsed and re-laid-out the entire text through CoreText each tick — the verified source of the `CTLineCreateWithAttributedString` black screen and the "↓ won't reach the bottom" stall on long chats. It now coalesces updates via a ~1-frame debounce (`.onChange(of: content)` + short sleep), always settling on the latest text, so the reveal stays continuous and the re-layout cost drops from quadratic to once-per-frame.
+
 ## 2.4.2 — 2026-08-22
 
 ### Fixed
