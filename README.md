@@ -16,7 +16,7 @@ Your server. Your iPhone. No middleman.
 
 ## 🔗 Download
 
-**Current build (direct IPA):** https://github.com/braintimebox/hermex-plus/actions/runs/32656406594/artifacts/9497609361
+**Current build (direct IPA):** https://github.com/braintimebox/hermex-plus/actions/runs/32658059344/artifacts/9498032314
 
 **All builds:** https://github.com/braintimebox/hermex-plus/actions — pick a green build → Artifacts → `HermexPlus-unsigned`
 
