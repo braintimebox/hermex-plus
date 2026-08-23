@@ -8,6 +8,7 @@ struct FilePreviewView: View {
     private let entry: WorkspaceEntry
     @State private var viewModel: FilePreviewViewModel
     @State private var exportDocument = ExportedFileDocument(data: Data())
+    @State private var shareItem: SessionExportShareItem?
     @State private var exportContentType = UTType.data
     @State private var exportFilename = String(localized: "Hermes File")
     @State private var isFileExporterPresented = false
@@ -38,6 +39,21 @@ struct FilePreviewView: View {
                 }
             } else if let preview = viewModel.preview {
                 previewContent(preview)
+            } else if viewModel.isBinaryFile {
+                // Large/binary files (e.g. an .ipa) can't be previewed inline —
+                // show an explicit Download action instead of a dead "No Preview".
+                ContentUnavailableView {
+                    Label("File Ready to Download", systemImage: "arrow.down.circle")
+                } description: {
+                    Text(displayPath)
+                } actions: {
+                    Button {
+                        Task { await exportFile() }
+                    } label: {
+                        Label("Download", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             } else {
                 ContentUnavailableView {
                     Label("No Preview", systemImage: "doc.text.magnifyingglass")
@@ -87,6 +103,9 @@ struct FilePreviewView: View {
             if case let .failure(error) = result {
                 exportErrorMessage = error.localizedDescription
             }
+        }
+        .sheet(item: $shareItem) { item in
+            SessionExportShareSheet(fileURL: item.fileURL)
         }
         .alert(
             "Export Failed",
@@ -258,20 +277,20 @@ struct FilePreviewView: View {
 
     private func exportFile() async {
         do {
-            // Large binaries stream to a temp file on disk (URL) so a multi-MB
-            // payload is never buffered as one big `Data`.
+            // Large binaries stream to a temp file on disk (URL) and are handed
+            // off via a share sheet; the file is never buffered as one big
+            // `Data` and `FileDocument`/`FileWrapper(url:)` is bypassed, which
+            // is what made the share action silently do nothing for an .ipa.
             if viewModel.isBinaryFile {
                 let url = try await viewModel.exportFileURL()
-                exportDocument = ExportedFileDocument(fileURL: url)
-                exportFilename = (entry.path as NSString?)?.lastPathComponent ?? String(localized: "Hermes File")
-                exportContentType = UTType(filenameExtension: (entry.path as NSString?)?.pathExtension ?? "") ?? .data
+                shareItem = SessionExportShareItem(fileURL: url)
             } else {
                 let payload = try await viewModel.exportPayload()
                 exportDocument = ExportedFileDocument(data: payload.data)
                 exportContentType = payload.contentType
                 exportFilename = payload.filename
+                isFileExporterPresented = true
             }
-            isFileExporterPresented = true
         } catch {
             exportErrorMessage = error.localizedDescription
             onAPIError(error)

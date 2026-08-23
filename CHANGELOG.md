@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.1 — 2026-08-23
+
+### Fixed
+- **Share/download of large binary files now works.** The share action for a non-previewable binary (e.g. an `.ipa`) was handed to `FileDocument`/`FileWrapper(url:)`, which silently did nothing. It now streams the file to a temp URL and presents a real share sheet (`SessionExportShareSheet`). An `.ipa` in the file browser now shows an explicit "Download" action instead of a dead "No Preview".
+
 ## 2.5.0 — 2026-08-23
 
 ### Added
