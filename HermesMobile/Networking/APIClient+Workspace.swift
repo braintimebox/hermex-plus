@@ -67,5 +67,13 @@ extension APIClient {
 
         return try await downloadData(from: url, using: publicMediaSession, mapsUnauthorized: false)
     }
+
+    /// Stream a workspace file to a temp file on disk (large binaries). Uses the
+    /// same endpoint contract as `rawFileData` but writes to disk instead of
+    /// memory — so a multi-MB .ipa is not loaded into a single `Data`.
+    func rawFileDownloadURL(sessionID: String, path: String) async throws -> URL {
+        let url = Endpoint.rawFile(sessionID: sessionID, path: path).url(relativeTo: baseURL)
+        return try await downloadFile(from: url, using: session)
+    }
 }
 

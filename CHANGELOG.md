@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0 — 2026-08-23
+
+### Added
+- **Large binary files now download instead of buffering in memory.** The in-app file browser previously loaded a whole file into a single `Data`, which made big binaries (e.g. an `.ipa`) fail to open/export. Workspace files stream to a temp file on disk (URLSession download) and are handed off by URL, so multi-MB files export reliably. `.ipa` is now treated as a binary (not opened as text).
+
+### Fixed
+- (Bugs 3 — reinstall avatar — and 6 — scroll oscillation while the agent is thinking — are diagnosed and deferred to a separate change; they need a second pass and on-device verification, not a blind hot-path edit.)
+
 ## 2.4.9 — 2026-08-23
 
 ### Added

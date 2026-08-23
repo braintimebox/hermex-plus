@@ -250,6 +250,31 @@ actor APIClient {
         return data
     }
 
+    /// Stream a GET to a temporary file on disk (bypasses memory-backed
+    /// `data(for:)`). Use for large binaries (e.g. an .ipa) where loading the
+    /// whole response into a single `Data` would spike memory or be dropped.
+    /// Returns the temp file URL; the caller owns/moves it.
+    func downloadFile(
+        from url: URL,
+        using session: URLSession
+    ) async throws -> URL {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        customHeaderProvider().apply(to: &request)
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+
+        let (tempURL, response) = try await session.download(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.http(statusCode: -1, body: nil)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw APIError.http(statusCode: httpResponse.statusCode, body: nil)
+        }
+        return tempURL
+    }
+
     static func isSameOrigin(_ url: URL, as baseURL: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased(),
               let baseScheme = baseURL.scheme?.lowercased(),

@@ -258,10 +258,19 @@ struct FilePreviewView: View {
 
     private func exportFile() async {
         do {
-            let payload = try await viewModel.exportPayload()
-            exportDocument = ExportedFileDocument(data: payload.data)
-            exportContentType = payload.contentType
-            exportFilename = payload.filename
+            // Large binaries stream to a temp file on disk (URL) so a multi-MB
+            // payload is never buffered as one big `Data`.
+            if viewModel.isBinaryFile {
+                let url = try await viewModel.exportFileURL()
+                exportDocument = ExportedFileDocument(fileURL: url)
+                exportFilename = (entry.path as NSString?)?.lastPathComponent ?? String(localized: "Hermes File")
+                exportContentType = UTType(filenameExtension: (entry.path as NSString?)?.pathExtension ?? "") ?? .data
+            } else {
+                let payload = try await viewModel.exportPayload()
+                exportDocument = ExportedFileDocument(data: payload.data)
+            }
+            exportContentType = nil
+            exportFilename = nil
             isFileExporterPresented = true
         } catch {
             exportErrorMessage = error.localizedDescription

@@ -7,17 +7,30 @@ struct ExportedFileDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.data] }
 
     let data: Data
+    let fileURL: URL?
 
     init(data: Data) {
         self.data = data
+        self.fileURL = nil
+    }
+
+    /// For large binaries streamed to disk (not held in memory as `Data`).
+    init(fileURL: URL) {
+        self.data = Data()
+        self.fileURL = fileURL
     }
 
     init(configuration: ReadConfiguration) throws {
+        fileURL = nil
         data = configuration.file.regularFileContents ?? Data()
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        if let fileURL {
+            // Stream from disk instead of buffering the whole payload in memory.
+            return try FileWrapper(url: fileURL)
+        }
+        return FileWrapper(regularFileWithContents: data)
     }
 }
 

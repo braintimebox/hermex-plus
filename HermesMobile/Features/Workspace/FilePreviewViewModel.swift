@@ -105,6 +105,27 @@ final class FilePreviewViewModel {
         }
     }
 
+    /// Large binaries (e.g. .ipa) are streamed to a temp file on disk and
+    /// handed off by URL instead of being loaded into a single `Data` — this is
+    /// what previously made big files fail to open/export.
+    func exportFileURL() async throws -> URL {
+        guard let sessionID = session.sessionId else {
+            throw FileExportError.missingSessionID
+        }
+        guard !path.isEmpty else {
+            throw FileExportError.missingPath
+        }
+        return try await apiClient.rawFileDownloadURL(sessionID: sessionID, path: path)
+    }
+
+    private var isLargeBinary: Bool {
+        isKnownUnsupportedBinaryPath
+    }
+
+    var isBinaryFile: Bool {
+        isKnownUnsupportedBinaryPath
+    }
+
     private var pathExtension: String {
         URL(fileURLWithPath: path).pathExtension.lowercased()
     }
@@ -116,7 +137,7 @@ final class FilePreviewViewModel {
     private var isKnownUnsupportedBinaryPath: Bool {
         [
             "7z", "a", "aiff", "avi", "bin", "bz2", "class", "db", "dmg", "doc",
-            "docx", "dylib", "exe", "flac", "gz", "jar", "m4a", "mov", "mp3",
+            "docx", "dylib", "exe", "flac", "gz", "ipa", "jar", "m4a", "mov", "mp3",
             "mp4", "o", "pdf", "pkg", "ppt", "pptx", "pyc", "rar", "sqlite",
             "svg", "tar", "tgz", "wav", "xls", "xlsx", "xz", "zip"
         ].contains(pathExtension)
