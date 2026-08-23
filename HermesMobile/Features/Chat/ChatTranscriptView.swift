@@ -140,7 +140,14 @@ struct ChatTranscriptView: View {
                         ChatScrollPolicy.sizeChangeAnchor(
                             shouldFollowLatestMessage: shouldFollowLatestMessage,
                             isAutoScrollPaused: isAutoScrollPaused,
-                            isStreaming: activeStreamID != nil
+                            // Only glue the viewport to the bottom while content
+                            // is actually being printed. While the agent is still
+                            // thinking (liveReasoningText non-empty) the size is
+                            // NOT growing, so a `.bottom` anchor only competes
+                            // with the app's follow path and blocks reading what
+                            // is already rendered — the "chat is inaccessible
+                            // while the agent thinks" behaviour.
+                            isStreaming: streamingAssistantMessageID != nil && liveReasoningText.isEmpty
                         ),
                         for: .sizeChanges
                     )

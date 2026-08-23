@@ -425,12 +425,20 @@ fileprivate struct EditScheduledMessageSheet: View {
         let sid: String
         let title: String?
         if destinationIsExistingChat {
-            guard let picked = pickedSession, !picked.id.isEmpty else {
+            if let picked = pickedSession, !picked.id.isEmpty {
+                sid = picked.id
+                title = nil
+            } else if !message.sessionId.isEmpty {
+                // Fallback: keep the already-attached chat. pickedSession can be
+                // nil if the session list didn't load or the id didn't match, and
+                // blocking on the picker meant the text/date edit was silently
+                // dropped (the "saved but not visible" bug).
+                sid = message.sessionId
+                title = message.sessionTitle
+            } else {
                 showSessionPicker = true
                 return
             }
-            sid = picked.id
-            title = nil
         } else {
             sid = ""
             title = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)

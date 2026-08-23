@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.2 — 2026-08-23
+
+### Fixed
+- **Chat is no longer inaccessible while the agent thinks.** The `.sizeChanges` bottom anchor was active whenever a stream was connected (`activeStreamID != nil`), even while the model was still thinking and the content wasn't growing — it raced the app's follow path and blocked reading already-rendered text. The anchor now applies only when content is actually being printed (`streamingAssistantMessageID != nil && liveReasoningText.isEmpty`).
+- **Editing a scheduled message no longer silently drops the change.** `save()` blocked on a session-picker guard when `pickedSession` was nil (session list not loaded / id mismatch), which dropped the text/date edit. It now falls back to the already-attached chat so the edit is saved.
+
 ## 2.5.1 — 2026-08-23
 
 ### Fixed
