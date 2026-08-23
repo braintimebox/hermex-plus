@@ -5522,7 +5522,12 @@ struct TranscriptMessage: Identifiable, Equatable {
     let anchorID: String
     let message: ChatMessage
 
-    var id: String { renderID }
+    /// Identity follows anchorID (stable — the messageId when one exists), so
+    /// ForEach and scroll targets stay consistent across structural shifts.
+    /// renderID stays positional as the compression-reference anchor and the
+    /// row's render target, but identity must not shift or SwiftUI re-diffs
+    /// the whole list (AttributeGraph stall on long chats).
+    var id: String { anchorID }
 }
 
 /// Display model for the synthesized "Context compaction · Reference only" card.

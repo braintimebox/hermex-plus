@@ -217,14 +217,16 @@ struct ChatTranscriptView: View {
                 }
                 .onChange(of: pinnedScrollTarget) {
                     guard let target = pinnedScrollTarget else { return }
-                    // Resolve the pinned message id → its transcript renderID, then
-                    // scroll to it. A pinned id can be stale (e.g. the message was
+                    // Resolve the pinned message id → its transcript anchorID, then
+                    // scroll to it. Rows are Now identified by anchorID (stable —
+                    // the messageId), so a renderID would not resolve to a mounted
+                    // row. A pinned anchor can be stale (e.g. the message was
                     // compacted away), so scroll only when the row still exists.
-                    let renderID = displayedTranscriptMessages
-                        .first(where: { $0.message.id == target })?.renderID
-                    if let renderID {
+                    let anchorID = displayedTranscriptMessages
+                        .first(where: { $0.message.id == target })?.anchorID
+                    if let anchorID {
                         withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                            proxy.scrollTo(renderID, anchor: .top)
+                            proxy.scrollTo(anchorID, anchor: .top)
                         }
                     }
                     onPinnedScrollConsumed()
@@ -302,7 +304,16 @@ struct ChatTranscriptView: View {
                     isMessagePinned: isMessagePinned
                 )
                 .equatable()
-                .id(transcriptMessage.renderID)
+                // ForEach identity uses anchorID (stable — the messageId when one
+                // exists) instead of the positional renderID. renderID is
+                // "transcript:<absoluteIndex>", which shifts on compaction /
+                // pagination / reconcile, re-identifying every row and forcing a
+                // full list diff (AttributeGraph AGGraphGetValue/SetOutputValue)
+                // that stalls the main thread on long chats. Anchor-based IDs keep
+                // existing message rows stable across a structural shift so only
+                // genuinely new/removed rows re-render. renderID stays the
+                // scroll target and the compression-reference anchor.
+                .id(transcriptMessage.anchorID)
 
                 if let compressionReferenceCard,
                    compressionReferenceCard.afterRenderID == transcriptMessage.renderID {
@@ -361,16 +372,19 @@ struct ChatTranscriptView: View {
     }
 
     private func loadOlderMessagesPreservingPosition(proxy: ScrollViewProxy) async {
-        let renderID = displayedTranscriptMessages.first?.renderID
+        // Anchor on the first transcript row's anchorID (stable). Rows are now
+        // `.id(anchorID)`, so a positional renderID no longer resolves after the
+        // older messages are prepended.
+        let anchorID = displayedTranscriptMessages.first?.anchorID
         let didLoad = await onLoadOlderMessages()
-        guard didLoad, let renderID else { return }
+        guard didLoad, let anchorID else { return }
 
         await Task.yield()
         if reduceMotion {
-            proxy.scrollTo(renderID, anchor: .top)
+            proxy.scrollTo(anchorID, anchor: .top)
         } else {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(renderID, anchor: .top)
+                proxy.scrollTo(anchorID, anchor: .top)
             }
         }
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.5 — 2026-08-23
+
+### Fixed
+- **Transcript rows keep a stable identity across compaction / pagination / reconcile (long-chat stall fix).** `TranscriptMessage.id` and the `ForEach` `.id()` now use the message's `anchorID` (the `messageId` when one exists) instead of the positional `renderID` (`transcript:<index>`). Previously any structural shift re-identified every row, forcing a full SwiftUI list diff (`AttributeGraph`) that stalled the main thread on long chats. Scroll targets (pinned message, load-older position) were updated to the same stable id so they resolve to a mounted row. `renderID` remains only as the compression-reference anchor.
+- **Last message now reliably scrolls into view.** The scroll-to-latest path targets the message's stable anchor id, so it resolves after a structural shift instead of being silently ignored.
+
 ## 2.4.4 — 2026-08-23
 
 ### Fixed
