@@ -1574,7 +1574,7 @@ struct ChatView: View {
         NavigationStack {
             ChatSearchSheet(
                 messages: viewModel.messages,
-                roleForMessage: { role in role == .user ? "You" : "Hermes" },
+                roleForMessage: { role in role == "user" ? "You" : "Hermes" },
                 onSelect: { messageID in
                     showingChatSearch = false
                     // Reuse the existing pinned-scroll target: it resolves the
