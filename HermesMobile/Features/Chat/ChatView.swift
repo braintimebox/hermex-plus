@@ -307,6 +307,7 @@ struct ChatView: View {
     @State private var showingForwardPicker = false
     @State private var showingSchedulePicker = false
     @State private var showingScheduledList = false
+    @State private var showingChatSearch = false
     @State private var showShareSheet = false
     @State private var shareText = ""
     @State private var showProfileNewSessionConfirmation = false
@@ -696,6 +697,19 @@ struct ChatView: View {
                             }
                         }
 
+                        // Chat search — left of Files, same style.
+                        if !viewModel.messages.isEmpty {
+                            ChatToolbarActionSlot {
+                                Button {
+                                    showingChatSearch = true
+                                } label: {
+                                    Label("Search", systemImage: "magnifyingglass")
+                                }
+                                .disabled(viewModel.isViewingCachedData)
+                                .accessibilityLabel("Search chat")
+                            }
+                        }
+
                         if showsFilesButton {
                             ChatToolbarActionSlot {
                                 NavigationLink {
@@ -804,6 +818,22 @@ struct ChatView: View {
                     ScheduledMessagesView(
                         onSendNow: { msg in
                             await sendScheduledNow(fromChat: msg)
+                        }
+                    )
+                }
+            }
+            .sheet(isPresented: $showingChatSearch) {
+                NavigationStack {
+                    ChatSearchSheet(
+                        messages: viewModel.messages,
+                        roleForMessage: { role in
+                            role == .user ? "You" : "Hermes"
+                        },
+                        onSelect: { messageID in
+                            showingChatSearch = false
+                            // Reuse the existing pinned-scroll target: it resolves
+                            // the message id → transcript row and scrolls to it.
+                            pinnedScrollTarget = messageID
                         }
                     )
                 }
@@ -3243,6 +3273,62 @@ private struct PinnedMessagesSheet: View {
                     Button(String(localized: "Done")) {
                         dismiss()
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Search the current chat's transcript messages. New fileprivate struct so no
+/// pbxproj registration is needed (inlined at the bottom of ChatView.swift).
+fileprivate struct ChatSearchSheet: View {
+    let messages: [ChatMessage]
+    let roleForMessage: (String?) -> String
+    let onSelect: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var results: [ChatMessage] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        return messages.filter { message in
+            (message.content ?? "").localizedCaseInsensitiveContains(q)
+        }
+    }
+
+    var body: some View {
+        Group {
+            if results.isEmpty {
+                ContentUnavailableView.search(text: query)
+            } else {
+                List(results) { message in
+                    Button {
+                        onSelect(message.id)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(roleForMessage(message.role))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(message.content ?? "")
+                                .font(.subheadline)
+                                .lineLimit(2)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+            }
+        }
+        .navigationTitle(String(localized: "Search Chat"))
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: String(localized: "Search messages"))
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(String(localized: "Cancel")) {
+                    dismiss()
                 }
             }
         }

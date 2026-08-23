@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.9 — 2026-08-23
+
+### Added
+- **Chat search.** A magnifying-glass button in the chat toolbar (left of Files, same style) opens a searchable sheet that filters the current chat's messages by text. Tapping a result jumps to that message in the transcript.
+
 ## 2.4.8 — 2026-08-23
 
 ### Fixed
