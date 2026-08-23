@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.4 — 2026-08-23
+
+### Fixed
+- **Scheduling a message to an existing chat now actually targets it.** Choosing a chat from the picker implicitly clears the "Attach to current" toggle, so the message no longer silently goes to the current/new chat instead of the one the user picked. Previously the attach toggle stayed on by default and `target` returned `.currentChat`, overriding the explicit pick.
+- **Pin is now a dual action: pin + save.** Long-press → Pin both pins the message (shown in Pinned) and saves it (in Saved). Unpin both unpins and unsaves, so the two stay in sync. Also guards the standalone Save menu item against inserting a duplicate `SavedMessage` (its UNIQUE key would otherwise silently drop the second insert).
+
 ## 2.4.3 — 2026-08-23
 
 ### Fixed

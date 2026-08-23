@@ -1321,9 +1321,13 @@ struct ChatView: View {
             },
             onPin: { context in
                 if let index = pinnedMessageIDs.firstIndex(of: context.messageID) {
+                    // Unpin = unpin + unsave (dual action).
                     pinnedMessageIDs.remove(at: index)
+                    deleteSavedMessage(messageID: context.messageID)
                 } else {
+                    // Pin = pin + save (dual action).
                     pinnedMessageIDs.append(context.messageID)
+                    saveMessage(context)
                 }
             },
             isMessagePinned: { messageID in
@@ -2464,6 +2468,11 @@ struct ChatView: View {
 
     private func saveMessage(_ context: MessageActionContext) {
         let sessionID = session.sessionId ?? ""
+        // Guard against a duplicate: SavedMessage uses a UNIQUE savedKey, and a
+        // second insert with the same key is silently dropped by SwiftData. The
+        // pin action toggles so it won't double-save, but the standalone Save
+        // menu item can run twice on the same message.
+        guard findSavedMessage(messageID: context.messageID) == nil else { return }
         let saved = SavedMessage(
             messageId: context.messageID,
             sessionId: sessionID,
@@ -2473,6 +2482,21 @@ struct ChatView: View {
             serverURLString: server.absoluteString
         )
         modelContext.insert(saved)
+    }
+
+    private func findSavedMessage(messageID: String) -> SavedMessage? {
+        let key = SavedMessage.cacheKey(messageId: messageID, serverURLString: server.absoluteString)
+        var descriptor = FetchDescriptor<SavedMessage>(
+            predicate: #Predicate { $0.savedKey == key }
+        )
+        descriptor.fetchLimit = 1
+        return (try? modelContext.fetch(descriptor))?.first
+    }
+
+    private func deleteSavedMessage(messageID: String) {
+        if let existing = findSavedMessage(messageID: messageID) {
+            modelContext.delete(existing)
+        }
     }
 
     private func saveScheduledMessage(text: String, at date: Date, target: ScheduledMessageTarget) {
@@ -3042,6 +3066,13 @@ struct ScheduleMessageSheet: View {
                 SessionPickerForForward(sessions: sessions, title: "Choose Chat") { session in
                     pickedExistingSession = session
                     chatChoice = .existingChat
+                    // Choosing an explicit existing chat must clear "Attach to
+                    // current". The attach toggle stays on by default when the
+                    // sheet opens from a chat, and `target` returns .currentChat
+                    // while it's on — so without this the user's explicit pick is
+                    // silently ignored and the message goes to the current/new
+                    // chat instead of the one they chose.
+                    attachToChat = false
                 }
             }
             .task {
