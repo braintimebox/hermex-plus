@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.5 — 2026-08-23
+
+### Fixed
+- **Fast streaming no longer freezes the main thread.** `advanceFadeWindow` rescanned the whole streamed text (StreamingMarkdownBlockSplitter ×2 + StreamingTextFadeTailSplitter) on *every* token — O(N) per token, O(N²) on a long answer — the "fat main thread" freeze driver. It now coalesces to at most once per frame (~24ms), so the scan runs ~40×/s instead of once per token.
+
 ## 2.5.4 — 2026-08-23
 
 ### Fixed

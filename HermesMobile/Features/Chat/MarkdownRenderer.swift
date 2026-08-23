@@ -205,6 +205,10 @@ private struct StreamingMarkdownChunkedView: View {
     /// blocks (paragraphs, list items) appear in reading order even when a
     /// fast stream backlogs a block's queue toward `maxStampLead`.
     @State private var chain = StreamingTextFadeStampChain()
+    /// Coalescing handle: `advanceFadeWindow` rescans the whole text on every
+    /// token (O(N) × 3 splitters → O(N²) on long answers, the frozen-main
+    /// driver). Collapse it to at most once per frame here.
+    @State private var fadeCommitTask: Task<Void, Never>?
 
     private var segments: StreamingMarkdownBlockSegments {
         StreamingMarkdownBlockSplitter.split(content)
@@ -262,7 +266,17 @@ private struct StreamingMarkdownChunkedView: View {
             anchorFadeWindowAtCurrentBlock()
         }
         .onChange(of: content) { oldContent, newContent in
-            advanceFadeWindow(from: oldContent, to: newContent)
+            // Main-thread cost: advanceFadeWindow rescans the whole text
+            // (StreamingMarkdownBlockSplitter ×2 + StreamingTextFadeTailSplitter)
+            // on EVERY token. That is O(N) per token → O(N²) on a long answer,
+            // the "fat main thread" freeze driver. Coalesce it to once per frame
+            // so the O(N) scan runs ~60×/s instead of once per token.
+            fadeCommitTask?.cancel()
+            fadeCommitTask = Task {
+                try? await Task.sleep(for: .milliseconds(24))
+                guard !Task.isCancelled else { return }
+                advanceFadeWindow(from: oldContent, to: newContent)
+            }
         }
         .onChange(of: isStreamedTextAnimationEnabled) { _, isEnabled in
             if isEnabled {
