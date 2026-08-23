@@ -657,7 +657,15 @@ struct ChatView: View {
                 MainThreadWatchdog.shared.setScreen("ChatView")
                 HermexLogger.shared.log(type: "event", screen: "ChatView", message: "chat opened")
                 Task {
-                    await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)
+                    // Avoid a DOUBLE stream reconnect on open: `loadMessages`
+                    // (when loadsInitialMessages) already reconnects after the
+                    // history load. Only reconnect here when we did NOT go
+                    // through loadMessages (e.g. opened from cache). Doing it in
+                    // both places re-arms the SSE twice, which shows up as the
+                    // repeated "chat opened" + main-thread freeze on open.
+                    if !loadsInitialMessages {
+                        await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)
+                    }
 
                     if viewModel.activeStreamID != nil {
                         handleActiveStreamChange()
@@ -1628,7 +1636,14 @@ struct ChatView: View {
     }
 
     private func loadMessages(appliesInitialFocus: Bool = true) async {
+        // Load the transcript FIRST, then let it actually lay out before any
+        // stream reconnect. Doing both back-to-back forces one async pass that
+        // re-lays-out the whole history AND re-arms the SSE at the same time —
+        // the overlap is what stalls main-thread on open (the repeated
+        // "chat opened" + freeze pattern). One `Task.yield()` gives SwiftUI a
+        // frame to paint the loaded history before the reconnect work begins.
         await viewModel.loadMessages(modelContext: modelContext)
+        await Task.yield()
         await viewModel.reconnectStreamIfNeeded(modelContext: modelContext)
         if appliesInitialFocus {
             applyInitialComposerFocusPolicyIfNeeded()

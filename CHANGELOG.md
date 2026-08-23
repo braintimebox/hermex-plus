@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.8 — 2026-08-23
+
+### Fixed
+- **Opening a chat no longer freezes (history-first, then stream).** On open the transcript was loaded AND the SSE stream reconnected back-to-back in one async pass, and the stream reconnect was also fired a second time from `.onAppear`. That double connect re-armed the SSE twice and re-laid-out the whole history at the same time — the source of the repeated "chat opened" + 3s main-thread freeze (SwiftUICore). Now the history loads first, gets a frame to actually paint (`Task.yield()`), and only then does the stream reconnect — and only once (the `.onAppear` duplicate is removed when `loadsInitialMessages` already handles it).
+
 ## 2.4.7 — 2026-08-23
 
 ### Fixed
