@@ -823,20 +823,7 @@ struct ChatView: View {
                 }
             }
             .sheet(isPresented: $showingChatSearch) {
-                NavigationStack {
-                    ChatSearchSheet(
-                        messages: viewModel.messages,
-                        roleForMessage: { role in
-                            role == .user ? "You" : "Hermes"
-                        },
-                        onSelect: { messageID in
-                            showingChatSearch = false
-                            // Reuse the existing pinned-scroll target: it resolves
-                            // the message id → transcript row and scrolls to it.
-                            pinnedScrollTarget = messageID
-                        }
-                    )
-                }
+                chatSearchSheet
             }
             .sheet(isPresented: $showShareSheet) {
                 ActivityViewController(activityItems: [shareText])
@@ -1580,6 +1567,22 @@ struct ChatView: View {
 
     private var displayedTranscriptMessages: [TranscriptMessage] {
         transcriptMessages
+    }
+
+    @ViewBuilder
+    private var chatSearchSheet: some View {
+        NavigationStack {
+            ChatSearchSheet(
+                messages: viewModel.messages,
+                roleForMessage: { role in role == .user ? "You" : "Hermes" },
+                onSelect: { messageID in
+                    showingChatSearch = false
+                    // Reuse the existing pinned-scroll target: it resolves the
+                    // message id → transcript row and scrolls to it.
+                    pinnedScrollTarget = messageID
+                }
+            )
+        }
     }
 
     private var latestTranscriptMessageID: String? {
