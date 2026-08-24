@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.8 — 2026-08-23
+
+### Fixed
+- **No more black screen when tapping the ↓ button.** The area below the last mounted LazyVStack row stayed unrendered during a fast scroll-to-bottom, showing a black gap in dark mode. The transcript now has an opaque `systemBackground` fill across the whole viewport, so that unrendered strip is the chat background instead of a black hole (light swipe up re-mounts the rows and it looks normal again).
+
 ## 2.5.7 — 2026-08-23
 
 ### Fixed

@@ -346,6 +346,12 @@ struct ChatTranscriptView: View {
                 }
 
                 ChatVerticalScrollAxisGuard()
+
+                // Opaque fill over the whole viewport so the area BELOW the
+                // last mounted LazyVStack row (which stays unrendered during a
+                // fast scroll-to-bottom) is the chat background instead of a
+                // black gap — the black-screen-on-↓ regression.
+                Color(.systemBackground)
             }
             .accessibilityHidden(true)
         }
