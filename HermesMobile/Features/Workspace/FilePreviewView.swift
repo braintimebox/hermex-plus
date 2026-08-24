@@ -280,7 +280,7 @@ struct FilePreviewView: View {
             screen: "file_preview",
             message: "export start",
             extras: [
-                "sessionID": viewModel.session.sessionId ?? "nil",
+                "sessionID": viewModel.sessionID ?? "nil",
                 "path": entry.path,
                 "isBinary": viewModel.isBinaryFile,
             ]
@@ -302,7 +302,7 @@ struct FilePreviewView: View {
                 screen: "file_preview",
                 message: "export ok, bytes=\(payload.data.count)",
                 extras: [
-                    "sessionID": viewModel.session.sessionId ?? "nil",
+                    "sessionID": viewModel.sessionID ?? "nil",
                     "path": entry.path,
                 ]
             )
@@ -313,7 +313,7 @@ struct FilePreviewView: View {
                 screen: "file_preview",
                 message: "export error: \(error.localizedDescription)",
                 extras: [
-                    "sessionID": viewModel.session.sessionId ?? "nil",
+                    "sessionID": viewModel.sessionID ?? "nil",
                     "path": entry.path,
                 ]
             )

@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 @Observable
 final class FilePreviewViewModel {
     private let session: SessionSummary
+
+    /// Public session id for diagnostics/logging (the stored `session` is private).
+    var sessionID: String? { session.sessionId }
     private let path: String
     private let apiClient: APIClient
 
