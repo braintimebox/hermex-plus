@@ -53,7 +53,7 @@ extension APIClient {
     }
 
     func rawFileData(sessionID: String, path: String) async throws -> Data {
-        try await sendData(endpoint: .rawFile(sessionID: sessionID, path: path), method: "GET", timeout: 180)
+        try await sendData(endpoint: .rawFile(sessionID: sessionID, path: path), method: "GET", encodedBody: nil, timeout: 180)
     }
 
     func mediaData(sessionID: String, path: String) async throws -> Data {
