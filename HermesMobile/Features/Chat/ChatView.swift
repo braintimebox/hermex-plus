@@ -1346,7 +1346,7 @@ struct ChatView: View {
             onReply: { viewModel.quotedMessage = (
                 messageId: $0.messageID,
                 author: $0.role == .user ? "You" : "Hermes",
-                text: String($0.copyText.prefix(200))
+                text: $0.copyText
             ) },
             onForward: {
                 forwardMessageContent = (

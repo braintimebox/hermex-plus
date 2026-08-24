@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.0 — 2026-08-24
+
+### Fixed
+- **Reply no longer truncates quoted text to 200 characters.** When replying to a long message, `onReply` sliced the quoted message with `String(copyText.prefix(200))`, so only the first 200 chars were preserved and the rest was silently lost from the quote. The cap was redundant — `QuoteReplyBanner` already clamps display via `.lineLimit(2)` — and only served to destroy data. Reply now quotes the full message text.
+
 ## 2.6.1 — 2026-08-24
 
 ### Fixed
