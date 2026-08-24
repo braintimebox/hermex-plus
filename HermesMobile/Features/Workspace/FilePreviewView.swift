@@ -273,6 +273,18 @@ struct FilePreviewView: View {
     }
 
     private func exportFile() async {
+        // Diagnostic: log the exact export start so we can see on the server
+        // whether download is even reached, and what sessionID/path is used.
+        HermexLogger.shared.log(
+            type: "file_export_start",
+            screen: "file_preview",
+            message: "export start",
+            extras: [
+                "sessionID": viewModel.session.sessionId ?? "nil",
+                "path": entry.path,
+                "isBinary": viewModel.isBinaryFile,
+            ]
+        )
         do {
             // `rawFileData` (session.data) passes the TLS proxy; `downloadFile`
             // (session.download) throws "A TLS error caused the secure connection
@@ -285,8 +297,26 @@ struct FilePreviewView: View {
             exportContentType = payload.contentType
             exportFilename = payload.filename
             isFileExporterPresented = true
+            HermexLogger.shared.log(
+                type: "file_export_ok",
+                screen: "file_preview",
+                message: "export ok, bytes=\(payload.data.count)",
+                extras: [
+                    "sessionID": viewModel.session.sessionId ?? "nil",
+                    "path": entry.path,
+                ]
+            )
         } catch {
             exportErrorMessage = error.localizedDescription
+            HermexLogger.shared.log(
+                type: "file_export_error",
+                screen: "file_preview",
+                message: "export error: \(error.localizedDescription)",
+                extras: [
+                    "sessionID": viewModel.session.sessionId ?? "nil",
+                    "path": entry.path,
+                ]
+            )
             onAPIError(error)
         }
     }

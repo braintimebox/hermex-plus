@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.0 — 2026-08-24
+
+### Changed
+- **Diagnostic logging on file export.** `file_export_start`, `file_export_ok`, and `file_export_error` events are sent to the Hermes logs ingest (`/webhook/hermex-logs → :8912`) with the sessionID, path, and (for errors) the exact message. This lets us see precisely what happens when a user taps Download/Share in the file manager — reached or not, and why it fails (or stalls). Removes guesswork from the download bug.
+
 ## 2.5.9 — 2026-08-23
 
 ### Fixed
