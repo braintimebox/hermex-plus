@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.1 — 2026-08-24
+
+### Fixed
+- **File export now shows a visible spinner while a large file (e.g. `.ipa`) is downloading.** Previously the Download/Share action silently went quiet during a long data load (no feedback) — the button just seemed dead. A `ProgressView` replaces the Share button while `isExporting`, so a slow or stalled download is visible instead of "nothing happens".
+
 ## 2.6.0 — 2026-08-24
 
 ### Fixed

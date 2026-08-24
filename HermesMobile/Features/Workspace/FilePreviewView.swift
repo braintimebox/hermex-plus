@@ -77,7 +77,9 @@ struct FilePreviewView: View {
                     .accessibilityLabel("Save image to Photos")
                 }
 
-                if viewModel.canExportFile {
+                if viewModel.isExporting {
+                    ProgressView()
+                } else if viewModel.canExportFile {
                     Button {
                         Task { await exportFile() }
                     } label: {
