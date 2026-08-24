@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.9 — 2026-08-23
+
+### Fixed
+- **The ↓ button no longer flies below the chat (black screen).** It scrolled to the `bottomAnchorID` marker, which sits at the end of a LAZY `LazyVStack` and may not be mounted on a fast scroll-to-bottom — so `scrollTo` teleported below the real content into an unrendered black gap. It now scrolls to the last mounted message (`latestTranscriptMessageID`), matching what the manual scroll can actually reach. The ↓ and manual scroll agree.
+
 ## 2.5.8 — 2026-08-23
 
 ### Fixed

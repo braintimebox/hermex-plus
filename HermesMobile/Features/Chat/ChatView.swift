@@ -2317,9 +2317,16 @@ struct ChatView: View {
     ) {
         guard !viewModel.messages.isEmpty else { return }
 
+        // Scroll to the LAST MOUNTED message, not the `bottomAnchorID` marker.
+        // That marker sits at the true end of the content but inside a LAZY
+        // LazyVStack — on a fast scroll-to-bottom it may not be mounted yet, so
+        // `scrollTo(bottomAnchorID)` teleports BELOW the real content and shows
+        // a black gap (the "↓ flies under the chat / black screen" symptom).
+        // A real mounted message never does that; the manual scroll can't reach
+        // the gap either, so this matches what the reader can actually see.
         scheduleFollowScroll(
             proxy,
-            targetID: bottomAnchorID,
+            targetID: latestTranscriptMessageID ?? bottomAnchorID,
             anchor: .bottom,
             animated: animated,
             isUserInitiated: isUserInitiated
