@@ -214,7 +214,12 @@ enum MainThreadStackCapture {
 
         let name = info.dli_sname.map { String(cString: $0) } ?? "?"
         let hasRealName = name != "<redacted>" && name != "?" && name != "_raw_spin_lock_pause"
-        let imageOffset = offsetFromImage.map { "+0x\\(String($0, radix: 16))" } ?? ""
+        let imageOffset: String
+        if let offsetFromImage {
+            imageOffset = "+0x" + String(offsetFromImage, radix: 16)
+        } else {
+            imageOffset = ""
+        }
 
         if hasRealName {
             return "\(image) \(name) \(imageOffset)".trimmingCharacters(in: .whitespaces)
