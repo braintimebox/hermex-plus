@@ -314,6 +314,13 @@ private struct StreamingMarkdownChunkedView: View {
     }
 
     private func advanceFadeWindow(from oldContent: String, to newContent: String) {
+        // Instrument the O(N) fade re-scan so a freeze that lands inside it is
+        // attributed correctly (heavyOp was empty in every freeze report — the
+        // streaming render hot path was not wrapped). Runs per coalesced frame,
+        // not per token, so the singleton label stays meaningful.
+        HeavyOperationTracker.begin("advanceFadeWindow")
+        defer { HeavyOperationTracker.end() }
+
         let now = Date().timeIntervalSinceReferenceDate
         let oldActive = StreamingMarkdownBlockSplitter.split(oldContent).activeMarkdown
         let newActive = StreamingMarkdownBlockSplitter.split(newContent).activeMarkdown

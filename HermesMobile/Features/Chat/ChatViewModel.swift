@@ -313,10 +313,17 @@ final class ChatViewModel {
             // reorder). Without a full snapshot a non-trailing in-place edit is not
             // cheaply identifiable — recompute the transcript. This is the rare
             // non-streaming path, not the per-token hot path.
+            HeavyOperationTracker.begin("transcriptMessages.fullRecompute")
             displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
+            HeavyOperationTracker.end()
         } else {
-            // Structural change (insert/delete/reorder) — full recompute.
+            // Structural change (insert/delete/reorder) — full recompute. This is
+            // the O(N) array rebuild + positional renderID shift that drives the
+            // ARC/SwiftUI re-diff on long chats; instrument it so a freeze here is
+            // named, not <redacted>.
+            HeavyOperationTracker.begin("transcriptMessages.structuralRecompute")
             displayedTranscriptMessages = Self.transcriptMessages(from: messages, messageOffset: messagesOffset)
+            HeavyOperationTracker.end()
             recomputeCompressionReferenceCard()
         }
 

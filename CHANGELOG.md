@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.1 — 2026-08-24
+
+### Changed
+- **Freeze diagnostics now name the blocked operation instead of showing `<redacted>`.** Two gaps fixed in the watchdog channel:
+  - **`heavyOp` is no longer empty.** The streaming render hot path was never wrapped in `HeavyOperationTracker`, so every freeze report shipped a blank `heavyOp`. The two heaviest main-thread suspects are now instrumented: `advanceFadeWindow` (the O(N) fade re-scan in `MarkdownRenderer`) and the full transcript recompute paths (`transcriptMessages.fullRecompute` / `.structuralRecompute` in `ChatViewModel`). A freeze that lands inside them is attributed with a label instead of nothing.
+  - **Stacks are atos-resolvable.** `symbolize` previously used the offset-from-nearest-symbol (`address - dli_saddr`), which collapses to ~0 for `<redacted>` SwiftUI frames and loses the address. It now always emits `<image> +0x<imageBaseOffset>` (offset from `dli_fbase`), the exact pair `atos` (with dSYM) resolves back to a real source line. Symbol names are appended only when they're actual (not `<redacted>` / `?`). This lets a captured free-fe stack be symbolicated offline to a precise source location.
+
 ## 3.0.0 — 2026-08-24
 
 ### Fixed

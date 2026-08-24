@@ -180,32 +180,47 @@ enum MainThreadStackCapture {
         return value
     }
 
-    /// Resolve an instruction address to "Image Symbol +0xNN" via `dladdr`.
-    /// Always reports the binary's basename (UIKitCore, SwiftUI, HermesMobile…)
-    /// even when the symbol itself is stripped — so `<redacted>` becomes a real
-    /// library name plus an offset into it.
+    /// Resolve an instruction address to an atos-symbolizable string.
+    ///
+    /// `dladdr` only recovers the *nearest exported* symbol name; SwiftUI/Swift
+    /// closure frames come back as `<redacted>` (the name is stripped/not
+    /// exported). That name is useless for locating the hang, but the
+    /// `dli_fname` + offset-from-`dli_fbase` pair is exactly what `atos` (with
+    /// the build's dSYM) resolves back to a real source line. So we ALWAYS emit
+    /// `"<image> +0x<imageBaseOffset>"` — the actionable value — and append the
+    /// symbol name only when it's actual (non-`<redacted>`, non-`?`).
     private static func symbolize(_ address: UInt64) -> String? {
         guard let raw = UnsafeRawPointer(bitPattern: UInt(address)) else { return nil }
         var info = Dl_info()
         guard dladdr(raw, &info) != 0 else { return nil }
-        let name = info.dli_sname.map { String(cString: $0) } ?? "?"
+
         let image: String = {
             guard let path = info.dli_fname.map({ String(cString: $0) }) else { return "?" }
             return (path as NSString).lastPathComponent
         }()
 
-        if let saddr = info.dli_saddr {
-            let base = UInt64(UInt(bitPattern: saddr))
-            guard address >= base else { return "\(image) \(name)" }
-            let offset = address - base
-            return offset == 0 ? "\(image) \(name)" : "\(image) \(name) +0x\(String(offset, radix: 16))"
-        }
+        // The atos-resolvable offset is from the image's load base (dli_fbase),
+        // NOT from the nearest symbol (dli_saddr). dli_saddr only tells us where
+        // the symbol starts; for `<redacted>` that base is the symbol itself, so
+        // `address - dli_saddr` collapses to ~0 and loses the offset into the
+        // image. Emitting image-base-offset makes every frame symbolizable.
+        var offsetFromImage: UInt64?
         if let fbase = info.dli_fbase {
             let base = UInt64(UInt(bitPattern: fbase))
-            let offset = address - base
-            return "\(image) +0x\(String(offset, radix: 16))"
+            if address >= base {
+                offsetFromImage = address - base
+            }
         }
-        return "\(image) \(name)"
+
+        let name = info.dli_sname.map { String(cString: $0) } ?? "?"
+        let hasRealName = name != "<redacted>" && name != "?" && name != "_raw_spin_lock_pause"
+        let imageOffset = offsetFromImage.map { "+0x\\(String($0, radix: 16))" } ?? ""
+
+        if hasRealName {
+            return "\(image) \(name) \(imageOffset)".trimmingCharacters(in: .whitespaces)
+        }
+        // No usable symbol name — emit the atos-resolvable image offset alone.
+        return "\(image) \(imageOffset)".trimmingCharacters(in: .whitespaces)
     }
 }
 
