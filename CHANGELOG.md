@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.1 — 2026-08-24
+
+### Fixed
+- **Composer no longer leaves a blank gap or hides the typed text while a reply is active.** The quote banner was measured into `composerHeight` even though the overlays that consume that height (`BottomComposerMaterialFade`, accessory stack) do not contain the banner — a double-count that inflated the bottom inset by the banner's height and left a large empty strip above the keyboard. The banner height is now excluded from `composerHeight`, so the bottom inset matches the input field + action bar exactly. Also dropped the redundant `.padding(.bottom, 10)` on keyboard-visible, which stacked with the inset and deepened the gap.
+
 ## 2.7.0 — 2026-08-24
 
 ### Fixed

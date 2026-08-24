@@ -147,6 +147,7 @@ struct MessageComposerView: View {
 
     @State private var textFieldHeight: CGFloat = 0
     @State private var textInputHeight: CGFloat = 22
+    @State private var quoteBannerHeight: CGFloat = 0
     @State private var noticeMessage: String?
     @State private var showsAllModelsSheet = false
     @State private var showsWorkspaceSheet = false
@@ -253,6 +254,17 @@ struct MessageComposerView: View {
                         author: quote.author,
                         text: quote.text,
                         onDismiss: onDismissQuote
+                    )
+                    .background(
+                        GeometryReader { quoteProxy in
+                            Color.clear
+                                .onAppear {
+                                    quoteBannerHeight = quoteProxy.size.height
+                                }
+                                .onChange(of: quoteProxy.size.height) { _, newHeight in
+                                    quoteBannerHeight = newHeight
+                                }
+                        }
                     )
                 }
 
@@ -439,10 +451,13 @@ struct MessageComposerView: View {
             GeometryReader { proxy in
                 Color.clear
                     .onAppear {
-                        onHeightChange(proxy.size.height)
+                        onHeightChange(proxy.size.height - quoteBannerHeight)
                     }
                     .onChange(of: proxy.size.height) { _, newHeight in
-                        onHeightChange(newHeight)
+                        onHeightChange(newHeight - quoteBannerHeight)
+                    }
+                    .onChange(of: quoteBannerHeight) { _, _ in
+                        onHeightChange(proxy.size.height - quoteBannerHeight)
                     }
             }
         )
@@ -600,7 +615,6 @@ struct MessageComposerView: View {
             voiceInput.stopBeforeSubmittingDraft()
             cancelVoiceNote()
         }
-        .padding(.bottom, keyboardIsVisible ? 10 : 0)
     }
 
     @ViewBuilder
