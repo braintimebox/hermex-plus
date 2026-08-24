@@ -274,19 +274,16 @@ struct FilePreviewView: View {
 
     private func exportFile() async {
         do {
-            // Large binaries stream to a temp file on disk (URL) so a multi-MB
-            // payload is never buffered as one big `Data`.
-            if viewModel.isBinaryFile {
-                let url = try await viewModel.exportFileURL()
-                exportDocument = ExportedFileDocument(fileURL: url)
-                exportFilename = (entry.path as NSString?)?.lastPathComponent ?? String(localized: "Hermes File")
-                exportContentType = UTType(filenameExtension: (entry.path as NSString?)?.pathExtension ?? "") ?? .data
-            } else {
-                let payload = try await viewModel.exportPayload()
-                exportDocument = ExportedFileDocument(data: payload.data)
-                exportContentType = payload.contentType
-                exportFilename = payload.filename
-            }
+            // `rawFileData` (session.data) passes the TLS proxy; `downloadFile`
+            // (session.download) throws "A TLS error caused the secure connection
+            // to fail". So export EVERYTHING via the Data path → fileExporter,
+            // which is what worked in 2.5.0. (For very large binaries the file is
+            // still handed to the exporter as Data, matching the working 2.5.0
+            // behaviour rather than the broken streamed-download path.)
+            let payload = try await viewModel.exportPayload()
+            exportDocument = ExportedFileDocument(data: payload.data)
+            exportContentType = payload.contentType
+            exportFilename = payload.filename
             isFileExporterPresented = true
         } catch {
             exportErrorMessage = error.localizedDescription

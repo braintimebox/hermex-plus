@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.7 — 2026-08-23
+
+### Fixed
+- **Download/share of a binary file no longer fails with "A TLS error caused the secure connection to fail."** The streamed-download path (`URLSession.download`) hit a TLS error through the proxy, while `URLSession.data` (rawFileData) passes it. Export now uses the working `rawFileData → fileExporter` path for all files (including `.ipa`), matching the behaviour that worked before the streamed-download experiment.
+
 ## 2.5.6 — 2026-08-23
 
 ### Fixed
