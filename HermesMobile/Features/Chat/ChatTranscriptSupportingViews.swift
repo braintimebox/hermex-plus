@@ -116,11 +116,21 @@ struct ChatScrollObserver: UIViewRepresentable {
             self.scrollView = scrollView
 
             observations = [
+                // KVO on contentOffset/contentSize fires on every scroll tick on
+                // the main thread. Delivering via `.deferred` (an async hop) lets
+                // the metrics arrive a frame late — during that window the
+                // `shouldFollowLatestMessage` flag can still be true while the
+                // user has already flicked up, and the next size change re-glues
+                // the viewport (the "scroll won't listen" jump). Delivering
+                // `.immediate` keeps `isUserInteracting`/`distanceFromBottom`
+                // truthful at the moment the system is about to auto-scroll.
+                // The 8pt quantization in `reportMetrics` drops ~90% of
+                // redundant deliveries, so the 120Hz re-render concern is moot.
                 scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
-                    Self.reportObservedMetrics(for: self)
+                    Self.reportObservedMetrics(for: self, delivery: .immediate)
                 },
                 scrollView.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
-                    Self.reportObservedMetrics(for: self)
+                    Self.reportObservedMetrics(for: self, delivery: .immediate)
                 }
             ]
 
@@ -207,18 +217,21 @@ struct ChatScrollObserver: UIViewRepresentable {
             }
         }
 
-        nonisolated private static func reportObservedMetrics(for coordinator: Coordinator?) {
+        nonisolated private static func reportObservedMetrics(
+            for coordinator: Coordinator?,
+            delivery: MetricDelivery
+        ) {
             guard Thread.isMainThread else {
                 DispatchQueue.main.async { [weak coordinator] in
                     MainActor.assumeIsolated {
-                        coordinator?.reportMetrics(delivery: .deferred)
+                        coordinator?.reportMetrics(delivery: delivery)
                     }
                 }
                 return
             }
 
             MainActor.assumeIsolated {
-                coordinator?.reportMetrics(delivery: .deferred)
+                coordinator?.reportMetrics(delivery: delivery)
             }
         }
 

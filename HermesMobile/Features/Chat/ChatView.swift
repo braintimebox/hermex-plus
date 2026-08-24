@@ -2347,10 +2347,16 @@ struct ChatView: View {
         }
 
         if isUserInitiated {
+            // An explicit ↓ tap / send is an unconditional re-arm of follow-latest.
+            shouldFollowLatestMessage = true
             userScrollCooldownUntil = nil
+        } else if !shouldFollowLatestMessage {
+            // Auto channels (streaming size changes, new message rows) must never
+            // re-arm follow-latest. If the user scrolled back up to read (`false`),
+            // the flag stays off until they explicitly tap ↓ or send. Re-arming here
+            // is what silently yanked the viewport back down mid-read.
+            return
         }
-
-        shouldFollowLatestMessage = true
         followScrollGeneration += 1
         let generation = followScrollGeneration
 
@@ -2528,6 +2534,11 @@ struct ChatView: View {
 
     private func prepareTranscriptForExplicitSend() {
         shouldFollowLatestMessage = true
+        // Explicit send re-pins to the tail: the new message must be visible even
+        // if the reader had scrolled up. Mark near-bottom so the `.onChange`
+        // channels (guarded by `isScrolledNearBottom`) let the scroll-to-latest
+        // run instead of silently suppressing it.
+        isScrolledNearBottom = true
         userScrollCooldownUntil = nil
         if isReadingOlderTranscript {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {

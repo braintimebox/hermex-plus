@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0 — 2026-08-24
+
+### Fixed
+- **The chat scroll is under your control again — no more yanking up/down while reading.**
+  The transcript used to "throw" the viewport to the bottom (or bounce randomly) while you scrolled up to read older messages, and could flash a black region during a fast scroll. Three root causes, fixed together:
+  - **(a) Stale follow-latest re-arm.** `shouldFollowLatestMessage` was unconditionally set to `true` by every auto channel (streaming size changes, new message rows). If you scrolled up to read, the next stream token would silently re-arm follow-latest and glue the viewport back to the bottom. Auto channels no longer re-arm the flag — only an explicit ↓ tap or send does.
+  - **(b) Context-blind auto-scroll.** The `.onChange(messages.count)` / `streamingScrollTrigger` / cache-reconcile channels fired on follow-latest even when you were *not* near the bottom. They now also require `isScrolledNearBottom`, so reading older messages is never hijacked. Explicit send re-pins to the tail (`isScrolledNearBottom = true`).
+  - **(c) Async metric race.** `ChatScrollObserver` delivered scroll metrics via a deferred async hop, so `isUserInteracting`/`distanceFromBottom` reached the auto-scroll logic a frame late — the window where a stale flag could re-glue the bottom. Metrics are now delivered immediately from the `contentOffset`/`contentSize` KVO on the main thread, so the "am I at the tail / is the user touching" decision is truthful the moment it's needed. The 8pt quantization already drops ~90% of redundant deliveries, so there is no 120Hz re-render regression.
+
 ## 2.7.1 — 2026-08-24
 
 ### Fixed

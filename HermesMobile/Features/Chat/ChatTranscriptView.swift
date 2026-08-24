@@ -198,7 +198,10 @@ struct ChatTranscriptView: View {
                     Color(.systemBackground).ignoresSafeArea()
                 }
                 .onChange(of: messages.count) {
-                    guard shouldFollowLatestMessage else { return }
+                    // Only follow when the reader is actually at the tail. A
+                    // stale `shouldFollowLatestMessage` (linger after a stream)
+                    // must not yank the viewport while the user reads older text.
+                    guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
 
                     if latestTranscriptMessageRole == "user" {
                         onScrollToLatestTranscriptMessage(proxy)
@@ -207,7 +210,7 @@ struct ChatTranscriptView: View {
                     }
                 }
                 .onChange(of: streamingScrollTrigger) {
-                    if shouldFollowLatestMessage {
+                    if shouldFollowLatestMessage, isScrolledNearBottom {
                         onScrollToLatestContent(proxy, true)
                     }
                 }
@@ -215,7 +218,7 @@ struct ChatTranscriptView: View {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no
                     // animation) unless the reader has scrolled away in the meantime.
-                    guard shouldFollowLatestMessage else { return }
+                    guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
                     onScrollToLatestContent(proxy, false)
                 }
                 .onChange(of: clarificationPrompt?.id) {
