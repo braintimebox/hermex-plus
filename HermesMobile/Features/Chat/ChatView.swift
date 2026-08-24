@@ -350,7 +350,13 @@ struct ChatView: View {
         self.onAPIError = onAPIError
         self.loadsInitialMessages = loadsInitialMessages
         self.autoStartsVoiceInput = autoStartsVoiceInput
-        _draftMessage = State(initialValue: initialDraft)
+        let restoredDraft: String
+        if initialDraft.isEmpty, let sid = session.sessionId {
+            restoredDraft = UserDefaults.standard.string(forKey: "chat.draft.\(sid)") ?? ""
+        } else {
+            restoredDraft = initialDraft
+        }
+        _draftMessage = State(initialValue: restoredDraft)
         _initialAttachments = State(initialValue: initialAttachments)
         _viewModel = State(initialValue: ChatViewModel(
             session: session,
@@ -649,6 +655,15 @@ struct ChatView: View {
                 activeStreamStatusRefreshTask = nil
                 viewModel.suspendStreamForNavigation()
                 viewModel.cleanupPollingTasks()
+                // Preserve an unsent draft so it isn't lost when leaving the chat;
+                // clear the stored one once the message has been sent (draft empty).
+                if let sid = session.sessionId {
+                    if draftMessage.isEmpty {
+                        UserDefaults.standard.removeObject(forKey: "chat.draft.\(sid)")
+                    } else {
+                        UserDefaults.standard.set(draftMessage, forKey: "chat.draft.\(sid)")
+                    }
+                }
                 // Defer audio teardown off the dismiss animation path — avoids
                 // blocking the navigation pop for ~0.5s while AVAudioPlayer /
                 // AVSpeechSynthesizer release their resources.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.6 — 2026-08-23
+
+### Fixed
+- **Binary files (e.g. `.ipa`) get an explicit Download action in the file manager.** A binary preview no longer falls through to a dead "No Preview" — it shows a Download button routed through the working `rawFileData → fileExporter` path (not the broken share sheet). Share/download works again.
+- **An unsent draft is no longer lost when leaving the chat.** The composer text is saved on disappear and restored on open (per session), and cleared once the message has been sent.
+
 ## 2.5.5 — 2026-08-23
 
 ### Fixed

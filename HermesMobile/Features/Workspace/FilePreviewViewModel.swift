@@ -59,7 +59,10 @@ final class FilePreviewViewModel {
                     preview = .unavailable(String(localized: "Could not decode this image."))
                 }
             } else if isKnownUnsupportedBinaryPath {
-                preview = .unavailable(String(localized: "Preview is not available for this file type."))
+                // Leave preview nil so the body's binary branch (explicit
+                // "Download" action) renders instead of a dead "No Preview".
+                // The download path is the working rawFileData → fileExporter.
+                preview = nil
             } else {
                 let file = try await apiClient.file(sessionID: sessionID, path: path)
                 exportData = Data((file.content ?? "").utf8)

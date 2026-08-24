@@ -38,6 +38,22 @@ struct FilePreviewView: View {
                 }
             } else if let preview = viewModel.preview {
                 previewContent(preview)
+            } else if viewModel.isBinaryFile {
+                // Binary (e.g. .ipa) — give an explicit Download action instead
+                // of a dead "No Preview". exportFile uses rawFileData →
+                // fileExporter (the working path).
+                ContentUnavailableView {
+                    Label("File Ready to Download", systemImage: "arrow.down.circle")
+                } description: {
+                    Text(displayPath)
+                } actions: {
+                    Button {
+                        Task { await exportFile() }
+                    } label: {
+                        Label("Download", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             } else {
                 ContentUnavailableView {
                     Label("No Preview", systemImage: "doc.text.magnifyingglass")
