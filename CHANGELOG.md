@@ -2,6 +2,9 @@
 
 ## 2.6.0 — 2026-08-24
 
+### Fixed
+- **File download/share no longer silently stalls.** `rawFileData` for a large binary (e.g. an `.ipa`, up to ~47 MB) had no explicit timeout and buffered the whole file in memory, so a big download could sit without any error or result ("the button just goes quiet"). It now uses an explicit 180s timeout, so a stalled download surfaces an error instead of hanging forever.
+
 ### Changed
 - **Diagnostic logging on file export.** `file_export_start`, `file_export_ok`, and `file_export_error` events are sent to the Hermes logs ingest (`/webhook/hermex-logs → :8912`) with the sessionID, path, and (for errors) the exact message. This lets us see precisely what happens when a user taps Download/Share in the file manager — reached or not, and why it fails (or stalls). Removes guesswork from the download bug.
 
