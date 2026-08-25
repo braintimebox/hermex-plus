@@ -483,7 +483,14 @@ struct ChatView: View {
                 }
             },
             onHeightChange: { height in
-                composerHeight = height
+                // Clamp: banner + field + action bar + voice bar fit well under
+                // 260pt. A runaway height (the focus feedback loop) must never
+                // inflate the bottom inset again. Only propagate real moves so
+                // minor layout chatter can't keep the loop alive.
+                let clamped = min(height, 260)
+                if abs(composerHeight - clamped) > 4 {
+                    composerHeight = clamped
+                }
                 // Diagnostic for the blank gap between the transcript and the
                 // composer. Log the three heights that control the bottom inset,
                 // so the next gap report shows whether the inset is inflated by

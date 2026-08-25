@@ -43,7 +43,14 @@ struct ComposerTextInputView: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(minHeight: 42, alignment: .topLeading)
+        // minHeight 42 keeps the field tappable; maxHeight 96 caps the growth at
+        // the same ceiling `reportHeight` clamps the measured text height to.
+        // Without the maxHeight the field expanded unboundedly inside the
+        // composer VStack when the keyboard focus re-laid the chat out — each
+        // growth step (+42pt, the minHeight quantum) fed `onHeightChange` →
+        // composerHeight → bottom fade/inset → another re-layout, a runaway
+        // feedback loop that ballooned the composer to 1000+pt of empty space.
+        .frame(minHeight: 42, maxHeight: 96, alignment: .topLeading)
     }
 
     private func updateMeasuredHeight(_ newHeight: CGFloat) {

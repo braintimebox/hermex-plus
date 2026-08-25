@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.4 — 2026-08-24
+
+### Fixed
+- **The giant empty gap between the transcript and the composer is gone — root cause found via the 3.0.3 diagnostic.** The logs showed `composerHeight` running away when the field gained keyboard focus: 147 → 423 → 465 → 633 … → 1018pt, growing in 42pt steps (the field's `minHeight` quantum). `ComposerTextInputView` had `.frame(minHeight: 42)` with **no `maxHeight`**, so during the keyboard focus re-layout the field expanded unboundedly; each growth fed `onHeightChange` → `composerHeight` → bottom fade/inset → another re-layout — a positive feedback loop that ballooned the composer to 1000+pt of empty space. Two fixes:
+  - `ComposerTextInputView` now has `.frame(minHeight: 42, maxHeight: 96)` — the same ceiling `reportHeight` already clamped the measured text height to, so the field can never grow past 96pt.
+  - `ChatView.onHeightChange` clamps `composerHeight` to 260pt and only propagates moves larger than 4pt, so no future runaway can inflate the bottom inset again.
+
 ## 3.0.3 — 2026-08-24
 
 ### Fixed
