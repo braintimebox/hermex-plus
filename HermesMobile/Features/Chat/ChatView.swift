@@ -484,6 +484,15 @@ struct ChatView: View {
             },
             onHeightChange: { height in
                 composerHeight = height
+                // Diagnostic for the blank gap between the transcript and the
+                // composer. Log the three heights that control the bottom inset,
+                // so the next gap report shows whether the inset is inflated by
+                // composerHeight/accessories or the content simply isn't anchored.
+                HermexLogger.shared.log(
+                    type: "event",
+                    screen: "ChatView",
+                    message: "composer height c=\\(Int(height)) inset=\\(Int(transcriptBottomInsetHeight)) acc=\\(Int(composerAccessorySpacerHeight)) focused=\\(composerIsFocused)"
+                )
             },
             onPhotoItemSelected: { item in
                 Task { await handlePhotoSelection(item) }

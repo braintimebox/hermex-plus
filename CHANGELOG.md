@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.2 — 2026-08-24
+
+### Fixed
+- **Reply composer no longer loses the input field.** v3.0.1's composer-height change (subtracting `quoteBannerHeight` from `composerHeight`, plus a `GeometryReader` background on the quote banner) collapsed the entire `MessageComposerView` while a reply was active — the text field and the `+ / model / voice / send` buttons disappeared, leaving only the quote banner and empty space above the keyboard. Reverted to the v2.7.0 composer layout: `onHeightChange` reports the measured height as-is (no banner subtraction) and the quote banner has no `GeometryReader` background. The input field and buttons render again in reply mode.
+
+### Changed
+- **Composer gap diagnostic added.** `onHeightChange` now logs `composerHeight`, `transcriptBottomInsetHeight`, and `composerAccessorySpacerHeight` to the Hermes log channel. The next reply-gap report will carry the actual numbers (which inflated height is responsible), so the gap can be fixed on data instead of a guess.
+
 ## 3.0.1 — 2026-08-24
 
 ### Changed
