@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.5 — 2026-08-25
+
+### Fixed
+- **Long streaming assistant messages no longer make the app unresponsive (O(N²) per-token join removed).** On every incoming token the streaming hot path built `flushedContent + pendingAssistantTokenText` (and `liveReasoningText + pendingReasoningChunks.joined()` for reasoning) — an O(N) join of the whole accumulated string that compounds to O(N²) over a long answer. That join is only ever consumed by replay de-duplication, which is inactive on normal streams. The join and the replay-dedup call are now skipped entirely unless the stream is a replay connection, so a normal stream appends the token directly. This is the same first runtime fix upstream `uzairansaruzi/hermex` documented for its `#291` (`long streaming assistant messages make Hermex unresponsive`) / PR `#292`.
+
 ## 3.0.4 — 2026-08-24
 
 ### Fixed

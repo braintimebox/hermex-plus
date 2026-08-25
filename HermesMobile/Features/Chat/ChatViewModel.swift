@@ -4413,12 +4413,20 @@ final class ChatViewModel {
         // Same append-time dedup contract as appendAssistantToken: return true iff
         // the event contributed new content, mutate only via the coalesced flush.
         _ = ensureStreamingAssistantMessage()
-        let effectiveContent = liveReasoningText + pendingReasoningChunks.joined()
-        let remainder = deduplicatedReplayText(
-            text,
-            existingContent: effectiveContent,
-            matchedPrefixLength: &activeStreamReplayMatchedReasoningLength
-        )
+
+        // Same O(N)-per-token join avoidance as appendAssistantToken: replay
+        // de-dup is the only consumer of the full live+pending reasoning join.
+        let remainder: String
+        if isActiveStreamReplayConnection {
+            let effectiveContent = liveReasoningText + pendingReasoningChunks.joined()
+            remainder = deduplicatedReplayText(
+                text,
+                existingContent: effectiveContent,
+                matchedPrefixLength: &activeStreamReplayMatchedReasoningLength
+            )
+        } else {
+            remainder = text
+        }
         guard !remainder.isEmpty else { return false }
 
         pendingReasoningChunks.append(remainder)
@@ -4576,14 +4584,27 @@ final class ChatViewModel {
         // return value stays a synchronous progress signal for the reconnect watchdog
         // while transcript mutation stays batched behind the coalesced flush.
         let messageID = ensureStreamingAssistantMessage()
-        let flushedContent: String
-        if messages.last?.messageId == messageID {
-            flushedContent = messages.last?.content ?? ""
+
+        // Replay de-dup is the ONLY consumer of the full flushed+pending join.
+        // On a normal stream (the common case) that join runs O(N) on EVERY
+        // token — flushed content + the whole pending buffer — and compounds to
+        // O(N²) over a long assistant answer, the verified driver of
+        // "long streaming messages make Hermex unresponsive" (upstream #291 /
+        // PR #292 first fix). Skip the join entirely when replay isn't active;
+        // `deduplicatedReplayToken` already returns the token unchanged then.
+        let remainder: String
+        if isActiveStreamReplayConnection {
+            let flushedContent: String
+            if messages.last?.messageId == messageID {
+                flushedContent = messages.last?.content ?? ""
+            } else {
+                flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
+            }
+            let effectiveContent = flushedContent + pendingAssistantTokenText
+            remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
         } else {
-            flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
+            remainder = token
         }
-        let effectiveContent = flushedContent + pendingAssistantTokenText
-        let remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
         guard !remainder.isEmpty else { return false }
 
         pendingAssistantTokenText += remainder
