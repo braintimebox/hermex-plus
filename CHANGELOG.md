@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.3 — 2026-08-24
+
+### Fixed
+- **Composer gap diagnostic now emits real numbers.** The 3.0.2 log line was double-escaped (`\\\\(Int(height))`), so the literal template text — not the values — was written to the Hermes log. The interpolation is fixed; the next reply-gap report will carry the actual `composerHeight` / `transcriptBottomInsetHeight` / `composerAccessorySpacerHeight` numbers.
+
 ## 3.0.2 — 2026-08-24
 
 ### Fixed

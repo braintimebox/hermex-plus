@@ -491,7 +491,7 @@ struct ChatView: View {
                 HermexLogger.shared.log(
                     type: "event",
                     screen: "ChatView",
-                    message: "composer height c=\\(Int(height)) inset=\\(Int(transcriptBottomInsetHeight)) acc=\\(Int(composerAccessorySpacerHeight)) focused=\\(composerIsFocused)"
+                    message: "composer height c=\(Int(height)) inset=\(Int(transcriptBottomInsetHeight)) acc=\(Int(composerAccessorySpacerHeight)) focused=\(composerIsFocused)"
                 )
             },
             onPhotoItemSelected: { item in
