@@ -7,11 +7,6 @@ struct QuoteReplyBanner: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Rectangle()
-                .fill(Color.accentColor)
-                .frame(width: 3)
-                .clipShape(Capsule())
-
             VStack(alignment: .leading, spacing: 1) {
                 Text(author)
                     .font(.caption.weight(.semibold))
@@ -22,6 +17,13 @@ struct QuoteReplyBanner: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
+            }
+            .padding(.leading, 13)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 3)
+                    .clipShape(Capsule())
             }
 
             Spacer(minLength: 0)

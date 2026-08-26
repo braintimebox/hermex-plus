@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.8 — 2026-08-26
+
+### Fixed
+- **Reply quote banner no longer blows up into a full-height blue strip with the real content and input field crushed to the bottom.** `QuoteReplyBanner` drew its accent bar as a bare `Rectangle().frame(width: 3)` — width only, no height, so the vertically-flexible shape expanded to fill whatever height the container proposed. When a reply was active, the banner's bar stretched to nearly the full screen (a huge empty gap), leaving the author/text/close and the input field squeezed into a narrow strip. The bar is now rendered as an `overlay(alignment: .leading)` on the text column, so its height is locked to the banner's intrinsic text height and can never inflate.
+
 ## 3.0.7 — 2026-08-26
 
 ### Fixed
