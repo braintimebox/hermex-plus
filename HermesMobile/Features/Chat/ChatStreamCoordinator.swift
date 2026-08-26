@@ -459,9 +459,15 @@ final class ChatStreamCoordinator {
                 break
             case .error(_), .transportError(_), .compressing(_), .contextStatus(_), .warning(_):
                 break
+            case .approvalPending(_), .clarificationPending(_):
+                // A late prompt is still a valid decision the user must answer:
+                // the gateway emits these from the same post-done background
+                // thread as the #288 title events, and dropping them left the
+                // user with nothing to confirm/answer. Stale prompts are handled
+                // by the pending-action coordinator's own expiry logic.
+                break
             case .token(_), .interimAssistant(_), .reasoning(_), .toolStarted(_),
-                 .toolCompleted(_), .approvalPending(_), .clarificationPending(_),
-                 .pendingSteerLeftover(_):
+                 .toolCompleted(_), .pendingSteerLeftover(_):
                 return
             }
         }

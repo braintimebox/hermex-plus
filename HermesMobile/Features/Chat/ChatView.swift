@@ -285,6 +285,7 @@ struct ChatView: View {
     @State private var draftMessage = ""
     @State private var isScrolledNearBottom = true
     @State private var isReadingOlderTranscript = false
+    @State private var showsPendingDecisionOverlay = false
     @State private var shouldFollowLatestMessage = true
     @State private var followScrollGeneration = 0
     @State private var isUserInteractingWithScroll = false
@@ -617,6 +618,22 @@ struct ChatView: View {
                 )
                 .zIndex(10)
             }
+
+            if showsPendingDecisionOverlay,
+               let clarificationPrompt = viewModel.clarificationPrompt {
+                ClarificationRequestOverlay(
+                    prompt: clarificationPrompt,
+                    isResponding: viewModel.isRespondingToClarification,
+                    errorMessage: viewModel.clarificationErrorMessage,
+                    bottomPadding: composerHeight + 16,
+                    onSubmit: { response in
+                        Task {
+                            _ = await viewModel.respondToClarification(response)
+                        }
+                    }
+                )
+                .zIndex(11)
+            }
         }
     }
 
@@ -738,6 +755,24 @@ struct ChatView: View {
                                 }
                                 .disabled(viewModel.isViewingCachedData)
                                 .accessibilityLabel("Search chat")
+                            }
+                        }
+
+                        // Third action — appears ONLY when the agent is waiting
+                        // for a decision (approval or clarification). The
+                        // clarification card renders inline at the transcript
+                        // bottom and its auto-scroll is suppressed while the
+                        // reader is scrolled away, so this button is the
+                        // reliable access point: tap to open the prompt.
+                        if viewModel.approvalPrompt != nil || viewModel.clarificationPrompt != nil {
+                            ChatToolbarActionSlot {
+                                Button {
+                                    showsPendingDecisionOverlay = true
+                                } label: {
+                                    Label("Needs your answer", systemImage: "checkmark.circle.badge.questionmark")
+                                }
+                                .foregroundStyle(.orange)
+                                .accessibilityLabel("Needs your answer")
                             }
                         }
 
@@ -2498,6 +2533,16 @@ struct ChatView: View {
         // streaming layout growth cannot yank the viewport mid-gesture.
         if metrics.isUserInteracting {
             userScrollCooldownUntil = ChatScrollPolicy.cooldownDeadline()
+            // Finger priority over printing: while streaming, ANY scroll touch
+            // immediately yields follow-latest intent to the user. Without this
+            // the 160pt streaming near-bottom band keeps `shouldFollowLatestMessage`
+            // true, and the system `.sizeChanges` anchor glues the viewport back
+            // to the growing message on every token — the finger literally fights
+            // the stream and can never accumulate enough distance to escape the
+            // band. Follow re-arms only on an explicit ↓ tap or send.
+            if isStreaming {
+                shouldFollowLatestMessage = false
+            }
         }
 
         if isNearBottom {
