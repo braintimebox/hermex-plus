@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.5 — 2026-08-26
+
+### Fixed
+- **"Листаю вверх — отбрасывает" (idle yank) closed.** The ownership rule re-armed the app the moment the finger left the scroll view: `resolveOwner` only yielded to the reader on touch WHILE streaming, and the idle "near bottom → .app" rule fired instantly (no cooldown), so a reader who stopped 30-70pt from the bottom was back at `.app` — and any quiet background event (stream-end reload via `loadMessages`, cache reconcile, even a keyboard notification) slammed the viewport down while the agent printed nothing. Now: (1) ANY scroll touch yields `.user` (not just while streaming); (2) ownership stays with the reader through the 0.25s settle cooldown; (3) the keyboard-show channel is gated by scroll owner (`scrollOwner == .app`), not the stale near-bottom flag. A reader who scrolled up keeps the viewport until an explicit ↓ tap or send.
+- **Owner transitions are now observable.** Every `.user↔.app` flip logs an event with `distanceFromBottom`, `isStreaming`, `isInteracting`, `isNearBottom` — the next repro produces the exact metrics that caused it.
+
 ## 3.1.4 — 2026-08-26
 
 ### Added

@@ -2626,10 +2626,26 @@ struct ChatView: View {
             current: scrollOwner,
             isStreaming: isStreaming,
             isUserInteracting: metrics.isUserInteracting,
-            isNearBottom: isNearBottom
+            isNearBottom: isNearBottom,
+            isInCooldown: userScrollCooldownUntil.map { Date() < $0 } ?? false
         )
         if scrollOwner != resolved {
+            let previous = scrollOwner
             scrollOwner = resolved
+            // Telemetry: prove the yank on-device — owner transitions with the
+            // position metrics that caused them. Rate-limited naturally: the
+            // equality guard above fires only on flips.
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "scroll owner \(previous == .app ? "app→user" : "user→app")",
+                extras: [
+                    "distanceFromBottom": Int(metrics.distanceFromBottom),
+                    "isStreaming": isStreaming,
+                    "isInteracting": metrics.isUserInteracting,
+                    "isNearBottom": isNearBottom,
+                ]
+            )
         }
 
         if !isNearBottom,

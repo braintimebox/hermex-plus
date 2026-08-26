@@ -42,10 +42,22 @@ enum ChatScrollPolicy {
         isStreaming: Bool,
         isUserInteracting: Bool,
         isNearBottom: Bool,
+        isInCooldown: Bool = false,
         explicitFollowCommand: Bool = false
     ) -> ChatScrollOwner {
         if explicitFollowCommand { return .app }
-        if isStreaming && isUserInteracting { return .user }
+        // ANY touch yields ownership to the reader — not only while streaming.
+        // A reader who flicks up and stops 30-70pt from the bottom (inside the
+        // 80pt idle band) must keep `.user`; otherwise the idle "return to .app
+        // when near bottom" rule re-arms the app the instant the finger leaves,
+        // and ANY later quiet event (stream end reload, cache reconcile,
+        // keyboard) slams the viewport back down — the "листаю вверх — меня
+        // отбрасывает, агент даже не печатает" bug.
+        if isUserInteracting { return .user }
+        // Settle window after the finger leaves: keep the reader's ownership
+        // until the cooldown expires, so a background event that lands during
+        // the settle cannot re-arm the app and yank the viewport.
+        if isInCooldown { return current }
         if !isNearBottom { return .user }
         if !isStreaming { return .app }
         return current

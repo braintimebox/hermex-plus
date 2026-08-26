@@ -248,7 +248,10 @@ struct ChatTranscriptView: View {
                     onPinnedScrollConsumed()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    if isScrolledNearBottom {
+                    // Keyboard may show while the reader is up (e.g. FAB tap):
+                    // only the app owner may snap to the bottom; a reader who
+                    // scrolled up must NOT get yanked by the keyboard event.
+                    if scrollOwner == .app, isScrolledNearBottom {
                         onScrollToBottom(proxy)
                     }
                 }
