@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.0 — 2026-08-26
+
+### Changed
+- **Dead hangs are now logged, not lost.** The watchdog used to report a freeze ONCE (at the 3s threshold) and then go silent while the main thread stayed stuck — a permanent hang that needed a force-quit produced exactly one "blocked 3s" event and no proof it ever ended (real case: 14:24 on 3.0.8 hung until the app was killed; the log showed "blocked 3s" with no `recovered`, which read as a hiccup). Now:
+  - While frozen, the watchdog keeps firing from its background queue and logs ESCALATING reports — "main thread STILL blocked Xs" at 3s, then 8s, 16s, 32s, 64s (doubling, capped 120s) — each with a fresh Mach stack capture, memory, and heavyOp.
+  - `recovered` now carries the TOTAL frozen duration.
+  - A persisted marker is written the moment a freeze is detected and cleared only on recovery. If the app is force-quit while frozen, the next launch logs "previous run died while main thread was frozen (force-quit)" with the frozen-since timestamp — a dead hang becomes a recorded fact instead of an inference.
+- **Every log event now carries `appVersion`** (was freeze-only), so any stutter/jank/freeze can be attributed to the exact build.
+
 ## 3.0.9 — 2026-08-26
 
 ### Fixed

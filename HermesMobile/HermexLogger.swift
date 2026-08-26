@@ -26,6 +26,12 @@ final class HermexLogger {
 
     private init() {}
 
+    /// The app's short version string, attached to every event so a freeze or
+    /// stutter can always be attributed to the exact build it came from.
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
     /// Enqueue a diagnostic event. Never throws, never crashes.
     /// `extras` carries structured context (stack, memory, heavy op) for
     /// freeze/jank reports; merged into the event after the base fields.
@@ -52,13 +58,13 @@ final class HermexLogger {
                 "type": type,
                 "ts": now,
                 "message": message,
+                "appVersion": appVersion,
             ]
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
             if let extras { event.merge(extras) { _, new in new } }
             if type == "freeze" {
                 event["lastEvents"] = recentEvents
-                event["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "?"
                 event["foreground"] = UIApplication.shared.applicationState == .active
             }
             buffer.append(event)

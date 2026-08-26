@@ -258,9 +258,19 @@ final class MainThreadWatchdog {
     private let lock = NSLock()
     private var lastPong = Date()
     private var isFrozen = false
+    private var frozenSince: Date?
+    private var lastFreezeReportAt = Date(timeIntervalSince1970: 0)
+    private var nextEscalationInterval: TimeInterval = 5.0
     private var timer: DispatchSourceTimer?
     private var currentScreen: String?
     private var lastStutterReport = Date(timeIntervalSince1970: 0)
+
+    /// Persisted marker: the epoch timestamp of the freeze start. Written from
+    /// the watchdog's BACKGROUND queue the moment a freeze is detected, and
+    /// cleared only on recovery. If the app is force-quit while frozen, the
+    /// marker survives — the next launch logs "previous run died frozen", which
+    /// is hard proof of a dead hang (a 3s report alone proves nothing).
+    private static let frozenMarkerKey = "hermex.watchdog.frozenSince"
 
     private init() {}
 
@@ -275,6 +285,20 @@ final class MainThreadWatchdog {
         // detected from the background watchdog queue, MainThreadStackCapture
         // reads this port's register state directly.
         MainThreadStackCapture.captureMainThreadPort()
+
+        // Previous run died while the main thread was frozen: the marker is
+        // still set because recovery never ran and a force-quit skips every
+        // lifecycle callback. Log it on THIS launch so a dead hang becomes a
+        // recorded fact with a frozen-since timestamp, then clear the marker.
+        if let frozenTs = UserDefaults.standard.object(forKey: Self.frozenMarkerKey) as? Double {
+            HermexLogger.shared.log(
+                type: "freeze",
+                screen: "startup",
+                message: "previous run died while main thread was frozen (force-quit) — frozen since epoch \\(Int(frozenTs)), \\(Int(Date().timeIntervalSince1970 - frozenTs))s before this launch",
+                extras: ["previousRunFrozenSince": frozenTs]
+            )
+            UserDefaults.standard.removeObject(forKey: Self.frozenMarkerKey)
+        }
 
         let queue = DispatchQueue(label: "hermex.watchdog", qos: .utility)
         let t = DispatchSource.makeTimerSource(queue: queue)
@@ -315,30 +339,62 @@ final class MainThreadWatchdog {
         let screen = currentScreen
         lock.unlock()
 
-        if elapsed > hangThreshold && !wasFrozen {
+        if elapsed > hangThreshold {
             lock.lock()
-            isFrozen = true
+            let wasFrozen = isFrozen
+            if !wasFrozen {
+                isFrozen = true
+                frozenSince = now.addingTimeInterval(-elapsed)
+                // Persist the marker NOW, from this background queue: if the
+                // hang is permanent (deadlock), the main thread never runs
+                // again and this is the only chance to leave proof behind.
+                UserDefaults.standard.set(
+                    now.timeIntervalSince1970,
+                    forKey: Self.frozenMarkerKey
+                )
+            }
+            let frozenStart = frozenSince ?? now
+            // Escalating reports while the hang continues: first at the
+            // threshold (~3s), then 5s later, then doubling (10s, 20s, 40s,
+            // 80s, capped at 120s). Each report carries a FRESH stack capture
+            // and the total frozen duration, so a permanent hang produces a
+            // trail of "STILL blocked" events instead of a single 3s report
+            // that is indistinguishable from a hiccup.
+            let shouldReport = !wasFrozen
+                || now.timeIntervalSince(lastFreezeReportAt) >= nextEscalationInterval
+            let totalFrozen = now.timeIntervalSince(frozenStart)
+            let screen = currentScreen
             lock.unlock()
-            // Capture WHERE the main thread is stuck from THIS (background)
-            // watchdog queue. `Thread.callStackSymbols` is static/current-thread
-            // only, so a main-queue loop would capture *itself* (the bug that
-            // made every freeze report show the watchdog's own frames and an
-            // empty heavyOp). The Mach `thread_get_state` path below reads the
-            // main thread's instruction pointer directly.
-            let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
-            let heavyOp = HeavyOperationTracker.snapshot() ?? ""
-            let mainStack = MainThreadStackCapture.capture()
-            HermexLogger.shared.log(
-                type: "freeze",
-                durationMs: elapsed * 1000,
-                screen: screen,
-                message: "main thread blocked \(Int(elapsed))s",
-                extras: [
-                    "stack": mainStack,
-                    "memoryMB": memoryMB,
-                    "heavyOp": heavyOp,
-                ]
-            )
+
+            if shouldReport {
+                lock.lock()
+                lastFreezeReportAt = now
+                nextEscalationInterval = min(nextEscalationInterval * 2, 120)
+                lock.unlock()
+
+                // Capture WHERE the main thread is stuck from THIS (background)
+                // watchdog queue. `Thread.callStackSymbols` is static/current-thread
+                // only, so a main-queue loop would capture *itself* (the bug that
+                // made every freeze report show the watchdog's own frames and an
+                // empty heavyOp). The Mach `thread_get_state` path below reads the
+                // main thread's instruction pointer directly.
+                let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
+                let heavyOp = HeavyOperationTracker.snapshot() ?? ""
+                let mainStack = MainThreadStackCapture.capture()
+                HermexLogger.shared.log(
+                    type: "freeze",
+                    durationMs: totalFrozen * 1000,
+                    screen: screen,
+                    message: wasFrozen
+                        ? "main thread STILL blocked \\(Int(totalFrozen))s"
+                        : "main thread blocked \\(Int(totalFrozen))s",
+                    extras: [
+                        "stack": mainStack,
+                        "memoryMB": memoryMB,
+                        "heavyOp": heavyOp,
+                    ]
+                )
+            }
         } else if elapsed >= stutterThreshold && !wasFrozen {
             // Sub-hang main-thread stall (1-3s): report rate-limited so a
             // stream of micro-hangs doesn't spam the log. Capture the main
@@ -371,12 +427,23 @@ final class MainThreadWatchdog {
     private func pong() {
         lock.lock()
         let wasFrozen = isFrozen
+        let frozenFor = frozenSince.map { Date().timeIntervalSince($0) }
         isFrozen = false
+        frozenSince = nil
+        lastFreezeReportAt = Date(timeIntervalSince1970: 0)
+        nextEscalationInterval = 5.0
         lastPong = Date()
         lock.unlock()
 
-        if wasFrozen {
-            HermexLogger.shared.log(type: "recovered", message: "main thread recovered")
+        if wasFrozen, let frozenFor {
+            // Main thread recovered — clear the persisted marker so the next
+            // launch does NOT report a false force-quit.
+            UserDefaults.standard.removeObject(forKey: Self.frozenMarkerKey)
+            HermexLogger.shared.log(
+                type: "recovered",
+                durationMs: frozenFor * 1000,
+                message: "main thread recovered after \\(Int(frozenFor))s"
+            )
         }
     }
 }
