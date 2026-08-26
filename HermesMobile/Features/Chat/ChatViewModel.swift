@@ -1805,6 +1805,18 @@ final class ChatViewModel {
             return
         }
 
+        if let trimmedMessages = Self.trimmingReloadedMessages(
+            reloadedMessages,
+            toPreserveCurrentMessages: previousMessages,
+            currentMessagesOffset: previousMessagesOffset,
+            reloadedMessagesOffset: reloadedMessagesOffset
+        ) {
+            messages = trimmedMessages
+            messagesOffset = previousMessagesOffset
+            hasOlderMessages = previousMessagesOffset > 0 || session?.messagesTruncated == true
+            return
+        }
+
         messages = reloadedMessages
         updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
     }
@@ -1824,6 +1836,42 @@ final class ChatViewModel {
         }
 
         return Array(currentMessages[..<overlapIndex]) + reloadedMessages
+    }
+
+    /// Mid-session reloads (turn-end `.done`, the completion refresh, or a
+    /// pull-to-refresh while reading) can come back with a *smaller*
+    /// `_messages_offset` than the window on screen — the server widened the
+    /// page, or `.done` omitted the offset entirely and it resolved to 0.
+    /// Adopting that shrunken offset renumbers every positional
+    /// `transcript:<absoluteIndex>` renderID, SwiftUI remounts the whole list,
+    /// and a reader who scrolled up is dumped at the top of the session.
+    ///
+    /// When the reloaded window still contains the first message we're already
+    /// showing at the absolute index implied by both offsets, drop the reloaded
+    /// rows *before* that overlap and keep the current offset: rows on screen
+    /// keep their renderIDs, and the tail is replaced with the
+    /// server-authoritative content. Returns nil when the windows don't align
+    /// (fall back to plain replacement).
+    nonisolated private static func trimmingReloadedMessages(
+        _ reloadedMessages: [ChatMessage],
+        toPreserveCurrentMessages currentMessages: [ChatMessage],
+        currentMessagesOffset: Int,
+        reloadedMessagesOffset: Int
+    ) -> [ChatMessage]? {
+        guard reloadedMessagesOffset < currentMessagesOffset,
+              let firstCurrentMessage = currentMessages.first
+        else {
+            return nil
+        }
+
+        let overlapIndex = currentMessagesOffset - reloadedMessagesOffset
+        guard reloadedMessages.indices.contains(overlapIndex),
+              reloadedMessages[overlapIndex].id == firstCurrentMessage.id
+        else {
+            return nil
+        }
+
+        return Array(reloadedMessages[overlapIndex...])
     }
 
     private func updateOlderMessagePagination(from session: SessionDetail?, loadedMessageCount: Int) {

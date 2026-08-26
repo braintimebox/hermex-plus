@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.7 — 2026-08-26
+
+### Fixed
+- **Late SSE content after a completed response is ignored — no more stray session-title text appended to the answer (#288, upstream #295).** After `.done` completes the response (`hasCompletedCurrentResponse == true`), the server's background title thread could still emit late `.token`/`reasoning`/`interimAssistant`/tool events, and the handler appended them as assistant message content — the session title appeared as an extra, sometimes-repeating line after the real answer. `ChatStreamCoordinator.handle(_:)` now guards on `hasCompletedCurrentResponse`: content events (token/reasoning/interimAssistant/tool/approval/clarification/pendingSteerLeftover) are dropped, while title/metadata and stream-lifecycle events (streamEnd/cancelled/error/transportError/heartbeat/ignored, plus compressing/contextStatus/warning for this fork) still pass so session metadata and teardown are never lost. Same guard upstream `uzairansaruzi/hermex` #295 (fixes #288).
+- **Scroll position survives a turn-end reload that widens the transcript window — no more being dumped to the top (#276).** When a response completes, `.done` (or the completion refresh) can return a *wider* window — a smaller `_messages_offset`, or no offset at all (resolving to 0). Adopting that shrunken offset renumbered every positional `transcript:<absoluteIndex>` renderID, so SwiftUI remounted the whole list and a reader who had scrolled up was thrown to the very beginning of the session. `applyReloadedMessages` now runs `trimmingReloadedMessages` when the reloaded window still contains the first on-screen row at the absolute index implied by both offsets: it drops the reloaded rows *before* that overlap and keeps the current offset, so on-screen rows keep their renderIDs and only the tail is refreshed from server-authoritative content. Returns nil (plain replacement) when the windows don't align — e.g. a truncation/compaction rewrite with no overlap. Same fix upstream `uzairansaruzi/hermex` #276 (closed).
+
 ## 3.0.6 — 2026-08-25
 
 ### Fixed

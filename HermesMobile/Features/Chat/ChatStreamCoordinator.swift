@@ -436,6 +436,36 @@ final class ChatStreamCoordinator {
     }
 
     private func handle(_ event: SSEEvent) {
+        // Ignore late content after the response has already completed (#288).
+        // Title/done/stream lifecycle events must still pass so session metadata
+        // updates and stream teardown are not dropped.
+        if hasCompletedCurrentResponse {
+            switch event {
+            case .title(let payload):
+                if delegate?.streamCoordinatorUpdateTitle(payload) == true {
+                    markProgress()
+                }
+                return
+            case .metering(let payload):
+                guard payload.sessionId == nil || payload.sessionId == delegate?.streamCoordinatorSessionID else {
+                    return
+                }
+                liveTokensPerSecond = payload.displayableTokensPerSecond
+                return
+            case .done(_):
+                // Duplicate done after completion — already finalized; ignore.
+                return
+            case .streamEnd, .cancelled, .heartbeat, .ignored:
+                break
+            case .error(_), .transportError(_), .compressing(_), .contextStatus(_), .warning(_):
+                break
+            case .token(_), .interimAssistant(_), .reasoning(_), .toolStarted(_),
+                 .toolCompleted(_), .approvalPending(_), .clarificationPending(_),
+                 .pendingSteerLeftover(_):
+                return
+            }
+        }
+
         lastEventID = streamClient.lastEventID ?? lastEventID
         lastTransportActivityDate = Date()
 
