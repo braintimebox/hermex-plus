@@ -5,6 +5,12 @@ struct ChatTranscriptView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// Exact scroll-position preservation across "Load older" prepends. The
+    /// naive `ScrollViewProxy.scrollTo(identity, .top)` fallback cannot align to
+    /// a not-yet-mounted LazyVStack row, so the controller snapshots the UIKit
+    /// geometry before the request and offsets by the content-height delta.
+    @State private var prependScrollPositionController = ChatPrependScrollPositionController()
+
     let isLoading: Bool
     let errorMessage: String?
     let messages: [ChatMessage]
@@ -344,7 +350,10 @@ struct ChatTranscriptView: View {
         .clipped()
         .background {
             ZStack {
-                ChatScrollObserver(isStreaming: activeStreamID != nil) { metrics in
+                ChatScrollObserver(
+                    isStreaming: activeStreamID != nil,
+                    prependScrollPositionController: prependScrollPositionController
+                ) { metrics in
                     onUpdateScrollMetrics(metrics)
                 }
 
@@ -382,21 +391,31 @@ struct ChatTranscriptView: View {
     }
 
     private func loadOlderMessagesPreservingPosition(proxy: ScrollViewProxy) async {
-        // Anchor on the first transcript row's ForEach identity (messageId ??
-        // renderID). Rows are `.id(transcriptMessage.id)`, so the scroll target
-        // must match that identity to resolve after the older messages are
-        // prepended.
+        // Exact path first: snapshot the UIKit scroll geometry, prepend, then
+        // offset by the net content-height growth. `ScrollViewProxy.scrollTo` to
+        // a coarse anchor cannot preserve the reader's exact gap above the
+        // previous first row, and a LazyVStack row that is not yet mounted makes
+        // scrollTo silently a no-op — the "Load older does nothing" bug.
+        let capturedExactPosition = prependScrollPositionController.capture()
         let identity = displayedTranscriptMessages.first?.id
         let didLoad = await onLoadOlderMessages()
-        guard didLoad, let identity else { return }
+        guard didLoad else {
+            prependScrollPositionController.cancelPreservation()
+            return
+        }
+
+        if capturedExactPosition,
+           prependScrollPositionController.restoreAfterPrepend() {
+            return
+        }
+
+        // Coarse fallback (user moved during the request, or the controller had
+        // no scroll view). Snap, never animate: an animated ride down through
+        // the lazy rows of a long transcript forces a re-layout of the markdown
+        // tree on main — the same mechanism that rendered the black screen on ↓.
+        guard let identity else { return }
 
         await Task.yield()
-        // Snap, never animate: an animated ride from the new top back down to
-        // the anchor row traverses the lazy rows of a long transcript and forces
-        // a re-layout of the markdown tree on main — the exact mechanism that
-        // rendered the black screen on the ↓ button (removed there in 3.0.0/3.1.1,
-        // see scrollToLatestContent). A fast prepend + snap lands the reader on
-        // the same content they were reading without the intermediate layout pass.
         proxy.scrollTo(identity, anchor: .top)
     }
 
