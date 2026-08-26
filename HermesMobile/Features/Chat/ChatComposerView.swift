@@ -123,7 +123,7 @@ struct MessageComposerView: View {
     let onOpenScheduledList: (() -> Void)?
     /// Non-nil shows the native ⌄ collapse affordance in the action row
     /// (reading-first mode): folds the composer back to the FAB.
-    let onCollapseComposer: (() -> Void)? = nil
+    let onCollapseComposer: (() -> Void)?
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
