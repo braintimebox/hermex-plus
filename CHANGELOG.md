@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1 — 2026-08-26
+
+### Changed
+- **Scroll ownership is now a single source of truth (ARCH-HPX-001, Law 1).** The follow-latest intent lived in scattered booleans (`shouldFollowLatestMessage` + `isScrolledNearBottom` + cooldown) consumed by six scroll sites, each applying its own gate — that is why scroll fixes kept leaking through another site (the 160pt streaming band + system `.sizeChanges` anchor survived the 3.0.0 fix). Now `ChatScrollOwner` (`user` / `app`) plus ONE reducer (`ChatScrollPolicy.resolveOwner`) decides ownership from the total set of transitions: explicit ↓ tap / send → `.app`; finger touches during streaming → `.user` (finger priority over printing); scrolled beyond the threshold → `.user`; idle at the bottom → `.app`; otherwise sticky. All six sites (system sizeChanges anchor, messages.count / streamingScrollTrigger / cacheFirstReconcileScrollToken / clarification onChange channels, follow-scroll scheduler, ↓ button visibility) read ONLY the owner. Observable behavior is identical to 3.1.0; the ↓ button additionally appears as soon as the reader takes ownership during streaming (explicit affordance to re-join the tail).
+
 ## 3.1.0 — 2026-08-26
 
 ### Fixed

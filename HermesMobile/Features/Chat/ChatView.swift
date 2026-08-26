@@ -286,7 +286,9 @@ struct ChatView: View {
     @State private var isScrolledNearBottom = true
     @State private var isReadingOlderTranscript = false
     @State private var showsPendingDecisionOverlay = false
-    @State private var shouldFollowLatestMessage = true
+    /// Single source of truth for who may scroll the transcript (see
+    /// `ChatScrollPolicy.resolveOwner`). All scroll sites read only this.
+    @State private var scrollOwner: ChatScrollOwner = .app
     @State private var followScrollGeneration = 0
     @State private var isUserInteractingWithScroll = false
     @State private var userScrollCooldownUntil: Date?
@@ -1312,7 +1314,7 @@ struct ChatView: View {
             showsAssistantTypingIndicator: showsAssistantTypingIndicator,
             showsCompressingStatus: viewModel.isCompressingContext,
             showsScrollToBottomButton: showsScrollToBottomButton,
-            shouldFollowLatestMessage: shouldFollowLatestMessage,
+            scrollOwner: scrollOwner,
             isAutoScrollPaused: isAutoFollowScrollPaused,
             latestTranscriptMessageRole: latestTranscriptMessageRole,
             isScrolledNearBottom: isScrolledNearBottom,
@@ -1527,7 +1529,7 @@ struct ChatView: View {
     }
 
     private var showsScrollToBottomButton: Bool {
-        !isScrolledNearBottom && (viewModel.activeStreamID == nil || !shouldFollowLatestMessage)
+        scrollOwner == .user
     }
 
     private var showsAssistantTypingIndicator: Bool {
@@ -1754,7 +1756,7 @@ struct ChatView: View {
     }
 
     private func loadOlderMessages() async -> Bool {
-        shouldFollowLatestMessage = false
+        scrollOwner = .user
         if !isReadingOlderTranscript {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
                 isReadingOlderTranscript = true
@@ -2399,12 +2401,12 @@ struct ChatView: View {
 
         if isUserInitiated {
             // An explicit ↓ tap / send is an unconditional re-arm of follow-latest.
-            shouldFollowLatestMessage = true
+            scrollOwner = .app
             userScrollCooldownUntil = nil
-        } else if !shouldFollowLatestMessage {
+        } else if scrollOwner == .user {
             // Auto channels (streaming size changes, new message rows) must never
-            // re-arm follow-latest. If the user scrolled back up to read (`false`),
-            // the flag stays off until they explicitly tap ↓ or send. Re-arming here
+            // re-arm follow-latest. If the reader owns the viewport, ownership
+            // stays with them until they explicitly tap ↓ or send. Re-arming here
             // is what silently yanked the viewport back down mid-read.
             return
         }
@@ -2533,55 +2535,42 @@ struct ChatView: View {
         // streaming layout growth cannot yank the viewport mid-gesture.
         if metrics.isUserInteracting {
             userScrollCooldownUntil = ChatScrollPolicy.cooldownDeadline()
-            // Finger priority over printing: while streaming, ANY scroll touch
-            // immediately yields follow-latest intent to the user. Without this
-            // the 160pt streaming near-bottom band keeps `shouldFollowLatestMessage`
-            // true, and the system `.sizeChanges` anchor glues the viewport back
-            // to the growing message on every token — the finger literally fights
-            // the stream and can never accumulate enough distance to escape the
-            // band. Follow re-arms only on an explicit ↓ tap or send.
-            if isStreaming {
-                shouldFollowLatestMessage = false
-            }
         }
 
-        if isNearBottom {
-            // Do NOT auto-re-arm follow-latest just because the viewport drifted
-            // back near the bottom during an active stream. Re-arming here is what
-            // made the transcript yank downward while the user was reading older
-            // messages: a couple of tokens plus the loose streaming threshold
-            // (160 pt) could briefly read as "near bottom", snap follow on, and
-            // the next size change pulled the viewport back down. While streaming,
-            // follow-latest stays off until the user explicitly taps the
-            // scroll-to-bottom button (or sends a message), matching how Telegram
-            // and chat sites behave: no auto-glue, a manual "↓" button instead.
-            //
-            // NOTE: isReadingOlderTranscript is intentionally NOT reset here.
-            // Resetting it on scroll-to-bottom made the composer chrome re-expand
-            // (secondary bar with workspace dir + profile + git appearing) purely
-            // because the transcript re-anchored — the "composer jumps when I tap ↓"
-            // bug. Reading mode now clears only on explicit write intent (composer
-            // focus / send), keeping the composer stable while scrolling.
-            if !isStreaming {
-                shouldFollowLatestMessage = true
-            }
-        } else if !isNearBottom {
-            // Scrolled away from the tail — drop follow-latest intent regardless
-            // of whether the gesture is still active. Previously this only fired
-            // while `metrics.isUserInteracting` was true, so a quick flick up that
-            // ended before the next metrics sample left `shouldFollowLatestMessage`
-            // true; once the 0.25s cooldown lapsed, the next streaming size change
-            // (`.sizeChanges` anchor = .bottom) yanked the viewport back down. The
-            // intent must follow the *position*, not the touch state.
-            shouldFollowLatestMessage = false
-            if !isReadingOlderTranscript,
-               ChatScrollPolicy.shouldEnterReadingOlder(
-                   distanceFromBottom: metrics.distanceFromBottom,
-                   isStreaming: isStreaming
-               ) {
-                withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                    isReadingOlderTranscript = true
-                }
+        // The single ownership decision (ChatScrollPolicy.resolveOwner):
+        //   - finger priority over printing: while streaming, ANY scroll touch
+        //     immediately yields the viewport to the reader — without this the
+        //     160pt streaming near-bottom band kept follow-latest on, and the
+        //     system `.sizeChanges` anchor glued the viewport back on every
+        //     token, so the reader could never escape the band;
+        //   - ownership must also follow the position, not the touch state: a
+        //     quick flick up that ends before the next sample must still drop
+        //     app ownership (synchronous KVO metrics make this reliable);
+        //   - idle at the bottom returns ownership to the app;
+        //   - while streaming, ownership stays with the reader until an
+        //     explicit ↓ tap or send (Telegram-style, no auto-glue).
+        // NOTE: isReadingOlderTranscript is intentionally NOT reset on
+        // near-bottom. Resetting it made the composer chrome re-expand purely
+        // because the transcript re-anchored — the "composer jumps when I tap
+        // ↓" bug. Reading mode clears only on explicit write intent.
+        let resolved = ChatScrollPolicy.resolveOwner(
+            current: scrollOwner,
+            isStreaming: isStreaming,
+            isUserInteracting: metrics.isUserInteracting,
+            isNearBottom: isNearBottom
+        )
+        if scrollOwner != resolved {
+            scrollOwner = resolved
+        }
+
+        if !isNearBottom,
+           !isReadingOlderTranscript,
+           ChatScrollPolicy.shouldEnterReadingOlder(
+               distanceFromBottom: metrics.distanceFromBottom,
+               isStreaming: isStreaming
+           ) {
+            withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                isReadingOlderTranscript = true
             }
         }
     }
@@ -2594,11 +2583,12 @@ struct ChatView: View {
     }
 
     private func prepareTranscriptForExplicitSend() {
-        shouldFollowLatestMessage = true
+        scrollOwner = .app
         // Explicit send re-pins to the tail: the new message must be visible even
         // if the reader had scrolled up. Mark near-bottom so the `.onChange`
-        // channels (guarded by `isScrolledNearBottom`) let the scroll-to-latest
-        // run instead of silently suppressing it.
+        // channels let the scroll-to-latest run instead of silently suppressing
+        // it (ownership alone gates them; this keeps the presentation signals
+        // consistent too).
         isScrolledNearBottom = true
         userScrollCooldownUntil = nil
         if isReadingOlderTranscript {

@@ -8,34 +8,72 @@ import SwiftUI
 /// user-owned manual scrolling, and a short cooldown after any user
 /// interaction prevents streaming layout growth from yanking the viewport
 /// while a manual scroll is still settling.
+/// Who owns the transcript viewport. The single source of truth for every
+/// scroll decision: all scroll sites (system sizeChanges anchor, onChange
+/// channels, follow-scroll scheduler, ↓ button) read ONLY this value. No site
+/// decides on its own — the class of "finger fights the stream" bugs lived in
+/// six sites each applying its own gate to scattered booleans.
+enum ChatScrollOwner: Equatable {
+    /// The reader owns the viewport. No auto-scroll may move it — not the
+    /// streaming growth, not the new-row channels. Only an explicit ↓ tap or
+    /// send can take ownership back.
+    case user
+
+    /// The app owns follow-latest: streaming growth and new rows glue to the
+    /// bottom while the reader is at the tail.
+    case app
+}
+
 enum ChatScrollPolicy {
     /// Existing transcripts should enter at their latest content as part of the
     /// scroll view's first layout, before the destination becomes visible.
     static let initialTranscriptAnchor = UnitPoint.bottom
 
+    /// The ONLY place that decides scroll ownership. Total transitions:
+    ///   - explicit ↓ tap / send          → .app (unconditional)
+    ///   - finger touches during stream   → .user (finger priority over printing)
+    ///   - scrolled beyond the threshold  → .user
+    ///   - idle AND at the bottom         → .app
+    ///   - otherwise                      → keep current (sticky)
+    /// A transient touch pause (cooldown) remains a separate suppression —
+    /// it never changes ownership, it only delays auto-scroll during a gesture.
+    static func resolveOwner(
+        current: ChatScrollOwner,
+        isStreaming: Bool,
+        isUserInteracting: Bool,
+        isNearBottom: Bool,
+        explicitFollowCommand: Bool = false
+    ) -> ChatScrollOwner {
+        if explicitFollowCommand { return .app }
+        if isStreaming && isUserInteracting { return .user }
+        if !isNearBottom { return .user }
+        if !isStreaming { return .app }
+        return current
+    }
+
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while the app still
-    /// owns follow-latest intent AND the user is not mid-scroll; return nil as
-    /// soon as the reader scrolls away (or during the settle cooldown) so a
+    /// owns follow-latest AND the user is not mid-scroll; return nil as soon
+    /// as the reader owns the viewport (or during the settle cooldown) so a
     /// streaming bubble's size growth can never yank the viewport back down.
     ///
     /// When idle (no stream), the system `.sizeChanges` anchor must stay nil
     /// entirely: idle follow-latest is already driven explicitly by
     /// `onChange(of: messages.count)` → `scrollToLatestContent`. A `.bottom`
     /// anchor here only competes with that path — and worse, outruns the async
-    /// scroll-metrics that reset `shouldFollowLatestMessage`. The metrics
-    /// arrive deferred (DispatchQueue.main.async), so the flag can linger
-    /// `true` for a frame or two after the reader scrolled back up; any
-    /// incidental size change in that window (a LazyVStack row re-measuring, an
-    /// image decoding, markdown finishing layout) makes the system silently
-    /// re-glue the viewport to the bottom — the "scroll won't listen" jump.
-    /// Restricting the anchor to streaming only removes that idle race.
+    /// scroll-metrics that drop app ownership. The metrics arrive deferred
+    /// (DispatchQueue.main.async), so ownership can linger `.app` for a frame
+    /// or two after the reader scrolled back up; any incidental size change in
+    /// that window (a LazyVStack row re-measuring, an image decoding, markdown
+    /// finishing layout) makes the system silently re-glue the viewport to the
+    /// bottom — the "scroll won't listen" jump. Restricting the anchor to
+    /// streaming only removes that idle race.
     static func sizeChangeAnchor(
-        shouldFollowLatestMessage: Bool,
+        owner: ChatScrollOwner,
         isAutoScrollPaused: Bool,
         isStreaming: Bool
     ) -> UnitPoint? {
-        (isStreaming && shouldFollowLatestMessage && !isAutoScrollPaused) ? .bottom : nil
+        (isStreaming && owner == .app && !isAutoScrollPaused) ? .bottom : nil
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as

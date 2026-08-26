@@ -118,12 +118,12 @@ struct ChatScrollObserver: UIViewRepresentable {
             observations = [
                 // KVO on contentOffset/contentSize fires on every scroll tick on
                 // the main thread. Delivering via `.deferred` (an async hop) lets
-                // the metrics arrive a frame late — during that window the
-                // `shouldFollowLatestMessage` flag can still be true while the
-                // user has already flicked up, and the next size change re-glues
-                // the viewport (the "scroll won't listen" jump). Delivering
-                // `.immediate` keeps `isUserInteracting`/`distanceFromBottom`
-                // truthful at the moment the system is about to auto-scroll.
+                // the metrics arrive a frame late — during that window scroll
+                // ownership can still be `.app` while the user has already
+                // flicked up, and the next size change re-glues the viewport
+                // (the "scroll won't listen" jump). Delivering `.immediate`
+                // keeps `isUserInteracting`/`distanceFromBottom` truthful at
+                // the moment the system is about to auto-scroll.
                 // The 8pt quantization in `reportMetrics` drops ~90% of
                 // redundant deliveries, so the 120Hz re-render concern is moot.
                 scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in

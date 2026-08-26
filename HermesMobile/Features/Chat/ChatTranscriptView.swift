@@ -31,7 +31,7 @@ struct ChatTranscriptView: View {
     let showsAssistantTypingIndicator: Bool
     let showsCompressingStatus: Bool
     let showsScrollToBottomButton: Bool
-    let shouldFollowLatestMessage: Bool
+    let scrollOwner: ChatScrollOwner
     let isAutoScrollPaused: Bool
     let latestTranscriptMessageRole: String?
     let isScrolledNearBottom: Bool
@@ -138,7 +138,7 @@ struct ChatTranscriptView: View {
                     )
                     .defaultScrollAnchor(
                         ChatScrollPolicy.sizeChangeAnchor(
-                            shouldFollowLatestMessage: shouldFollowLatestMessage,
+                            owner: scrollOwner,
                             isAutoScrollPaused: isAutoScrollPaused,
                             // Only glue the viewport to the bottom while content
                             // is actually being printed. While the agent is still
@@ -198,10 +198,10 @@ struct ChatTranscriptView: View {
                     Color(.systemBackground).ignoresSafeArea()
                 }
                 .onChange(of: messages.count) {
-                    // Only follow when the reader is actually at the tail. A
-                    // stale `shouldFollowLatestMessage` (linger after a stream)
-                    // must not yank the viewport while the user reads older text.
-                    guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
+                    // Only follow when the APP owns the viewport. A stale
+                    // ownership (linger after a stream) must not yank the
+                    // viewport while the user reads older text.
+                    guard scrollOwner == .app else { return }
 
                     if latestTranscriptMessageRole == "user" {
                         onScrollToLatestTranscriptMessage(proxy)
@@ -210,19 +210,19 @@ struct ChatTranscriptView: View {
                     }
                 }
                 .onChange(of: streamingScrollTrigger) {
-                    if shouldFollowLatestMessage, isScrolledNearBottom {
+                    if scrollOwner == .app {
                         onScrollToLatestContent(proxy, true)
                     }
                 }
                 .onChange(of: cacheFirstReconcileScrollToken) {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no
-                    // animation) unless the reader has scrolled away in the meantime.
-                    guard shouldFollowLatestMessage, isScrolledNearBottom else { return }
+                    // animation) unless the reader owns the viewport.
+                    guard scrollOwner == .app else { return }
                     onScrollToLatestContent(proxy, false)
                 }
                 .onChange(of: clarificationPrompt?.id) {
-                    guard clarificationPrompt != nil, shouldFollowLatestMessage else { return }
+                    guard clarificationPrompt != nil, scrollOwner == .app else { return }
                     onScrollToBottom(proxy)
                 }
                 .onChange(of: pinnedScrollTarget) {
