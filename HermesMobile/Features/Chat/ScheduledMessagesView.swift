@@ -264,13 +264,30 @@ private struct ScheduledMessageRow: View {
     let onDelete: () -> Void
     let onEdit: () -> Void
 
+    /// Human-readable destination: which chat the message will go to. The row
+    /// used to render `sessionTitle` only when non-empty, and the edit sheet
+    /// stored `nil` for existing chats — after re-targeting a message to an
+    /// existing chat the list showed no destination at all (looked like the
+    /// change wasn't saved). Always show the destination, with the chat name
+    /// when available.
+    private var destinationLabel: String {
+        if sessionId.isEmpty {
+            if let title = sessionTitle, !title.isEmpty {
+                return "New Chat: \(title)"
+            }
+            return "New Chat"
+        }
+        if let title = sessionTitle, !title.isEmpty {
+            return "Chat: \(title)"
+        }
+        return "Existing Chat"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let title = sessionTitle, !title.isEmpty {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.accentColor)
-            }
+            Text(destinationLabel)
+                .font(.caption)
+                .foregroundColor(.accentColor)
 
             Text(text)
                 .font(.subheadline)
@@ -427,7 +444,10 @@ fileprivate struct EditScheduledMessageSheet: View {
         if destinationIsExistingChat {
             if let picked = pickedSession, !picked.id.isEmpty {
                 sid = picked.id
-                title = nil
+                // Store the chat's name so the Scheduled list can show the
+                // destination. Was `nil` before — the row displayed nothing
+                // after re-targeting, which looked like the edit didn't save.
+                title = picked.displayTitle
             } else if !message.sessionId.isEmpty {
                 // Fallback: keep the already-attached chat. pickedSession can be
                 // nil if the session list didn't load or the id didn't match, and

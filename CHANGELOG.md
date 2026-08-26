@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.9 — 2026-08-26
+
+### Fixed
+- **Scheduled message list now always shows where a message is going — re-targeting to an existing chat no longer looks like a no-op.** Two gaps: the edit sheet stored `sessionTitle = nil` for existing chats (so the row had no name to display), and the row rendered the title only when non-empty — after editing the destination to an existing chat the list showed nothing (it looked like the change wasn't saved, even though `sessionId`/`scheduleKey` were stored and synced). The edit sheet now stores the picked chat's `displayTitle`, and the row always renders a destination line: `Chat: <name>` for an existing chat, `New Chat: <name>` (or `New Chat`) for a new one.
+
 ## 3.0.8 — 2026-08-26
 
 ### Fixed
