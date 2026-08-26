@@ -391,13 +391,13 @@ struct ChatTranscriptView: View {
         guard didLoad, let identity else { return }
 
         await Task.yield()
-        if reduceMotion {
-            proxy.scrollTo(identity, anchor: .top)
-        } else {
-            withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(identity, anchor: .top)
-            }
-        }
+        // Snap, never animate: an animated ride from the new top back down to
+        // the anchor row traverses the lazy rows of a long transcript and forces
+        // a re-layout of the markdown tree on main — the exact mechanism that
+        // rendered the black screen on the ↓ button (removed there in 3.0.0/3.1.1,
+        // see scrollToLatestContent). A fast prepend + snap lands the reader on
+        // the same content they were reading without the intermediate layout pass.
+        proxy.scrollTo(identity, anchor: .top)
     }
 
     @ViewBuilder

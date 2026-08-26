@@ -252,7 +252,15 @@ final class MainThreadWatchdog {
 
     private let pingInterval: TimeInterval = 1.0
     private let hangThreshold: TimeInterval = 3.0
-    private let stutterThreshold: TimeInterval = 1.0
+    // MUST stay strictly ABOVE pingInterval + jitter. The protocol measures
+    // elapsed = now - lastPong, and the pong lands a few ms AFTER each tick —
+    // so a threshold of 1.0 == the 1.0s ping cadence reports "stall" on nearly
+    // EVERY tick (elapsed ≈ 1.0 + timer drift). That produced ~2300 phantom
+    // stutter events (median 1000.4ms, mach_msg idle stacks) that throttled the
+    // 30s rate limit and drowned real reports. 1.25s: only reports actual
+    // stalls; 1.0-1.25s borderline jitter is by design invisible (a real 3s+
+    // block still hits the freeze path below).
+    private let stutterThreshold: TimeInterval = 1.25
     private let stutterRateLimit: TimeInterval = 30.0
 
     private let lock = NSLock()
@@ -294,7 +302,7 @@ final class MainThreadWatchdog {
             HermexLogger.shared.log(
                 type: "freeze",
                 screen: "startup",
-                message: "previous run died while main thread was frozen (force-quit) — frozen since epoch \\(Int(frozenTs)), \\(Int(Date().timeIntervalSince1970 - frozenTs))s before this launch",
+                message: "previous run died while main thread was frozen (force-quit) — frozen since epoch \(Int(frozenTs)), \(Int(Date().timeIntervalSince1970 - frozenTs))s before this launch",
                 extras: ["previousRunFrozenSince": frozenTs]
             )
             UserDefaults.standard.removeObject(forKey: Self.frozenMarkerKey)
@@ -386,8 +394,8 @@ final class MainThreadWatchdog {
                     durationMs: totalFrozen * 1000,
                     screen: screen,
                     message: wasFrozen
-                        ? "main thread STILL blocked \\(Int(totalFrozen))s"
-                        : "main thread blocked \\(Int(totalFrozen))s",
+                        ? "main thread STILL blocked \(Int(totalFrozen))s"
+                        : "main thread blocked \(Int(totalFrozen))s",
                     extras: [
                         "stack": mainStack,
                         "memoryMB": memoryMB,
@@ -410,12 +418,16 @@ final class MainThreadWatchdog {
             lock.unlock()
             if shouldReport {
                 let mainStack = MainThreadStackCapture.capture()
+                let heavyOp = HeavyOperationTracker.snapshot() ?? ""
                 HermexLogger.shared.log(
                     type: "stutter",
                     durationMs: elapsed * 1000,
                     screen: screen,
                     message: "main thread stalled \(Int(elapsed))s",
-                    extras: ["stack": mainStack]
+                    extras: [
+                        "stack": mainStack,
+                        "heavyOp": heavyOp,
+                    ]
                 )
             }
         }

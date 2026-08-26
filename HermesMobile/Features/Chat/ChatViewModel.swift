@@ -1708,10 +1708,29 @@ final class ChatViewModel {
                 cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
             }
 
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "load older",
+                extras: [
+                    "beforeOffset": messageBefore,
+                    "fetchedCount": olderMessages.count,
+                    "didAddMessages": didAddMessages,
+                    "resolvedOffset": messagesOffset,
+                    "hasOlderMessages": hasOlderMessages,
+                ]
+            )
+
             return didAddMessages
         } catch {
             lastError = error
             errorMessage = error.localizedDescription
+            HermexLogger.shared.log(
+                type: "error",
+                screen: "ChatView",
+                message: "load older failed",
+                extras: ["error": error.localizedDescription]
+            )
             return false
         }
     }

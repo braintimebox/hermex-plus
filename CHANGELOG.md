@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.2 — 2026-08-26
+
+### Fixed
+- **The periodic "1s stall" (every ~30-34s) was a measurement artifact, not a real hang — now eliminated.** The watchdog's ping/pong protocol measured `elapsed = now - lastPong` against a 1.0s threshold while the ping interval itself is 1.0s, so nearly EVERY tick reported "main thread stalled 1s" (2300 events, median 1000.4ms, idle `mach_msg` stacks). The 30s rate limit was consumed by these phantoms, drowning real reports. Threshold is now 1.25s — strictly above the ping cadence + jitter; a real ≥1.25s stall still reports, and a real 3s+ block still escalates through the freeze path. On-device effect: the log now reflects reality instead of the watchdog's own cadence.
+- **Freeze/stutter messages reported literal `\(Int(...))` instead of seconds.** The freeze escalation ("main thread STILL blocked" with the real duration) and the force-quit marker at launch were introduced in 3.1.0 with a double-escaped string — the log read `main thread STILL blocked \(Int(totalFrozen))s` instead of `…blocked 14s`. Interpolation fixed (was a regression of the same class fixed in 3.0.3).
+- **"Load older" scroll restore no longer animates.** The position-preserving scroll after prepending a page used `withAnimation` — the animated ride down through the lazy rows of a long transcript forces a re-layout of the markdown tree on main, the exact mechanism that rendered the black screen on the ↓ button (snap there since 3.0.0/3.1.1). Restore now snaps, matching the ↓ path.
+
+### Changed
+- **Each `load older` request is now reported to the diagnostics channel** (`load older` event with `beforeOffset`, `fetchedCount`, `didAddMessages`, `resolvedOffset`, `hasOlderMessages`; `load older failed` event with the error). The next tap on the device produces the facts needed to verify pagination end-to-end instead of guessing.
+- **Stutter reports now carry `heavyOp`** like freeze reports, so a real stall is attributed to the tracked operation it happened in.
+- **Logging itself never runs on the main thread** (unchanged, verified): `HermexLogger` enqueues on a private utility queue, batches ≤20 events, 10s timeout, fire-and-forget; the only main-thread touch is the watchdog's 1/s pong.
+
 ## 3.1.1 — 2026-08-26
 
 ### Changed
