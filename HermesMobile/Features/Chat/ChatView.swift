@@ -628,22 +628,24 @@ struct ChatView: View {
             }
             .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: viewModel.showsListenPlaybackBar)
 
-            if composerVisible {
-                BottomComposerMaterialFade(composerHeight: composerHeight)
+            Group {
+                if composerVisible {
+                    BottomComposerMaterialFade(composerHeight: composerHeight)
 
-                composerAccessoryStack
+                    composerAccessoryStack
 
-                messageComposer
-                    .overlay(alignment: .topTrailing) {
-                        // Explicit collapse affordance: ⌄ folds the composer
-                        // back to the FAB (and dismisses the keyboard) without
-                        // reaching for the outside tap.
-                        ChatComposerCollapseButton { hideComposer() }
-                            .padding(.top, 6)
-                            .padding(.trailing, 10)
-                    }
-            } else {
-                composeFAB
+                    messageComposer
+                        .overlay(alignment: .topTrailing) {
+                            // Explicit collapse affordance: ⌄ folds the composer
+                            // back to the FAB (and dismisses the keyboard) without
+                            // reaching for the outside tap.
+                            ChatComposerCollapseButton { hideComposer() }
+                                .padding(.top, 6)
+                                .padding(.trailing, 10)
+                        }
+                } else {
+                    composeFAB
+                }
             }
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
 
