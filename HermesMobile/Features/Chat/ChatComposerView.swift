@@ -121,6 +121,9 @@ struct MessageComposerView: View {
     let onScheduleTapped: (() -> Void)?
     let scheduledCount: Int
     let onOpenScheduledList: (() -> Void)?
+    /// Non-nil shows the native ⌄ collapse affordance in the action row
+    /// (reading-first mode): folds the composer back to the FAB.
+    let onCollapseComposer: (() -> Void)? = nil
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -344,6 +347,21 @@ struct MessageComposerView: View {
 
                         if showsReasoningControl {
                             reasoningMenu
+                        }
+
+                        if let onCollapseComposer {
+                            Button {
+                                onCollapseComposer()
+                            } label: {
+                                Image(systemName: "keyboard.chevron.compact.down")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 30, height: 30)
+                                    .background(.thinMaterial, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(localized: "Collapse composer"))
+                            .accessibilityHint(String(localized: "Return to full-screen reading"))
                         }
 
                         Spacer(minLength: 0)

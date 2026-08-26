@@ -485,6 +485,7 @@ struct ChatView: View {
             },
             scheduledCount: scheduledMessageCount,
             onOpenScheduledList: { showingScheduledList = true },
+            onCollapseComposer: { hideComposer() },
             onCancel: {
                 Task { await cancelStream() }
             },
@@ -635,14 +636,6 @@ struct ChatView: View {
                     composerAccessoryStack
 
                     messageComposer
-                        .overlay(alignment: .topTrailing) {
-                            // Explicit collapse affordance: ⌄ folds the composer
-                            // back to the FAB (and dismisses the keyboard) without
-                            // reaching for the outside tap.
-                            ChatComposerCollapseButton { hideComposer() }
-                                .padding(.top, 6)
-                                .padding(.trailing, 10)
-                        }
                 } else {
                     composeFAB
                 }
@@ -2590,6 +2583,10 @@ struct ChatView: View {
             distanceFromBottom: metrics.distanceFromBottom,
             isStreaming: isStreaming
         )
+        // Ownership uses a MUCH stricter threshold: the reader owns the viewport
+        // unless they are literally at the bottom (≤8pt). UI bands (80/160pt)
+        // still drive chrome state below.
+        let isAtVeryBottom = metrics.distanceFromBottom <= ChatScrollPolicy.ownershipBottomThreshold
         // Only assign when the value actually flips — reassigning an identical
         // Bool still fans a @State write through the whole ChatView body, which
         // is exactly the per-tick re-render churn this method exists to avoid.
@@ -2626,7 +2623,7 @@ struct ChatView: View {
             current: scrollOwner,
             isStreaming: isStreaming,
             isUserInteracting: metrics.isUserInteracting,
-            isNearBottom: isNearBottom,
+            isAtVeryBottom: isAtVeryBottom,
             isInCooldown: userScrollCooldownUntil.map { Date() < $0 } ?? false
         )
         if scrollOwner != resolved {
@@ -3504,24 +3501,5 @@ fileprivate struct ChatSearchSheet: View {
                 }
             }
         }
-    }
-}
-
-/// Small ⌄ pill that folds the reading-first composer back to the compose FAB.
-/// Material background so it reads as an affordance over the composer chrome.
-private struct ChatComposerCollapseButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(.thinMaterial, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Collapse composer"))
-        .accessibilityHint(String(localized: "Return to full-screen reading"))
     }
 }

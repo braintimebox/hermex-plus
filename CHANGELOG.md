@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.6 — 2026-08-26
+
+### Fixed
+- **Ownership is now STRICT: the app owns the viewport ONLY at the very bottom (≤8pt) or after an explicit ↓ tap / send.** The old 80/160pt "near bottom" bands re-armed app ownership while the reader was still 20-70pt up — and in chat where the server transcript replaces a short cache-first render, the reconcile snap fired while the reader was mid-content ("в одном чате владею скроллом, в другом как будто нет": the cache-first chats re-glue, server-first chats don't). Now any position above 8pt is reader-owned: no quiet event (stream-end reload, cache reconcile, keyboard) can yank the viewport, and a fast flick is no longer fought by the app — the jerky feeling was the app repeatedly re-gluing the viewport against the finger.
+- **Keyboard collapse is native, not a sticker.** The ⌄ affordance moved from the floating pill overlay into the composer's action row (material circle, `keyboard.chevron.compact.down`, left side of the row — same idiom as iOS keyboard-dismiss). The overlay `ChatComposerCollapseButton` is removed.
+
+### Verification
+- Per-chat scroll-ownership hypothesis (cache-first vs server-first) is now confirmable on-device: every `.user↔.app` transition logs `distanceFromBottom`, `isStreaming`, `isInteracting` (added in 3.1.5).
+
 ## 3.1.5 — 2026-08-26
 
 ### Fixed

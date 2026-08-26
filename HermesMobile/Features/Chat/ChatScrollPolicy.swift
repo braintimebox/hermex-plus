@@ -41,24 +41,20 @@ enum ChatScrollPolicy {
         current: ChatScrollOwner,
         isStreaming: Bool,
         isUserInteracting: Bool,
-        isNearBottom: Bool,
+        isAtVeryBottom: Bool,
         isInCooldown: Bool = false,
         explicitFollowCommand: Bool = false
     ) -> ChatScrollOwner {
         if explicitFollowCommand { return .app }
         // ANY touch yields ownership to the reader — not only while streaming.
-        // A reader who flicks up and stops 30-70pt from the bottom (inside the
-        // 80pt idle band) must keep `.user`; otherwise the idle "return to .app
-        // when near bottom" rule re-arms the app the instant the finger leaves,
-        // and ANY later quiet event (stream end reload, cache reconcile,
-        // keyboard) slams the viewport back down — the "листаю вверх — меня
-        // отбрасывает, агент даже не печатает" bug.
         if isUserInteracting { return .user }
         // Settle window after the finger leaves: keep the reader's ownership
-        // until the cooldown expires, so a background event that lands during
-        // the settle cannot re-arm the app and yank the viewport.
+        // until the cooldown expires.
         if isInCooldown { return current }
-        if !isNearBottom { return .user }
+        // The reader owns the viewport unless they are LITERALLY at the bottom.
+        // "Near bottom" (80/160pt bands) is a chrome affordance, not ownership —
+        // a reader 20pt up is reading, not following.
+        if !isAtVeryBottom { return .user }
         if !isStreaming { return .app }
         return current
     }
@@ -89,12 +85,21 @@ enum ChatScrollPolicy {
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as
-    /// pinned to the latest content while idle.
+    /// pinned to the latest content while idle (drives chrome state).
     static let bottomDetectionThreshold: CGFloat = 80
 
     /// Looser bottom threshold while a response is streaming, so small layout
     /// jitter from incoming tokens does not flip follow state off.
     static let streamingBottomDetectionThreshold: CGFloat = 160
+
+    /// OWNERSHIP threshold — much stricter than the UI bands. The reader owns
+    /// the viewport unless they are literally AT the bottom (≤8pt) or pressed
+    /// ↓ / sent a message. The old 80/160pt bands re-armed the app while the
+    /// reader was 30-70pt up (still "near bottom"), so a quiet event (stream
+    /// end reload, cache reconcile, keyboard) slammed the viewport down —
+    /// "листаю вверх — меня отбрасывает, агент даже не печатает", and the
+    /// same fight is what makes a fast flick feel jerky.
+    static let ownershipBottomThreshold: CGFloat = 8
 
     /// Extra distance past the bottom threshold required before the composer
     /// chrome collapses into its compact "reading older" presentation.
