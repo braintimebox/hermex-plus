@@ -305,50 +305,79 @@ enum StreamingTextFadeTailSplitter {
     /// by value. Offsets convert back to `String.Index` via `String.Index(utf8Offset:in:)`,
     /// which is always valid because the memo key is the exact text content and
     /// any line boundary falls on a character start in that content.
-    private static let cacheLock = NSLock()
-    private static var cachedBoundariesText: String?
-    private static var cachedBoundaries: [Int]?
+    /// Incremental boundary scan. During streaming the text grows append-only
+    /// every token, and the expensive part is the O(N) line scan that finds
+    /// block boundaries — the repeated full re-scan is what feeds the
+    /// CoreText-backed stall on long streams. This holds the resume cursor
+    /// plus the fence + provisional-item state so each call scans only the
+    /// newly-appended bytes.
+    ///
+    /// Offsets are UTF-8 byte offsets, NOT `String.Index` — the latter is tied
+    /// to a specific `String` instance's representation and is not safely
+    /// reusable across distinct instances that merely compare equal by value.
+    /// Offsets convert back via `String.Index(utf8Offset:in:)`, always valid
+    /// because every resume point is a line boundary (a character start).
+    private struct BoundaryScanState {
+        var previousText: String = ""
+        var scannedUtf8: Int = 0
+        var isInsideFence: Bool = false
+        /// Confirmed boundaries (UTF-8 offsets), append-only across appends.
+        var committedBoundaries: [Int] = []
+        /// A completed top-level list item's boundary is provisional: it
+        /// vanishes if the next line is indented. Kept OUT of the committed
+        /// list until the following line resolves it.
+        var pendingItemBoundary: Int?
+    }
+
+    private static let stateLock = NSLock()
+    private static var state = BoundaryScanState()
 
     static func split(_ text: String, firstFadeOrdinal: Int) -> BlockSplit {
         let boundaries = scanBoundaries(text)
         return slice(text, boundaries: boundaries, firstFadeOrdinal: firstFadeOrdinal)
     }
 
-    /// Line-scan for block boundaries, memoized on the exact text. Returns the
-    /// boundaries as UTF-8 byte offsets, portable across equal-valued strings.
     private static func scanBoundaries(_ text: String) -> [String.Index] {
-        cacheLock.lock()
-        if let cachedBoundariesText, cachedBoundariesText == text, let cachedBoundaries {
-            let utf8View = text.utf8
-            let start = text.startIndex
-            let indices = cachedBoundaries.compactMap { offset -> String.Index? in
-                utf8View.index(start, offsetBy: offset, limitedBy: text.endIndex)
-            }
-            cacheLock.unlock()
-            return indices
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        // Append-only fast path: continue the scan from where we stopped.
+        // Otherwise reset and scan from scratch (`hasPrefix` is a cheap memcmp).
+        let resumeUtf8: Int
+        if !state.previousText.isEmpty, text.hasPrefix(state.previousText) {
+            resumeUtf8 = state.scannedUtf8
+        } else {
+            state = BoundaryScanState()
+            resumeUtf8 = 0
         }
-        cacheLock.unlock()
 
-        let result = computeBoundaries(text)
+        let (committed, pending) = scan(text, resumeUtf8: resumeUtf8)
+        state.previousText = text
 
-        cacheLock.lock()
-        cachedBoundariesText = text
+        let utf8 = text.utf8
         let start = text.startIndex
-        cachedBoundaries = result.map { text.utf8.distance(from: start, to: $0) }
-        cacheLock.unlock()
-        return result
+        var indices = committed.compactMap { utf8.index(start, offsetBy: $0, limitedBy: text.endIndex) }
+        // A trailing provisional item boundary is reported (matching the full
+        // scan) but stays provisional in the state so a later indented line
+        // can still revoke it.
+        if let pending, let idx = utf8.index(start, offsetBy: pending, limitedBy: text.endIndex) {
+            indices.append(idx)
+        }
+        return indices
     }
 
-    private static func computeBoundaries(_ text: String) -> [String.Index] {
-        var boundaries: [String.Index] = []
-        // A completed item line's boundary is provisional: it vanishes if the
-        // next line turns out to be indented (a nested child or continuation
-        // belongs in the parent's block, or it would render un-nested and
-        // jump the layout when absorbed). The view tolerates the resulting
-        // backward shift in boundary count.
-        var pendingItemBoundary: String.Index?
-        var lineStart = text.startIndex
-        var isInsideFence = false
+    private static func scan(
+        _ text: String,
+        resumeUtf8: Int
+    ) -> (committed: [Int], pending: Int?) {
+        let utf8 = text.utf8
+        let start = text.startIndex
+
+        let resumeIndex = utf8.index(start, offsetBy: resumeUtf8)
+        var lineStart = resumeIndex
+        var isInsideFence = state.isInsideFence
+        var boundaries = state.committedBoundaries
+        var pendingItemBoundary = state.pendingItemBoundary
 
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
@@ -367,24 +396,25 @@ enum StreamingTextFadeTailSplitter {
             if isFenceDelimiter(trimmedLine) {
                 isInsideFence.toggle()
                 if !isInsideFence {
-                    boundaries.append(nextLineStart)
+                    boundaries.append(utf8.distance(from: start, to: nextLineStart))
                 }
             } else if !isInsideFence, hasLineBreak {
                 if trimmedLine.isEmpty || isBlockBoundaryLine(trimmedLine) {
-                    boundaries.append(nextLineStart)
+                    boundaries.append(utf8.distance(from: start, to: nextLineStart))
                 } else if isTopLevelListItemLine(line) {
-                    pendingItemBoundary = nextLineStart
+                    pendingItemBoundary = utf8.distance(from: start, to: nextLineStart)
                 }
             }
 
             lineStart = nextLineStart
         }
 
-        if let pending = pendingItemBoundary {
-            boundaries.append(pending)
-        }
+        state.scannedUtf8 = utf8.distance(from: start, to: text.endIndex)
+        state.isInsideFence = isInsideFence
+        state.committedBoundaries = boundaries
+        state.pendingItemBoundary = pendingItemBoundary
 
-        return boundaries
+        return (boundaries, pendingItemBoundary)
     }
 
     /// Slices boundaries into the solid head plus the fade-window blocks. Cheap

@@ -13,37 +13,62 @@ struct StreamingMarkdownBlockSegments: Equatable {
 enum StreamingMarkdownBlockSplitter {
     static let stableChunkTargetCharacterCount = 6_000
 
-    /// Memoized last result. During streaming the body + onChange handlers call
-    /// `split` several times per token on the *same* `content`; recomputing an
-    /// O(N) line scan each time (and copying `activeMarkdown` every time) is a
-    /// real main-thread cost on long messages. Guarded — `split` runs on the
-    /// main thread in body evaluation, but the lock keeps it safe regardless.
-    private static let cacheLock = NSLock()
-    private static var cachedText: String?
-    private static var cachedResult: StreamingMarkdownBlockSegments?
+    /// Incremental scan state. During streaming the same content grows by
+    /// append-only each token; re-scanning the WHOLE text from `startIndex`
+    /// every frame is the O(N²) driver (the `CTLineCreateWithAttributedString`
+    /// main-thread stall on long answers). This holds the resume cursor + the
+    /// fence/chunk state so each call scans only the newly-appended bytes.
+    ///
+    /// Offsets are UTF-8 byte offsets — `String.Index` is tied to a specific
+    /// `String` instance's representation and is not safely reusable across
+    /// distinct instances that merely compare equal by value. Offsets convert
+    /// back via `String.Index(utf8Offset:in:)`, always valid because every
+    /// resume point is a line boundary (a character start).
+    private struct ScanState {
+        var previousText: String = ""
+        var scannedUtf8: Int = 0
+        var isInsideFence: Bool = false
+        var chunkStartUtf8: Int = 0
+        var stableChunks: [StreamingMarkdownChunk] = []
+    }
+
+    /// Single shared state, guarded like the old memo cache. One active stream
+    /// per process is the norm; a non-append text resets the state below.
+    private static let stateLock = NSLock()
+    private static var state = ScanState()
 
     static func split(_ text: String) -> StreamingMarkdownBlockSegments {
-        cacheLock.lock()
-        if let cachedText, cachedText == text, let cachedResult {
-            cacheLock.unlock()
-            return cachedResult
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        // Append-only fast path: continue the scan from where we stopped.
+        // Otherwise (replaced content / new stream / replayed slice) reset and
+        // scan from scratch. `hasPrefix` is a cheap memcmp, not a line scan.
+        let resumeUtf8: Int
+        if !state.previousText.isEmpty, text.hasPrefix(state.previousText) {
+            resumeUtf8 = state.scannedUtf8
+        } else {
+            state = ScanState()
+            resumeUtf8 = 0
         }
-        cacheLock.unlock()
 
-        let result = computeSplit(text)
-
-        cacheLock.lock()
-        cachedText = text
-        cachedResult = result
-        cacheLock.unlock()
+        let result = scan(text, resumeUtf8: resumeUtf8)
+        state.previousText = text
         return result
     }
 
-    private static func computeSplit(_ text: String) -> StreamingMarkdownBlockSegments {
-        var lineStart = text.startIndex
-        var chunkStart = text.startIndex
-        var isInsideFence = false
-        var stableChunks: [StreamingMarkdownChunk] = []
+    private static func scan(
+        _ text: String,
+        resumeUtf8: Int
+    ) -> StreamingMarkdownBlockSegments {
+        let utf8 = text.utf8
+        let start = text.startIndex
+
+        let resumeIndex = utf8.index(start, offsetBy: resumeUtf8)
+        var lineStart = resumeIndex
+        var chunkStartIndex = utf8.index(start, offsetBy: state.chunkStartUtf8)
+        var isInsideFence = state.isInsideFence
+        var stableChunks = state.stableChunks
 
         while lineStart < text.endIndex {
             let lineEnd = text[lineStart...].firstIndex(of: "\n") ?? text.endIndex
@@ -65,17 +90,23 @@ enum StreamingMarkdownBlockSplitter {
             }
 
             if let stableBoundary,
-               shouldSealChunk(in: text, from: chunkStart, to: stableBoundary) {
-                appendChunk(in: text, from: chunkStart, to: stableBoundary, into: &stableChunks)
-                chunkStart = stableBoundary
+               shouldSealChunk(in: text, from: chunkStartIndex, to: stableBoundary) {
+                appendChunk(in: text, from: chunkStartIndex, to: stableBoundary, into: &stableChunks)
+                chunkStartIndex = stableBoundary
             }
 
             lineStart = nextLineStart
         }
 
+        // Persist the cursor + fence/chunk state for the next append.
+        state.scannedUtf8 = utf8.distance(from: start, to: text.endIndex)
+        state.isInsideFence = isInsideFence
+        state.chunkStartUtf8 = utf8.distance(from: start, to: chunkStartIndex)
+        state.stableChunks = stableChunks
+
         return StreamingMarkdownBlockSegments(
             stableChunks: stableChunks,
-            activeMarkdown: String(text[chunkStart...])
+            activeMarkdown: String(text[chunkStartIndex...])
         )
     }
 

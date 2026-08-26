@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.6 — 2026-08-25
+
+### Fixed
+- **Streaming markdown render is now incremental — no more O(N²) full re-scan per token (the remaining root of the long-answer freeze).** The two streaming block scanners re-scanned the ENTIRE accumulated text from `startIndex` on every token/frame: `StreamingMarkdownBlockSplitter` (whole-string line scan) and `StreamingTextFadeTailSplitter` (whole-string boundary scan). Their exact-text memo caches never hit during streaming (the text changes every token), so a long reply re-parsed quadratically — the `CTLineCreateWithAttributedString` / `CoreText` main-thread stall behind the 5s+ freezes. Both scanners now hold an append-only resume cursor (UTF-8 byte offset) plus the fence/chunk/provisional-item state, and each call scans only the newly-appended bytes (`hasPrefix` memcmp + incremental line scan). A non-append text (replaced content, replay, new stream) resets to a full scan, so results stay byte-identical to the old whole-string scan. `advanceFadeWindow` also stops re-splitting `oldContent` (which would have forced a full reset+scan every frame and nullified the win) — it now reads the cached `previousActiveMarkdown` `@State`. This is the append-only `StreamingMarkdownRenderState` slice upstream `uzairansaruzi/hermex` documented as "designed but not yet implemented" in PR `#292` — now actually implemented here.
+
 ## 3.0.5 — 2026-08-25
 
 ### Fixed

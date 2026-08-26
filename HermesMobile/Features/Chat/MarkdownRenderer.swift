@@ -209,6 +209,11 @@ private struct StreamingMarkdownChunkedView: View {
     /// token (O(N) × 3 splitters → O(N²) on long answers, the frozen-main
     /// driver). Collapse it to at most once per frame here.
     @State private var fadeCommitTask: Task<Void, Never>?
+    /// The `activeMarkdown` of the last committed content. `advanceFadeWindow`
+    /// reads this instead of re-splitting `oldContent` — with the incremental
+    /// splitter, re-scanning the OLD string would force a full reset+scan every
+    /// frame and nullify the incremental win.
+    @State private var previousActiveMarkdown = ""
 
     private var segments: StreamingMarkdownBlockSegments {
         StreamingMarkdownBlockSplitter.split(content)
@@ -311,6 +316,7 @@ private struct StreamingMarkdownChunkedView: View {
         mountBoundaryCount = split.boundaryCount
         lastBoundaryCount = split.boundaryCount
         lastTouchedAt = [:]
+        previousActiveMarkdown = segments.activeMarkdown
     }
 
     private func advanceFadeWindow(from oldContent: String, to newContent: String) {
@@ -322,8 +328,10 @@ private struct StreamingMarkdownChunkedView: View {
         defer { HeavyOperationTracker.end() }
 
         let now = Date().timeIntervalSinceReferenceDate
-        let oldActive = StreamingMarkdownBlockSplitter.split(oldContent).activeMarkdown
         let newActive = StreamingMarkdownBlockSplitter.split(newContent).activeMarkdown
+        let oldActive = previousActiveMarkdown.isEmpty
+            ? StreamingMarkdownBlockSplitter.split(oldContent).activeMarkdown
+            : previousActiveMarkdown
         let split = StreamingTextFadeTailSplitter.split(newActive, firstFadeOrdinal: firstFadeOrdinal)
 
         if !newActive.hasPrefix(oldActive) {
@@ -333,6 +341,7 @@ private struct StreamingMarkdownChunkedView: View {
             lastTouchedAt = [:]
             firstFadeOrdinal = split.boundaryCount
             lastBoundaryCount = split.boundaryCount
+            previousActiveMarkdown = newActive
             chain.reset()
             fadesActive = true
             return
@@ -346,6 +355,7 @@ private struct StreamingMarkdownChunkedView: View {
             lastTouchedAt[block.ordinal] = now
         }
         lastBoundaryCount = split.boundaryCount
+        previousActiveMarkdown = newActive
 
         firstFadeOrdinal = StreamingTextFadeWindow.advanceStart(
             current: min(firstFadeOrdinal, split.boundaryCount),
