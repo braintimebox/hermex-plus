@@ -329,6 +329,11 @@ struct ChatView: View {
     @State private var gitAlert: GitChatAlert?
     @State private var composerHeight: CGFloat = 52
     @State private var composerIsFocused = false
+    /// Full-screen reading mode: the composer is HIDDEN by default; a round
+    /// compose FAB at the bottom-trailing reveals it on demand (tap → composer
+    /// slides up + keyboard). Hidden again on tap-outside, scroll, or after
+    /// sending — the chat returns to reading the response full-screen.
+    @State private var composerVisible = false
     @State private var didCompleteInitialAppearance = false
     @State private var isInitialComposerFocusContentReady = false
     @State private var didApplyInitialComposerFocusPolicy = false
@@ -385,6 +390,44 @@ struct ChatView: View {
         return (try? modelContext.fetchCount(fetch)) ?? 0
     }
 
+    /// Round compose button shown while the composer is hidden (reading mode).
+    /// Tap → composer slides up and takes focus (keyboard on demand only).
+    private var composeFAB: some View {
+        Button {
+            showComposer()
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(Color.accentColor))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+        }
+        .accessibilityLabel(String(localized: "Write a message"))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 16)
+        .padding(.bottom, 20)
+    }
+
+    private func showComposer() {
+        guard viewModel.errorMessage == nil else { return }
+        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+            composerVisible = true
+        }
+        requestComposerFocusIfPossible()
+    }
+
+    private func hideComposer() {
+        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+            composerVisible = false
+        }
+        composerIsFocused = false
+    }
+
+    /// Composer visibility + keyboard follow the same rule: the input bar is
+    /// revealed ONLY by an explicit tap (FAB or the composer field itself while
+    /// visible). No auto-focus on chat open — the keyboard must never eat the
+    /// screen while the user is simply reading.
     private var messageComposer: some View {
         MessageComposerView(
             draftMessage: $draftMessage,
@@ -546,11 +589,6 @@ struct ChatView: View {
         // The composer flips wholesale with the transcript under the RTL
         // toggle (#259): input, placeholder, and chrome mirror together.
         .environment(\.layoutDirection, chatLayoutDirection)
-        .background(
-            NavigationAppearanceCompletionObserver(action: handleInitialAppearanceCompletion)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        )
     }
 
     private func transcriptMediaPreviewView(for item: TranscriptMediaPreviewItem) -> some View {
@@ -590,11 +628,24 @@ struct ChatView: View {
             }
             .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: viewModel.showsListenPlaybackBar)
 
-            BottomComposerMaterialFade(composerHeight: composerHeight)
+            if composerVisible {
+                BottomComposerMaterialFade(composerHeight: composerHeight)
 
-            composerAccessoryStack
+                composerAccessoryStack
 
-            messageComposer
+                messageComposer
+                    .overlay(alignment: .topTrailing) {
+                        // Explicit collapse affordance: ⌄ folds the composer
+                        // back to the FAB (and dismisses the keyboard) without
+                        // reaching for the outside tap.
+                        ChatComposerCollapseButton { hideComposer() }
+                            .padding(.top, 6)
+                            .padding(.trailing, 10)
+                    }
+            } else {
+                composeFAB
+            }
+            .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
 
             if let approvalPrompt = viewModel.approvalPrompt {
                 ApprovalRequestOverlay(
@@ -627,7 +678,7 @@ struct ChatView: View {
                     prompt: clarificationPrompt,
                     isResponding: viewModel.isRespondingToClarification,
                     errorMessage: viewModel.clarificationErrorMessage,
-                    bottomPadding: composerHeight + 16,
+                    bottomPadding: composerVisible ? composerHeight + 16 : 24,
                     onSubmit: { response in
                         Task {
                             _ = await viewModel.respondToClarification(response)
@@ -644,6 +695,15 @@ struct ChatView: View {
             .overlay(alignment: .top) {
             GitActionToastOverlay(state: gitToastState)
         }
+        // The appearance-completion observer lives at the whole-chat level (not
+        // inside the composer): with reading mode the composer is hidden, so the
+        // observer must fire regardless of composer visibility — it drives the
+        // initial message load.
+        .background(
+            NavigationAppearanceCompletionObserver(action: handleInitialAppearanceCompletion)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        )
         .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("chat-detail:\(viewModel.displayTitle)")
@@ -1555,11 +1615,20 @@ struct ChatView: View {
     }
 
     private var transcriptBottomInsetHeight: CGFloat {
-        max(96, composerHeight + 44 + composerAccessorySpacerHeight)
+        // Reading mode (composer hidden): the transcript runs to the very bottom
+        // of the screen — 0 inset. Only when the composer is visible does the
+        // content lift above it.
+        composerVisible
+            ? max(96, composerHeight + 44 + composerAccessorySpacerHeight)
+            : 0
     }
 
     private var scrollToBottomButtonBottomPadding: CGFloat {
-        composerHeight + 12 + composerAccessorySpacerHeight
+        // With the composer hidden the ↓ button must clear the compose FAB
+        // (48pt + 20pt bottom padding), so it sits just above it.
+        composerVisible
+            ? composerHeight + 12 + composerAccessorySpacerHeight
+            : 68
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {
@@ -1794,7 +1863,6 @@ struct ChatView: View {
 
     private func sendDraftMessage() async {
         let submittedDraft = draftMessage
-        let shouldRestoreFocusAfterSend = composerIsFocused
 
         if submittedDraft.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/") {
             let parsedCommand = SlashCommandExecutor.parse(submittedDraft)?.command
@@ -1824,11 +1892,9 @@ struct ChatView: View {
 
         if didStart {
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
-            if shouldRestoreFocusAfterSend {
-                requestComposerFocusIfPossible()
-            } else {
-                composerIsFocused = false
-            }
+            // Reading-first: after a successful send the composer collapses back
+            // to the FAB and the response streams on the full screen.
+            hideComposer()
         }
 
         if let lastError = viewModel.lastError {
@@ -1847,6 +1913,8 @@ struct ChatView: View {
 
         if didSend {
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
+            // Reading-first: voice note sent — collapse back to the FAB.
+            hideComposer()
         }
 
         if let lastError = viewModel.lastError {
@@ -2457,7 +2525,9 @@ struct ChatView: View {
     }
 
     private func dismissKeyboard() {
-        composerIsFocused = false
+        // Reading-first: dismissing the keyboard also collapses the composer
+        // back to the compose FAB — the chat returns to full-screen reading.
+        hideComposer()
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil,
@@ -2478,17 +2548,14 @@ struct ChatView: View {
     }
 
     private func applyInitialComposerFocusPolicyIfNeeded() {
+        // Reading-first mode: NO auto-focus on chat open. The composer is
+        // hidden and the keyboard must never pop while the user is reading.
+        // Input is revealed only by the FAB tap (see showComposer). The old
+        // policy focused empty chats on open, which made the keyboard eat half
+        // the screen every time a chat was opened (user: "хочу весь экран для
+        // чтения, клавиатура только по требованию").
         guard !didApplyInitialComposerFocusPolicy else { return }
-        guard didCompleteInitialAppearance, isInitialComposerFocusContentReady else { return }
-
-        if !viewModel.messages.isEmpty {
-            didApplyInitialComposerFocusPolicy = true
-            return
-        }
-
-        guard viewModel.errorMessage == nil, canFocusComposer else { return }
         didApplyInitialComposerFocusPolicy = true
-        requestComposerFocusIfPossible()
     }
 
     private func presentPreviewRestoringComposerFocusIfNeeded(_ present: () -> Void) {
@@ -3419,5 +3486,24 @@ fileprivate struct ChatSearchSheet: View {
                 }
             }
         }
+    }
+}
+
+/// Small ⌄ pill that folds the reading-first composer back to the compose FAB.
+/// Material background so it reads as an affordance over the composer chrome.
+private struct ChatComposerCollapseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(.thinMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Collapse composer"))
+        .accessibilityHint(String(localized: "Return to full-screen reading"))
     }
 }

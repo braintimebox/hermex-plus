@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.4 — 2026-08-26
+
+### Added
+- **Reading-first input mode (user request: "хочу весь экран для чтения, ввод только по требованию").** The composer is now HIDDEN by default and the transcript runs to the very bottom of the screen — the full screen is for reading. A round compose FAB (bottom-trailing) reveals the input on demand: tap → composer slides up + keyboard. The composer collapses back to the FAB on: tap outside, ⌄ collapse button, or a successful send (text or voice note) — the response then streams on the full screen. The ⌄ button on the composer gives an explicit "minimize" affordance (material pill, top-trailing).
+- **No auto-focus on chat open.** The keyboard no longer pops by itself (old policy focused empty chats on open, eating half the screen every time). Keyboard appears ONLY after the FAB tap — explicit demand.
+
+### Fixed
+- **Initial message load no longer depends on composer visibility.** The `NavigationAppearanceCompletionObserver` (drives the first load) was attached inside the composer; with the composer hidden by default the chat would never load. Moved to the whole-chat level.
+- Composer-driven insets now reflect reading mode: bottom inset = 0 when hidden (full-screen transcript), ↓ button lifted above the FAB (68pt), clarification overlay bottom padding adapted.
+
 ## 3.1.3 — 2026-08-26
 
 ### Fixed
