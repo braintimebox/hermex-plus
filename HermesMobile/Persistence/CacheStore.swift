@@ -396,14 +396,14 @@ private extension ChatMessage {
             timestamp: cachedMessage.timestamp,
             messageId: cachedMessage.messageId,
             name: cachedMessage.name,
-            serverID: cachedMessage.serverID,
             toolCallId: cachedMessage.toolCallId,
             toolUseId: cachedMessage.toolUseId,
             toolCalls: toolCalls,
             contentParts: contentParts,
             reasoning: cachedMessage.reasoning,
             attachments: attachments,
-            turnTps: cachedMessage.turnTps
+            turnTps: cachedMessage.turnTps,
+            serverID: cachedMessage.serverID
         )
     }
 }

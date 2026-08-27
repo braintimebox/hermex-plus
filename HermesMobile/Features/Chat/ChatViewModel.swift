@@ -2041,23 +2041,24 @@ final class ChatViewModel {
 
         if let assistantIndex = assistantSearchRange.reversed().first(where: { mergedMessages[$0].role == "assistant" }) {
             let loadedAssistant = mergedMessages[assistantIndex]
+            let reconciledContent = reconciledActiveStreamContent(
+                loadedContent: loadedAssistant.content,
+                snapshotContent: snapshotAssistant.content
+            )
             mergedMessages[assistantIndex] = ChatMessage(
                 role: loadedAssistant.role,
-                content: reconciledActiveStreamContent(
-                    loadedContent: loadedAssistant.content,
-                    snapshotContent: snapshotAssistant.content
-                ),
+                content: reconciledContent,
                 timestamp: loadedAssistant.timestamp ?? snapshotAssistant.timestamp,
                 messageId: loadedAssistant.messageId ?? snapshotAssistant.messageId,
                 name: loadedAssistant.name ?? snapshotAssistant.name,
-                serverID: loadedAssistant.serverID ?? snapshotAssistant.serverID,
                 toolCallId: loadedAssistant.toolCallId ?? snapshotAssistant.toolCallId,
                 toolUseId: loadedAssistant.toolUseId ?? snapshotAssistant.toolUseId,
                 toolCalls: loadedAssistant.toolCalls ?? snapshotAssistant.toolCalls,
                 contentParts: loadedAssistant.contentParts ?? snapshotAssistant.contentParts,
                 reasoning: loadedAssistant.reasoning ?? snapshotAssistant.reasoning,
                 attachments: loadedAssistant.attachments ?? snapshotAssistant.attachments,
-                turnTps: loadedAssistant.turnTps ?? snapshotAssistant.turnTps
+                turnTps: loadedAssistant.turnTps ?? snapshotAssistant.turnTps,
+                serverID: loadedAssistant.serverID ?? snapshotAssistant.serverID
             )
             return ActiveStreamMessageMerge(
                 messages: mergedMessages,
@@ -3665,14 +3666,14 @@ final class ChatViewModel {
             timestamp: existing.timestamp,
             messageId: existing.messageId,
             name: existing.name,
-            serverID: existing.serverID,
             toolCallId: existing.toolCallId,
             toolUseId: existing.toolUseId,
             toolCalls: existing.toolCalls,
             contentParts: existing.contentParts,
             reasoning: existing.reasoning,
             attachments: existing.attachments,
-            turnTps: existing.turnTps
+            turnTps: existing.turnTps,
+            serverID: existing.serverID
         )
         scheduleStreamingScrollTrigger()
     }
@@ -4386,14 +4387,14 @@ final class ChatViewModel {
                 timestamp: existing.timestamp,
                 messageId: existing.messageId,
                 name: existing.name,
-                serverID: existing.serverID,
                 toolCallId: existing.toolCallId,
                 toolUseId: existing.toolUseId,
                 toolCalls: existing.toolCalls,
                 contentParts: existing.contentParts,
                 reasoning: existing.reasoning,
                 attachments: existing.attachments,
-                turnTps: existing.turnTps
+                turnTps: existing.turnTps,
+                serverID: existing.serverID
             )
             scheduleStreamingScrollTrigger()
             return true
@@ -4821,14 +4822,14 @@ final class ChatViewModel {
                     timestamp: existing.timestamp,
                     messageId: messageID,
                     name: existing.name,
-                    serverID: existing.serverID,
                     toolCallId: existing.toolCallId,
                     toolUseId: existing.toolUseId,
                     toolCalls: existing.toolCalls,
                     contentParts: existing.contentParts,
                     reasoning: existing.reasoning,
                     attachments: existing.attachments,
-                    turnTps: existing.turnTps
+                    turnTps: existing.turnTps,
+                    serverID: existing.serverID
                 )
             }
             return true
@@ -5572,14 +5573,14 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
                 timestamp: message.timestamp,
                 messageId: message.messageId,
                 name: message.name,
-                serverID: message.serverID,
                 toolCallId: message.toolCallId,
                 toolUseId: message.toolUseId,
                 toolCalls: message.toolCalls,
                 contentParts: message.contentParts,
                 reasoning: message.reasoning,
                 attachments: message.attachments,
-                turnTps: finalTokensPerSecond
+                turnTps: finalTokensPerSecond,
+                serverID: message.serverID
             )
         }
         return hasCompletedTranscript

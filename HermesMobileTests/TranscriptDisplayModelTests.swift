@@ -609,14 +609,14 @@ final class StableIdentityInvariantTests: XCTestCase {
             timestamp: original.timestamp,
             messageId: original.messageId,
             name: original.name,
-            serverID: original.serverID,
             toolCallId: original.toolCallId,
             toolUseId: original.toolUseId,
             toolCalls: original.toolCalls,
             contentParts: original.contentParts,
             reasoning: original.reasoning,
             attachments: original.attachments,
-            turnTps: original.turnTps
+            turnTps: original.turnTps,
+            serverID: original.serverID
         )
         XCTAssertEqual(rebuilt.serverID, 132, "F1: serverID must survive reconstruction")
     }
