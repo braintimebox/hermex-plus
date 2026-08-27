@@ -402,9 +402,9 @@ struct ChatView: View {
             showComposer()
         } label: {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
+                .frame(width: 48, height: 48)
                 .adaptiveGlass(
                     .regular,
                     isInteractive: true,
@@ -420,7 +420,9 @@ struct ChatView: View {
                 opacity: colorScheme == .dark ? 0.32 : 0.16,
                 radius: 8,
                 y: 4,
-                pressedOpacity: colorScheme == .dark ? 0.18 : 0.08
+                pressedOpacity: colorScheme == .dark ? 0.18 : 0.08,
+                pressedRadius: 3,
+                pressedY: 2
             )
         ))
         .accessibilityLabel(String(localized: "Write a message"))
@@ -1639,13 +1641,13 @@ struct ChatView: View {
     }
 
     private var scrollToBottomButtonBottomPadding: CGFloat {
-        // Friend-row with the compose FAB (44pt + 8pt gap + 20pt bottom): ↓
+        // Friend-row with the compose FAB (48pt + 8pt gap + 20pt bottom): ↓
         // sits directly above the FAB in one bottom-right cluster. When the
         // composer is visible the FAB is hidden and the button clears the
         // composer as before.
         composerVisible
             ? composerHeight + 12 + composerAccessorySpacerHeight
-            : 72
+            : 76
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {
