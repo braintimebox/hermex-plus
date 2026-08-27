@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.9 — 2026-08-26
+
+### Changed
+- **The two bottom-right buttons are now FRIENDS (Hermex style).** The compose FAB and the ↓ button form one glass cluster: FAB (44pt, `adaptiveGlass` — the SAME Hermex glass design as ↓, no more "сине-серый градиентный кружок") at the bottom, ↓ directly above it with an 8pt gap. Previously the FAB used a grated blue gradient (3.1.7/3.1.8) and the ↓ was moved to the top-trailing (3.1.7/3.1.8) — both readings were wrong; user: "эти две кнопки подружить и сделать нормальное оформление в стиле Hermex". The ↓ is back bottom-right, FAB is glass.
+
 ## 3.1.8 — 2026-08-26
 
 ### Fixed

@@ -265,6 +265,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @AppStorage(StreamingSendBehavior.storageKey) private var streamingSendBehaviorRawValue = StreamingSendBehavior.steer.rawValue
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
@@ -392,37 +393,36 @@ struct ChatView: View {
 
     /// Round compose button shown while the composer is hidden (reading mode).
     /// Tap → composer slides up and takes focus (keyboard on demand only).
-    /// Style: vivid blue gradient + filled white icon + strong soft shadow —
-    /// the canonical polished FAB, NOT a muted translucent circle (user: "тот
-    /// кружочек сине-серый абсолютно не адекватно выглядит, в других
-    /// приложениях я видел лучше реализацию").
+    /// Style: the SAME Hermex glass circle as the ↓ button (adaptiveGlass) —
+    /// one design language, both buttons are "friends" in the bottom-right
+    /// column (user: "эти две кнопки подружить и сделать нормальное
+    /// оформление в стиле Hermex").
     private var composeFAB: some View {
         Button {
             showComposer()
         } label: {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 56, height: 56)
-                .background {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.20, green: 0.55, blue: 1.00),
-                                    Color(red: 0.10, green: 0.40, blue: 0.95),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .shadow(
-                            color: Color(red: 0.10, green: 0.40, blue: 0.95).opacity(0.45),
-                            radius: 10,
-                            y: 5
-                        )
-                }
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .adaptiveGlass(
+                    .regular,
+                    isInteractive: true,
+                    fallbackMaterial: .regularMaterial,
+                    in: Circle()
+                )
+                .chatMinimumHitTarget(in: Circle())
         }
+        .buttonStyle(.chatTactile(
+            .icon,
+            shadow: ChatTactileButtonStyle.Shadow(
+                color: .black,
+                opacity: colorScheme == .dark ? 0.32 : 0.16,
+                radius: 8,
+                y: 4,
+                pressedOpacity: colorScheme == .dark ? 0.18 : 0.08
+            )
+        ))
         .accessibilityLabel(String(localized: "Write a message"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .padding(.trailing, 16)
@@ -1400,6 +1400,7 @@ struct ChatView: View {
             transcriptMessageSpacing: transcriptMessageSpacing,
             transcriptBlockSpacing: transcriptBlockSpacing,
             transcriptBottomInsetHeight: transcriptBottomInsetHeight,
+            scrollToBottomButtonBottomPadding: scrollToBottomButtonBottomPadding,
             localAttachmentPreviews: viewModel.localAttachmentPreviews,
             listeningMessageID: viewModel.listeningMessageID,
             isViewingCachedData: viewModel.isViewingCachedData,
@@ -1635,6 +1636,16 @@ struct ChatView: View {
         composerVisible
             ? max(96, composerHeight + 44 + composerAccessorySpacerHeight)
             : 0
+    }
+
+    private var scrollToBottomButtonBottomPadding: CGFloat {
+        // Friend-row with the compose FAB (44pt + 8pt gap + 20pt bottom): ↓
+        // sits directly above the FAB in one bottom-right cluster. When the
+        // composer is visible the FAB is hidden and the button clears the
+        // composer as before.
+        composerVisible
+            ? composerHeight + 12 + composerAccessorySpacerHeight
+            : 72
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {

@@ -48,6 +48,7 @@ struct ChatTranscriptView: View {
     let transcriptMessageSpacing: CGFloat
     let transcriptBlockSpacing: CGFloat
     let transcriptBottomInsetHeight: CGFloat
+    let scrollToBottomButtonBottomPadding: CGFloat
     let localAttachmentPreviews: [String: [String: Data]]
     let listeningMessageID: String?
     let isViewingCachedData: Bool
@@ -182,24 +183,16 @@ struct ChatTranscriptView: View {
                         HStack {
                             Spacer()
                             ChatScrollToBottomButton(
-                                bottomPadding: 0,
+                                bottomPadding: scrollToBottomButtonBottomPadding,
                                 onTap: {
                                     onScrollToBottom(proxy)
                                 }
                             )
                         }
-                        // Top-trailing placement (user design): the whole-frame
-                        // alignment overrides the ZStack's `.bottom` — without
-                        // it the button stays pinned to the bottom (the
-                        // "не вижу разницы" report: 3.1.7 only changed padding,
-                        // ZStack alignment kept it below the FAB).
-                        .frame(
-                            maxWidth: .infinity,
-                            maxHeight: .infinity,
-                            alignment: .topTrailing
-                        )
+                        // Bottom-trailing column WITH the compose FAB (friend
+                        // row): ↓ lifts above the FAB (44pt + 8pt gap) so the
+                        // two Hermex glass circles form one cluster.
                         .padding(.trailing, 12)
-                        .padding(.top, 8)
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
                     }
                 }
