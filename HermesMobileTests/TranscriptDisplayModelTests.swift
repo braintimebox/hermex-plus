@@ -661,7 +661,8 @@ final class StableIdentityInvariantTests: XCTestCase {
         let b = msg(id: 132, messageId: "mb", content: "same")
         let rows = ChatViewModel.transcriptMessages(from: [a, b])
         XCTAssertEqual(rows.count, 1, "F1: byte-identical duplicate collapses to first")
-        XCTAssertEqual(rows[0].id, "srv-132", "F1: unique serverID stays srv-N")
+        XCTAssertTrue(rows[0].id.hasPrefix("srv-132-h"),
+                      "F1: surviving row keeps a stable -h discriminator even when its twin collapses")
     }
 
     // MARK: - offset / pagination identity stability
