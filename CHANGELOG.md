@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.7 — 2026-08-26
+
+### Fixed
+- **Tapping the composer no longer collapses it — paste works.** The tap-outside chain (`dismissKeyboard → hideComposer`, introduced in 3.1.4) fired on ANY event that merely resigned focus, including taps landing around/near the composer card and zero-window focus churn while the agent was thinking — the composer "тупо сворачивается" from one tap, and a paste attempt died mid-gesture. Close is now TWO-STEP, like normal chat apps: first outside tap (keyboard up) → dismiss keyboard, composer stays; second outside tap (or ⌄ / send) → collapse to the FAB. `dismissKeyboard` never collapses.
+- **↓ button moved to the TOP-trailing (user design).** It no longer stacks under the compose FAB at the bottom-trailing (the "наслоение" cluster); the bottom-right belongs to the FAB alone, and the jump-to-latest affordance floats at the top-right of the transcript.
+
+### Changed
+- **Compose FAB redesigned:** vivid blue gradient circle (56pt), white filled icon, strong soft blue shadow — the canonical polished FAB instead of the muted accent circle ("сине-серый кружочек абсолютно не адекватно выглядит").
+
 ## 3.1.6 — 2026-08-26
 
 ### Fixed

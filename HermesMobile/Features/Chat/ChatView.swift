@@ -392,16 +392,36 @@ struct ChatView: View {
 
     /// Round compose button shown while the composer is hidden (reading mode).
     /// Tap → composer slides up and takes focus (keyboard on demand only).
+    /// Style: vivid blue gradient + filled white icon + strong soft shadow —
+    /// the canonical polished FAB, NOT a muted translucent circle (user: "тот
+    /// кружочек сине-серый абсолютно не адекватно выглядит, в других
+    /// приложениях я видел лучше реализацию").
     private var composeFAB: some View {
         Button {
             showComposer()
         } label: {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(Color.accentColor))
-                .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+                .frame(width: 56, height: 56)
+                .background {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.20, green: 0.55, blue: 1.00),
+                                    Color(red: 0.10, green: 0.40, blue: 0.95),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(
+                            color: Color(red: 0.10, green: 0.40, blue: 0.95).opacity(0.45),
+                            radius: 10,
+                            y: 5
+                        )
+                }
         }
         .accessibilityLabel(String(localized: "Write a message"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -1380,7 +1400,6 @@ struct ChatView: View {
             transcriptMessageSpacing: transcriptMessageSpacing,
             transcriptBlockSpacing: transcriptBlockSpacing,
             transcriptBottomInsetHeight: transcriptBottomInsetHeight,
-            scrollToBottomButtonBottomPadding: scrollToBottomButtonBottomPadding,
             localAttachmentPreviews: viewModel.localAttachmentPreviews,
             listeningMessageID: viewModel.listeningMessageID,
             isViewingCachedData: viewModel.isViewingCachedData,
@@ -1413,7 +1432,7 @@ struct ChatView: View {
                 await loadOlderMessages()
             },
             onUpdateScrollMetrics: updateScrollMetrics,
-            onDismissKeyboard: dismissKeyboard,
+            onDismissKeyboard: handleTranscriptTap,
             onScrollToBottom: scrollToBottom,
             onScrollToLatestTranscriptMessage: { proxy in
                 scrollToLatestTranscriptMessage(proxy)
@@ -1616,14 +1635,6 @@ struct ChatView: View {
         composerVisible
             ? max(96, composerHeight + 44 + composerAccessorySpacerHeight)
             : 0
-    }
-
-    private var scrollToBottomButtonBottomPadding: CGFloat {
-        // With the composer hidden the ↓ button must clear the compose FAB
-        // (48pt + 20pt bottom padding), so it sits just above it.
-        composerVisible
-            ? composerHeight + 12 + composerAccessorySpacerHeight
-            : 68
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {
@@ -2520,15 +2531,32 @@ struct ChatView: View {
     }
 
     private func dismissKeyboard() {
-        // Reading-first: dismissing the keyboard also collapses the composer
-        // back to the compose FAB — the chat returns to full-screen reading.
-        hideComposer()
+        // Keyboard-only dismissal (two-step close): the composer SURVIVES a
+        // keyboard dismiss — it must never collapse from a tap that merely
+        // resigned focus (the "нажал в любом месте композера — он тупо
+        // сворачивается" bug; a failed paste was the same path killing the
+        // field mid-gesture). Collapsing happens only via ⌄ / send / a second
+        // outside tap (handleTranscriptTap).
+        composerIsFocused = false
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil,
             from: nil,
             for: nil
         )
+    }
+
+    /// Transcript tap gesture (outside the composer): two-step close.
+    /// First tap with the keyboard up → dismiss the keyboard, keep the
+    /// composer. Next tap (or tap while the keyboard is already down) →
+    /// collapse back to the FAB. Matches chat-app tap-to-dismiss semantics.
+    private func handleTranscriptTap() {
+        guard composerVisible else { return }
+        if composerIsFocused {
+            dismissKeyboard()
+        } else {
+            hideComposer()
+        }
     }
 
     private var canFocusComposer: Bool {

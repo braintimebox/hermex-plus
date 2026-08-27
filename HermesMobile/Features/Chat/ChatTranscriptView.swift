@@ -48,7 +48,6 @@ struct ChatTranscriptView: View {
     let transcriptMessageSpacing: CGFloat
     let transcriptBlockSpacing: CGFloat
     let transcriptBottomInsetHeight: CGFloat
-    let scrollToBottomButtonBottomPadding: CGFloat
     let localAttachmentPreviews: [String: [String: Data]]
     let listeningMessageID: String?
     let isViewingCachedData: Bool
@@ -183,13 +182,18 @@ struct ChatTranscriptView: View {
                         HStack {
                             Spacer()
                             ChatScrollToBottomButton(
-                                bottomPadding: scrollToBottomButtonBottomPadding,
+                                bottomPadding: 0,
                                 onTap: {
                                     onScrollToBottom(proxy)
                                 }
                             )
                         }
+                        // Top-trailing placement (user design): the ↓ button must
+                        // NOT stack under the compose FAB at the bottom-trailing;
+                        // top-right is free of any other chrome and reads as the
+                        // "jump to latest" affordance above the transcript.
                         .padding(.trailing, 12)
+                        .padding(.top, 8)
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
                     }
                 }
