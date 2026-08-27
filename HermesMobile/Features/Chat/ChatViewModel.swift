@@ -2050,6 +2050,7 @@ final class ChatViewModel {
                 timestamp: loadedAssistant.timestamp ?? snapshotAssistant.timestamp,
                 messageId: loadedAssistant.messageId ?? snapshotAssistant.messageId,
                 name: loadedAssistant.name ?? snapshotAssistant.name,
+                serverID: loadedAssistant.serverID ?? snapshotAssistant.serverID,
                 toolCallId: loadedAssistant.toolCallId ?? snapshotAssistant.toolCallId,
                 toolUseId: loadedAssistant.toolUseId ?? snapshotAssistant.toolUseId,
                 toolCalls: loadedAssistant.toolCalls ?? snapshotAssistant.toolCalls,
@@ -3664,6 +3665,7 @@ final class ChatViewModel {
             timestamp: existing.timestamp,
             messageId: existing.messageId,
             name: existing.name,
+            serverID: existing.serverID,
             toolCallId: existing.toolCallId,
             toolUseId: existing.toolUseId,
             toolCalls: existing.toolCalls,
@@ -4384,6 +4386,7 @@ final class ChatViewModel {
                 timestamp: existing.timestamp,
                 messageId: existing.messageId,
                 name: existing.name,
+                serverID: existing.serverID,
                 toolCallId: existing.toolCallId,
                 toolUseId: existing.toolUseId,
                 toolCalls: existing.toolCalls,
@@ -4818,6 +4821,7 @@ final class ChatViewModel {
                     timestamp: existing.timestamp,
                     messageId: messageID,
                     name: existing.name,
+                    serverID: existing.serverID,
                     toolCallId: existing.toolCallId,
                     toolUseId: existing.toolUseId,
                     toolCalls: existing.toolCalls,
@@ -5568,6 +5572,7 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
                 timestamp: message.timestamp,
                 messageId: message.messageId,
                 name: message.name,
+                serverID: message.serverID,
                 toolCallId: message.toolCallId,
                 toolUseId: message.toolUseId,
                 toolCalls: message.toolCalls,
@@ -5832,13 +5837,18 @@ extension ChatViewModel {
     ) -> [TranscriptMessage] {
         let offset = max(0, messageOffset ?? 0)
 
-        // Pass 1: apply the display filters and compute per-row STABLE base
-        // identity + content digest. No position/index in either.
+        // Pass 1: apply the display filters and compute the STABLE base id
+        // (no position/index anywhere). Base is O(1) for rows that carry a
+        // serverID or a client messageId; the SHA-256 fallback is computed
+        // ONLY for rows with neither (rare — fresh unstamped server rows).
+        // Pass 2 computes the content digest ONLY for rows whose base id is
+        // shared with another row (duplicate serverID groups — the only case
+        // that needs a discriminator). This keeps the common path free of
+        // per-row hashing: no O(total content) work per recompute.
         struct Candidate {
             let loadedIndex: Int
             let message: ChatMessage
             let baseID: String
-            let digest: String
         }
         var candidates: [Candidate] = []
         candidates.reserveCapacity(messages.count)
@@ -5851,8 +5861,7 @@ extension ChatViewModel {
             candidates.append(Candidate(
                 loadedIndex: loadedIndex,
                 message: message,
-                baseID: stableBaseIdentity(for: message),
-                digest: stableIdentityDigest(for: message)
+                baseID: stableBaseIdentity(for: message)
             ))
         }
 
@@ -5871,16 +5880,28 @@ extension ChatViewModel {
         transcriptMessages.reserveCapacity(candidates.count)
 
         for candidate in candidates {
-            let digestKey = candidate.baseID + "\u{1}" + candidate.digest
-            let occurrence = digestOccurrence[digestKey, default: 0] + 1
-            digestOccurrence[digestKey] = occurrence
-            guard occurrence == 1 else { continue }  // indistinguishable duplicate
+            let needsDiscriminator = baseCount[candidate.baseID] ?? 0 > 1
+            let digest: String? = needsDiscriminator
+                ? stableIdentityDigest(for: candidate.message)
+                : nil
+
+            let digestKey: String?
+            if let digest {
+                digestKey = candidate.baseID + "\u{1}" + digest
+            } else {
+                digestKey = nil
+            }
+            if let digestKey {
+                let occurrence = digestOccurrence[digestKey, default: 0] + 1
+                digestOccurrence[digestKey] = occurrence
+                guard occurrence == 1 else { continue }  // indistinguishable duplicate
+            }
 
             let id: String
-            if baseCount[candidate.baseID] == 1 {
-                id = candidate.baseID
+            if let digest, needsDiscriminator {
+                id = candidate.baseID + "-h" + digest.prefix(12)
             } else {
-                id = candidate.baseID + "-h" + candidate.digest.prefix(12)
+                id = candidate.baseID
             }
 
             let anchorID = TranscriptTurnClassifier.anchorID(

@@ -576,3 +576,102 @@ final class ResponseSpeedFormatterTests: XCTestCase {
         XCTAssertNil(ResponseSpeedFormatter.compactText(.nan))
     }
 }
+
+/// F1 Stable Identity regression invariants (3.2.0).
+///
+/// Guards the core contract: a `serverID` must SURVIVE every reconstruction,
+/// reach `TranscriptMessage.id`, never be replaced by a positional/digest
+/// fallback when a stable id exists, and duplicate serverIDs must stay unique
+/// with a deterministic, position-independent discriminator.
+final class StableIdentityInvariantTests: XCTestCase {
+
+    private func msg(
+        id: Int? = nil,
+        messageId: String? = "mid-\(UUID().uuidString)",
+        role: String = "assistant",
+        content: String = "hello"
+    ) -> ChatMessage {
+        ChatMessage(role: role, content: content, timestamp: 1, messageId: messageId, serverID: id)
+    }
+
+    // MARK: - serverID survives reconstruction
+
+    /// F1 §4 invariant: reconstruct(old) must preserve old.serverID when non-nil.
+    func testServerIDSurvivesReconstruction() {
+        let original = msg(id: 132)
+        XCTAssertEqual(original.serverID, 132)
+
+        // Simulate a reconstruction path (e.g. updateLocalMessage / appendInterim):
+        // a new ChatMessage built from the SAME logical message keeps serverID.
+        let rebuilt = ChatMessage(
+            role: original.role,
+            content: original.content! + " more",
+            timestamp: original.timestamp,
+            messageId: original.messageId,
+            name: original.name,
+            serverID: original.serverID,
+            toolCallId: original.toolCallId,
+            toolUseId: original.toolUseId,
+            toolCalls: original.toolCalls,
+            contentParts: original.contentParts,
+            reasoning: original.reasoning,
+            attachments: original.attachments,
+            turnTps: original.turnTps
+        )
+        XCTAssertEqual(rebuilt.serverID, 132, "F1: serverID must survive reconstruction")
+    }
+
+    // MARK: - serverID precedence over messageId
+
+    func testServerIDWinsOverMessageIdInTranscriptIdentity() {
+        let m = msg(id: 7, messageId: "stream-uuid")
+        let row = ChatViewModel.transcriptMessages(from: [m]).first
+        XCTAssertEqual(row?.id, "srv-7", "F1: serverID must take precedence")
+    }
+
+    // MARK: - no positional identity
+
+    func testNoPositionalIdentityInTranscriptID() {
+        let m = msg(id: 7)
+        let row = ChatViewModel.transcriptMessages(from: [m], messageOffset: 42).first
+        XCTAssertEqual(row?.id, "srv-7", "F1: id must not include index/offset")
+        XCTAssertFalse(row?.id.contains("transcript:") ?? true, "F1: renderID must not be the identity")
+    }
+
+    // MARK: - duplicate serverID -> unique deterministic discriminator
+
+    func testDuplicateServerIDProducesUniqueStableIdentities() {
+        // id=132 persisted as several rows (one logical turn => N server rows).
+        let a = msg(id: 132, messageId: "ma", content: "alpha")
+        let b = msg(id: 132, messageId: "mb", content: "beta")
+        let rows = ChatViewModel.transcriptMessages(from: [a, b])
+        XCTAssertEqual(rows.count, 2, "F1: duplicate serverID must NOT collapse rows")
+        XCTAssertNotEqual(rows[0].id, rows[1].id, "F1: duplicate serverID must yield unique ids")
+        XCTAssertTrue(rows[0].id.hasPrefix("srv-132-h"), "F1: duplicate needs -h discriminator")
+        XCTAssertTrue(rows[1].id.hasPrefix("srv-132-h"))
+        // Deterministic: rebuilding with the same content yields the same ids.
+        let rowsAgain = ChatViewModel.transcriptMessages(from: [a, b])
+        XCTAssertEqual(rows.map(\.id), rowsAgain.map(\.id), "F1: discriminator must be deterministic")
+    }
+
+    // MARK: - byte-identical duplicates collapse but do not lose the whole group
+
+    func testByteIdenticalDuplicateCollapsesOneRowOnly() {
+        let a = msg(id: 132, messageId: "ma", content: "same")
+        let b = msg(id: 132, messageId: "mb", content: "same")
+        let rows = ChatViewModel.transcriptMessages(from: [a, b])
+        XCTAssertEqual(rows.count, 1, "F1: byte-identical duplicate collapses to first")
+        XCTAssertEqual(rows[0].id, "srv-132", "F1: unique serverID stays srv-N")
+    }
+
+    // MARK: - offset / pagination identity stability
+
+    func testIdentityStableAcrossOffsetShift() {
+        let messages = [msg(id: 1, content: "x"), msg(id: 2, content: "y"), msg(id: 3, content: "z")]
+        let before = ChatViewModel.transcriptMessages(from: messages, messageOffset: 0)
+        let after = ChatViewModel.transcriptMessages(from: messages, messageOffset: 50)
+        XCTAssertEqual(before.map(\.id), after.map(\.id),
+                       "F1: identity must be stable across offset shift / pagination")
+    }
+}
+
