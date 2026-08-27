@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.8 — 2026-08-26
+
+### Fixed
+- **↓ button actually moves to the top-trailing now.** 3.1.7 changed only the padding; the button sat inside `ZStack(alignment: .bottom)`, so it stayed pinned under the FAB — the user's "не вижу разницы" report. The button block now uses a whole-frame `.topTrailing` alignment that overrides the ZStack's bottom pinning. (In reading mode: FAB bottom-right alone, ↓ top-right.)
+
 ## 3.1.7 — 2026-08-26
 
 ### Fixed

@@ -188,10 +188,16 @@ struct ChatTranscriptView: View {
                                 }
                             )
                         }
-                        // Top-trailing placement (user design): the ↓ button must
-                        // NOT stack under the compose FAB at the bottom-trailing;
-                        // top-right is free of any other chrome and reads as the
-                        // "jump to latest" affordance above the transcript.
+                        // Top-trailing placement (user design): the whole-frame
+                        // alignment overrides the ZStack's `.bottom` — without
+                        // it the button stays pinned to the bottom (the
+                        // "не вижу разницы" report: 3.1.7 only changed padding,
+                        // ZStack alignment kept it below the FAB).
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .topTrailing
+                        )
                         .padding(.trailing, 12)
                         .padding(.top, 8)
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
