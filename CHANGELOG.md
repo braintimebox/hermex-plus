@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.10 — 2026-08-26
+
+### Fixed
+- **↓ button can no longer teleport below the content (black screen).** The 1pt `bottomAnchorID` marker lived INSIDE the LazyVStack, so it was not mounted until scrolled into view — `scrollTo(bottomAnchorID)` could land beyond the real content ("кнопка вниз ведёт ниже и виден чёрный экран"). The marker is now OUTSIDE the lazy container (VStack wrapper, 1pt at the content's true end): always mounted, always resolvable — a ↓ tap always lands on real content.
+
 ## 3.1.9 — 2026-08-26
 
 ### Changed
