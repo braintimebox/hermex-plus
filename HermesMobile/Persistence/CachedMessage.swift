@@ -11,6 +11,10 @@ final class CachedMessage {
     var content: String?
     var timestamp: Double?
     var messageId: String?
+    /// Persisted serverID so the cache-first/reconcile path rebuilds the SAME
+    /// TranscriptMessage identity as the network path (stable identity across
+    /// cache reconcile — part of the EXPERIMENT B scheme).
+    var serverID: Int?
     var name: String?
     var toolCallId: String?
     var toolUseId: String?
@@ -59,6 +63,7 @@ final class CachedMessage {
         content = message.content
         timestamp = message.timestamp
         messageId = message.messageId
+        serverID = message.serverID
         name = message.name
         toolCallId = message.toolCallId
         toolUseId = message.toolUseId

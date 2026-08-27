@@ -1440,8 +1440,8 @@ struct ChatView: View {
             onScrollToLatestTranscriptMessage: { proxy in
                 scrollToLatestTranscriptMessage(proxy)
             },
-            onScrollToLatestContent: { proxy, animated in
-                scrollToLatestContent(proxy, animated: animated)
+            onScrollToLatestContent: { proxy, animated, source in
+                scrollToLatestContent(proxy, animated: animated, source: source ?? "latestContent")
             },
             onPreviewAttachment: { attachment, localData in
                 presentPreviewRestoringComposerFocusIfNeeded {
@@ -2431,7 +2431,7 @@ struct ChatView: View {
         // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the button
         // would otherwise appear dead until the scroll settled.
         NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
-        scrollToLatestContent(proxy, animated: false, isUserInitiated: true)
+        scrollToLatestContent(proxy, animated: false, isUserInitiated: true, source: "down")
     }
 
     private func scrollToLatestTranscriptMessage(
@@ -2446,14 +2446,16 @@ struct ChatView: View {
             targetID: latestTranscriptMessageID,
             anchor: .bottom,
             animated: animated,
-            isUserInitiated: isUserInitiated
+            isUserInitiated: isUserInitiated,
+            source: "latestMessage"
         )
     }
 
     private func scrollToLatestContent(
         _ proxy: ScrollViewProxy,
         animated: Bool = true,
-        isUserInitiated: Bool = false
+        isUserInitiated: Bool = false,
+        source: String = "latestContent"
     ) {
         guard !viewModel.messages.isEmpty else { return }
 
@@ -2469,7 +2471,8 @@ struct ChatView: View {
             targetID: latestTranscriptMessageID ?? bottomAnchorID,
             anchor: .bottom,
             animated: animated,
-            isUserInitiated: isUserInitiated
+            isUserInitiated: isUserInitiated,
+            source: source
         )
     }
 
@@ -2478,7 +2481,8 @@ struct ChatView: View {
         targetID: String,
         anchor: UnitPoint,
         animated: Bool,
-        isUserInitiated: Bool
+        isUserInitiated: Bool,
+        source: String = "auto"
     ) {
         // Auto-follow (streaming tokens, new rows) must not override the user's
         // scroll position while they are interacting or within the cooldown.
@@ -2516,6 +2520,23 @@ struct ChatView: View {
             guard !Task.isCancelled, (isUserInitiated || generation == followScrollGeneration) else { return }
             // Re-check at fire time: a gesture may have begun during the delay.
             if !isUserInitiated, isAutoFollowScrollPaused { return }
+
+#if DEBUG
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "scroll command",
+                extras: [
+                    "source": source,
+                    "targetID": targetID,
+                    "anchor": anchor == .bottom ? "bottom" : "top",
+                    "generation": generation,
+                    "scrollOwner": scrollOwner == .app ? "app" : "user",
+                    "isUserInitiated": isUserInitiated,
+                    "animated": animated,
+                ]
+            )
+#endif
 
             // Snap (no animation) while inside the cache-first reconcile window so the
             // taller server transcript replacing the cached one doesn't animate a jump
@@ -3005,7 +3026,7 @@ struct ChatView: View {
     }
 
     private func transcriptMessagesAfter(_ context: MessageActionContext) -> Int {
-        guard let index = transcriptMessages.firstIndex(where: { $0.id == context.messageID }) else {
+        guard let index = transcriptMessages.firstIndex(where: { $0.message.id == context.messageID }) else {
             return 0
         }
 

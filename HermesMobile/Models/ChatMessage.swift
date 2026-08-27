@@ -9,6 +9,14 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     var content: String?
     let timestamp: Double?
     let messageId: String?
+    /// Server-side stable integer row id (minted by the webui backend's
+    /// `_assign_stable_message_ids`, monotonic per session). It is the ONLY
+    /// position-independent identity the server provides — but it is NOT
+    /// unique per display row (one logical turn can be persisted as several
+    /// rows sharing an id), so TranscriptMessage keys off this plus a
+    /// content-based discriminator. Optional because local-only messages
+    /// never carry it; `messageId` is untouched and unchanged.
+    let serverID: Int?
     let name: String?
     let toolCallId: String?
     let toolUseId: String?
@@ -30,12 +38,14 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         contentParts: [JSONValue]? = nil,
         reasoning: String? = nil,
         attachments: [MessageAttachment]? = nil,
-        turnTps: Double? = nil
+        turnTps: Double? = nil,
+        serverID: Int? = nil
     ) {
         self.role = role
         self.content = content
         self.timestamp = timestamp
         self.messageId = messageId
+        self.serverID = serverID
         self.name = name
         self.toolCallId = toolCallId
         self.toolUseId = toolUseId
@@ -51,6 +61,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         case content
         case timestamp
         case messageId
+        case serverID = "id"
         case name
         case toolCallId
         case toolUseId

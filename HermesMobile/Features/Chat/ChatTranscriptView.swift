@@ -70,7 +70,7 @@ struct ChatTranscriptView: View {
     let onDismissKeyboard: () -> Void
     let onScrollToBottom: (ScrollViewProxy) -> Void
     let onScrollToLatestTranscriptMessage: (ScrollViewProxy) -> Void
-    let onScrollToLatestContent: (ScrollViewProxy, Bool) -> Void
+    let onScrollToLatestContent: (ScrollViewProxy, Bool, String?) -> Void
     let onPreviewAttachment: (MessageAttachment, Data?) -> Void
     let onPreviewTranscriptMedia: (TranscriptMediaReference) -> Void
     let onToggleListening: (MessageActionContext) -> Void
@@ -215,12 +215,12 @@ struct ChatTranscriptView: View {
                     if latestTranscriptMessageRole == "user" {
                         onScrollToLatestTranscriptMessage(proxy)
                     } else {
-                        onScrollToLatestContent(proxy, true)
+                        onScrollToLatestContent(proxy, true, "newRow")
                     }
                 }
                 .onChange(of: streamingScrollTrigger) {
                     if scrollOwner == .app {
-                        onScrollToLatestContent(proxy, true)
+                        onScrollToLatestContent(proxy, true, "streamingTrigger")
                     }
                 }
                 .onChange(of: cacheFirstReconcileScrollToken) {
@@ -228,7 +228,7 @@ struct ChatTranscriptView: View {
                     // the lighter cached render, so snap back to the bottom (no
                     // animation) unless the reader owns the viewport.
                     guard scrollOwner == .app else { return }
-                    onScrollToLatestContent(proxy, false)
+                    onScrollToLatestContent(proxy, false, "cacheReconcile")
                 }
                 .onChange(of: clarificationPrompt?.id) {
                     guard clarificationPrompt != nil, scrollOwner == .app else { return }

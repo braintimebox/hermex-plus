@@ -1,6 +1,21 @@
 # Changelog
 
-## 3.1.10 — 2026-08-26
+## 3.2.0 — 2026-08-27 (EXPERIMENT B — stable identity; НЕ production-релиз)
+
+### Changed (identity only — A/B test B arm)
+- **`ChatMessage.serverID: Int?`** — декодируется серверное поле `"id"` (монотонный стабильный id из `_assign_stable_message_ids`). `messageId` не изменён. `CachedMessage` персистентно хранит `serverID` (cache-reconcile сохраняет identity).
+- **`TranscriptMessage.id`** теперь **хранимый** и строится в `transcriptMessages(from:)` с приоритетом:
+  1. `srv-<serverID>` — стабильный серверный id;
+  2. `mid-<messageId>` — локальный стабильный id (stream-UUID / local-UUID);
+  3. `fx-<SHA256(role|timestamp|content|reasoning|toolCallId|toolUseId)>` — детерминированный фолбэк для рядов без обоих.
+  Дубли одного serverID: суффикс `-h<digest[:12]>`; байт-идентичные дубли схлопываются к первому вхождению.
+- **`renderID`** остаётся только технической мишенью (`scrollTo`, `afterRenderID`) — не используется как SwiftUI `.id()`.
+- **DEBUG-инструментация** (в release выключена): `identity churn` (oldID→newID, serverID, reason, source), `identity churn count`, `scroll command` (source, targetID, anchor, generation, scrollOwner, isUserInitiated, animated).
+- **Проверено на реальных данных** (`webui/sessions`): 379 сообщений → 211 rows, коллизий ID 0; pagination-инвариант: 180 общих рядов, 0 несовпадений; reload-инвариант: идентично; `id=132 ×9` → 5 уникальных.
+
+### NOT changed (A/B isolation)
+ChatScrollOwner / resolveOwner / auto-follow / pagination logic / scroll commands / streaming / Markdown / MainActor / Down button.
+Эксперимент НЕ завершён: verdict только после A/B-замеров на устройстве (A = 3.1.10, B = 3.2.0).
 
 ### Fixed
 - **↓ button can no longer teleport below the content (black screen).** The 1pt `bottomAnchorID` marker lived INSIDE the LazyVStack, so it was not mounted until scrolled into view — `scrollTo(bottomAnchorID)` could land beyond the real content ("кнопка вниз ведёт ниже и виден чёрный экран"). The marker is now OUTSIDE the lazy container (VStack wrapper, 1pt at the content's true end): always mounted, always resolvable — a ↓ tap always lands on real content.

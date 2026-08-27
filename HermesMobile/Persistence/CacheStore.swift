@@ -395,6 +395,7 @@ private extension ChatMessage {
             content: cachedMessage.content,
             timestamp: cachedMessage.timestamp,
             messageId: cachedMessage.messageId,
+            serverID: cachedMessage.serverID,
             name: cachedMessage.name,
             toolCallId: cachedMessage.toolCallId,
             toolUseId: cachedMessage.toolUseId,

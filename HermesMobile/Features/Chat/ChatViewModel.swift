@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CryptoKit
 import MediaPlayer
 import Observation
 import SwiftData
@@ -217,6 +218,62 @@ final class ChatViewModel {
     /// `messagesOffset` changes. Views read this single cached value instead of
     /// re-running the full classification pass on every body evaluation.
     private(set) var displayedTranscriptMessages: [TranscriptMessage] = []
+#if DEBUG
+    /// EXPERIMENT B instrumentation: previous rendered identity snapshot +
+    /// mutation source tagging. Release builds compile this out (zero delta).
+    @ObservationIgnored private var debugPreviousTranscriptIDs: [String] = []
+    @ObservationIgnored private var debugIdentityChurnSource: String = "unknown"
+
+    /// Tags the NEXT transcript recompute with the mutation source. Call right
+    /// before `messages` mutates so `recordIdentityChurnIfNeeded` can report
+    /// WHERE the churn came from (stream / reload / cache / pagination / send).
+    private func debugTagIdentitySource(_ source: String) {
+        debugIdentityChurnSource = source
+        debugPreviousTranscriptIDs = displayedTranscriptMessages.map(\.id)
+    }
+
+    /// EXPERIMENT B: per-row identity churn log — old ID → new ID with cause.
+    /// Emits one `identity churn` event per changed row (plus a count event).
+    /// Only compares positions that existed in BOTH snapshots (insertions at
+    /// the end are structural growth, not churn).
+    private func recordIdentityChurnIfNeeded(reason: String) {
+        let ids = displayedTranscriptMessages.map(\.id)
+        let old = debugPreviousTranscriptIDs
+        let sharedCount = min(old.count, ids.count)
+        var changedRows = 0
+        for index in 0..<sharedCount where old[index] != ids[index] {
+            changedRows += 1
+            let message = displayedTranscriptMessages[index].message
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "identity churn",
+                extras: [
+                    "oldID": old[index],
+                    "newID": ids[index],
+                    "serverID": message.serverID.map { String($0) } ?? "nil",
+                    "reason": reason,
+                    "source": debugIdentityChurnSource,
+                ]
+            )
+        }
+        if changedRows > 0 || old.count != ids.count {
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "identity churn count",
+                extras: [
+                    "changedRows": changedRows,
+                    "oldCount": old.count,
+                    "newCount": ids.count,
+                    "reason": reason,
+                    "source": debugIdentityChurnSource,
+                ]
+            )
+        }
+        debugPreviousTranscriptIDs = ids
+    }
+#endif
     private(set) var isLoading = false
     private(set) var isLoadingOlderMessages = false
     private(set) var isStartingChat = false
@@ -306,7 +363,8 @@ final class ChatViewModel {
                 loadedIndex: slot.loadedIndex,
                 renderID: slot.renderID,
                 anchorID: slot.anchorID,
-                message: last
+                message: last,
+                id: slot.id
             )
         } else if count == previousMessageCount {
             // Same length but not a clean trailing-append (rare single-slot edit or
@@ -327,6 +385,12 @@ final class ChatViewModel {
             recomputeCompressionReferenceCard()
         }
 
+#if DEBUG
+        let churnReason = isTrailingContentChange
+            ? "trailing"
+            : (count == previousMessageCount ? "fullRecompute" : "structuralRecompute")
+        recordIdentityChurnIfNeeded(reason: churnReason)
+#endif
         previousMessageCount = count
         previousLastMessageID = lastID
         previousLastContent = lastContent
@@ -1595,6 +1659,9 @@ final class ChatViewModel {
         sessionID: String,
         modelContext: ModelContext
     ) -> [ChatMessage] {
+#if DEBUG
+        debugTagIdentitySource("cache")
+#endif
         let cachedMessages: [ChatMessage]
         do {
             cachedMessages = try CacheStore.cachedMessages(
@@ -1652,6 +1719,9 @@ final class ChatViewModel {
         }
 
         resetPendingStreamingContentBuffers()
+#if DEBUG
+        debugTagIdentitySource("pagination")
+#endif
         let messageBefore = messagesOffset
         isLoadingOlderMessages = true
         errorMessage = nil
@@ -1807,6 +1877,9 @@ final class ChatViewModel {
         previousMessages: [ChatMessage],
         previousMessagesOffset: Int
     ) {
+#if DEBUG
+        debugTagIdentitySource("reload")
+#endif
         let reloadedMessagesOffset = Self.resolvedMessagesOffset(
             from: session,
             loadedMessageCount: reloadedMessages.count
@@ -4681,6 +4754,9 @@ final class ChatViewModel {
 
     @discardableResult
     private func flushAssistantTokens(maxWordUnits: Int? = nil) -> Bool {
+#if DEBUG
+        debugTagIdentitySource("stream")
+#endif
         guard !pendingAssistantTokenText.isEmpty else { return false }
 
         // Chunks were deduplicated at append time, so flushing is pure concatenation.
@@ -5616,17 +5692,19 @@ struct TranscriptMessage: Identifiable, Equatable {
     let renderID: String
     let anchorID: String
     let message: ChatMessage
-
-    /// ForEach identity: unique AND stable. anchorID alone is NOT unique when two
-    /// messages share a messageId (a real case after a stream reconnect /
-    /// duplicate) — that broke row identity and the bottom scroll in 2.4.5.
-    /// renderID is unique but positional (shifts on compaction/pagination), which
-    /// re-diffs the whole list on long chats. `messageId ?? renderID` gives the
-    /// best of both: unique (renderID fallback) and stable (messageId-first).
-    var id: String {
-        if let mid = message.messageId, !mid.isEmpty { return mid }
-        return renderID
-    }
+    /// SwiftUI ForEach identity — EXPERIMENT B (stable identity).
+    /// Built by `transcriptMessages(from:)` from STABLE, position-independent
+    /// sources only (see `stableIdentityScheme`):
+    ///   1. `srv-<serverID>`   — server-minted monotonic row id (when present);
+    ///   2. `mid-<messageId>`  — client/local stable id (stream-UUID, local-UUID);
+    ///   3. `fx-<digest>`      — deterministic fallback for rows with neither
+    ///      (digest = SHA-256 of role|timestamp|content|reasoning|toolCallId).
+    /// Duplicate serverIDs (one logical turn persisted as N rows) get a
+    /// content-digest discriminator suffix; rows that are byte-identical are
+    /// collapsed to their first occurrence.
+    /// NEVER positional: `renderID` ("transcript:<absoluteIndex>") stays a
+    /// TECHNICAL scroll/compression target only.
+    let id: String
 }
 
 /// Display model for the synthesized "Context compaction · Reference only" card.
@@ -5753,33 +5831,112 @@ extension ChatViewModel {
         hidingStreamingAssistantID streamingAssistantID: String?
     ) -> [TranscriptMessage] {
         let offset = max(0, messageOffset ?? 0)
-        var transcriptMessages: [TranscriptMessage] = []
-        transcriptMessages.reserveCapacity(messages.count)
 
+        // Pass 1: apply the display filters and compute per-row STABLE base
+        // identity + content digest. No position/index in either.
+        struct Candidate {
+            let loadedIndex: Int
+            let message: ChatMessage
+            let baseID: String
+            let digest: String
+        }
+        var candidates: [Candidate] = []
+        candidates.reserveCapacity(messages.count)
         for (loadedIndex, message) in messages.enumerated() {
             guard message.role != "tool" else { continue }
             guard !TranscriptTurnClassifier.isToolResultOnlyMessage(message) else { continue }
             if let streamingAssistantID, message.messageId == streamingAssistantID {
                 continue
             }
+            candidates.append(Candidate(
+                loadedIndex: loadedIndex,
+                message: message,
+                baseID: stableBaseIdentity(for: message),
+                digest: stableIdentityDigest(for: message)
+            ))
+        }
+
+        // Pass 2: assign SwiftUI identity. Same base id across rows is NORMAL
+        // (one logical turn = several server rows sharing a serverID). Rows
+        // that differ only content-wise get a digest suffix; byte-identical
+        // duplicates (same serverID AND same digest) collapse to their first
+        // occurrence — stable because the server only appends such rows, and
+        // "first in server order" is deterministic for identical rows.
+        var baseCount: [String: Int] = [:]
+        for candidate in candidates {
+            baseCount[candidate.baseID, default: 0] += 1
+        }
+        var digestOccurrence: [String: Int] = [:]
+        var transcriptMessages: [TranscriptMessage] = []
+        transcriptMessages.reserveCapacity(candidates.count)
+
+        for candidate in candidates {
+            let digestKey = candidate.baseID + "\u{1}" + candidate.digest
+            let occurrence = digestOccurrence[digestKey, default: 0] + 1
+            digestOccurrence[digestKey] = occurrence
+            guard occurrence == 1 else { continue }  // indistinguishable duplicate
+
+            let id: String
+            if baseCount[candidate.baseID] == 1 {
+                id = candidate.baseID
+            } else {
+                id = candidate.baseID + "-h" + candidate.digest.prefix(12)
+            }
 
             let anchorID = TranscriptTurnClassifier.anchorID(
-                for: message,
-                at: loadedIndex,
+                for: candidate.message,
+                at: candidate.loadedIndex,
                 messageOffset: messageOffset
             )
-            let absoluteIndex = offset + loadedIndex
+            let absoluteIndex = offset + candidate.loadedIndex
+            // renderID stays a TECHNICAL scroll/compression target — never a
+            // SwiftUI .id() (EXPERIMENT B: stable identity).
             let renderID = "transcript:\(absoluteIndex)"
 
             transcriptMessages.append(TranscriptMessage(
-                loadedIndex: loadedIndex,
+                loadedIndex: candidate.loadedIndex,
                 renderID: renderID,
                 anchorID: anchorID,
-                message: message
+                message: candidate.message,
+                id: id
             ))
         }
 
         return transcriptMessages
+    }
+
+    /// Stable, position-independent base identity for a transcript row.
+    /// Precedence: serverID (server-minted, monotonic per session) →
+    /// client messageId (stream-UUID / local-UUID, stable within a session) →
+    /// deterministic digest fallback (rows carrying neither).
+    nonisolated static func stableBaseIdentity(for message: ChatMessage) -> String {
+        if let serverID = message.serverID {
+            return "srv-\(serverID)"
+        }
+        if let messageId = message.messageId, !messageId.isEmpty {
+            return "mid-\(messageId)"
+        }
+        return "fx-\(stableIdentityDigest(for: message))"
+    }
+
+    /// Deterministic per-row digest used to disambiguate duplicate serverIDs
+    /// and to key the no-id fallback. Inputs are server-authoritative row
+    /// fields that do NOT mutate between .done / REST reload / cache
+    /// reconcile / pagination (one storage, appended only): role, timestamp,
+    /// content, reasoning, toolCallId. NOT position-dependent, NOT mutable
+    /// during streaming for rows that carry a messageId/serverID (those use
+    /// the id paths above; the digest is only a discriminator/fallback).
+    nonisolated static func stableIdentityDigest(for message: ChatMessage) -> String {
+        let input = [
+            message.role ?? "",
+            message.timestamp.map { String($0) } ?? "",
+            message.content ?? "",
+            message.reasoning ?? "",
+            message.toolCallId ?? "",
+            message.toolUseId ?? "",
+        ].joined(separator: "\u{0}")
+        let digest = SHA256.hash(data: Data(input.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     nonisolated static func compressionReferenceCard(
