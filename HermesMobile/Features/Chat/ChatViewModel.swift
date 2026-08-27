@@ -217,6 +217,13 @@ final class ChatViewModel {
     /// `messagesOffset` changes. Views read this single cached value instead of
     /// re-running the full classification pass on every body evaluation.
     private(set) var displayedTranscriptMessages: [TranscriptMessage] = []
+#if DEBUG
+    /// A/B test B arm: count .id() changes of already-visible rows across
+    /// recomputes. This is THE metric separating "stable identity" from
+    /// "still churning" — remount correlates with changedIDs > 0. Logged as
+    /// `identity churn` events (debug builds only; release builds drop it).
+    @ObservationIgnored private var debugPreviousTranscriptIDs: [String] = []
+#endif
     private(set) var isLoading = false
     private(set) var isLoadingOlderMessages = false
     private(set) var isStartingChat = false
@@ -327,10 +334,37 @@ final class ChatViewModel {
             recomputeCompressionReferenceCard()
         }
 
+#if DEBUG
+        recordIdentityChurnIfNeeded()
+#endif
         previousMessageCount = count
         previousLastMessageID = lastID
         previousLastContent = lastContent
     }
+
+#if DEBUG
+    /// DEBUG-only: emit `identity churn` when the .id() of already-visible rows
+    /// changed across a recompute (the remount driver, A/B test B arm).
+    /// Release builds compile this out entirely — zero behavior delta.
+    private func recordIdentityChurnIfNeeded() {
+        let ids = displayedTranscriptMessages.map(\.id)
+        let changed = zip(debugPreviousTranscriptIDs, ids).filter { $0 != $1 }.count
+        let growth = ids.count - debugPreviousTranscriptIDs.count
+        if changed > 0 || growth != 0 {
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "identity churn",
+                extras: [
+                    "changedIDs": changed,
+                    "prevCount": debugPreviousTranscriptIDs.count,
+                    "newCount": ids.count,
+                ]
+            )
+        }
+        debugPreviousTranscriptIDs = ids
+    }
+#endif
     /// Synthesized "Context compaction · Reference only" card resolved from the
     /// session's `compression_anchor_*` metadata; nil when the session has no
     /// compaction metadata or the reference text is gated out.
@@ -5617,15 +5651,22 @@ struct TranscriptMessage: Identifiable, Equatable {
     let anchorID: String
     let message: ChatMessage
 
-    /// ForEach identity: unique AND stable. anchorID alone is NOT unique when two
-    /// messages share a messageId (a real case after a stream reconnect /
-    /// duplicate) — that broke row identity and the bottom scroll in 2.4.5.
-    /// renderID is unique but positional (shifts on compaction/pagination), which
-    /// re-diffs the whole list on long chats. `messageId ?? renderID` gives the
-    /// best of both: unique (renderID fallback) and stable (messageId-first).
+    /// ForEach identity: STABLE FIRST (A/B test B arm — 3.2.0-EXP-B).
+    /// The identity must NOT depend on messagesOffset, loadedIndex, or window
+    /// composition: a shift caused by pagination/reload/compaction must never
+    /// re-number the .id() of already-visible rows. Otherwise SwiftUI remounts
+    /// the whole list (AttributeGraph / AnyKeyPath.hash / ForEach.makeID work
+    /// on the main thread) and scrollTo targets go stale.
+    /// `message.id` = messageId ?? "role-timestamp-content": deterministic,
+    /// position-independent. renderID ("transcript:<absoluteIndex>") remains a
+    /// TECHNICAL target for ScrollViewProxy + compression-card placement only
+    /// (ChatView scrollTo, afterRenderID) — it is NEVER a SwiftUI .id().
+    /// Known limitation (documented for the experiment): two messages with
+    /// identical role+timestamp+content share an id (ForEach collision) — rare
+    /// with server timestamps; production fix is a server-guaranteed
+    /// messageId on every path.
     var id: String {
-        if let mid = message.messageId, !mid.isEmpty { return mid }
-        return renderID
+        message.id
     }
 }
 
