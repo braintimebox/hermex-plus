@@ -1,16 +1,6 @@
 # Changelog
 
-## 3.2.0 — 2026-08-27 (A/B TEST — EXP-B, stable identity)
-
-### Changed
-- **A/B test B arm: message identity is now STABLE and position-independent.** `TranscriptMessage.id` = `message.id` (server `messageId` when present, else the deterministic non-positional `role-timestamp-content` fallback) — it no longer falls back to the positional `"transcript:\(offset + loadedIndex)"` renderID. Pagination/reload/compaction can no longer re-number the `.id()` of already-visible rows (the mass-remount driver behind AttributeGraph/AnyKeyPath.hash/ForEach.makeID work). `renderID` remains a technical target for `ScrollViewProxy.scrollTo` and compression-card placement only — never a SwiftUI `.id()`.
-- **DEBUG-only identity-churn counter**: `identity churn` log event with `changedIDs`/`prevCount`/`newCount` on every transcript recompute (compiled out of release builds; zero behavior delta). This is the A/B measurement metric.
-- Known limitation (documented for the experiment): two messages with identical role+timestamp+content share an id → ForEach collision. Rare with server timestamps; production fix is a server-guaranteed messageId on every path.
-- NOT changed (A/B isolation): ChatScrollOwner/resolveOwner/auto-follow/pagination algorithm/streaming/MainActor/Markdown/Down button.
-
-### Verify on device (same scenarios as 3.1.10 control, 5× each)
-1. rapid scroll up/down; 2. long history open; 3. load older ×2–3; 4. scroll mid-stream; 5. ↓ button; 6. deep scroll + attachment; 7. repeat.
-Expected for B: `identity churn` → changedIDs ~0 on pagination/reload; freeze stacks free of ForEach.makeID/AnyKeyPath.hash.
+## 3.1.10 — 2026-08-26
 
 ### Fixed
 - **↓ button can no longer teleport below the content (black screen).** The 1pt `bottomAnchorID` marker lived INSIDE the LazyVStack, so it was not mounted until scrolled into view — `scrollTo(bottomAnchorID)` could land beyond the real content ("кнопка вниз ведёт ниже и виден чёрный экран"). The marker is now OUTSIDE the lazy container (VStack wrapper, 1pt at the content's true end): always mounted, always resolvable — a ↓ tap always lands on real content.
