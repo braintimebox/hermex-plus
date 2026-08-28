@@ -250,6 +250,49 @@ enum MainThreadStackCapture {
 final class MainThreadWatchdog {
     static let shared = MainThreadWatchdog()
 
+    /// Instrumentation-only context attached to jank/stutter/freeze reports so
+    /// a stall can be tied to its scenario (streaming ON/OFF, message count,
+    /// scroll state). Purely observational: updated from existing didSet/scroll
+    /// paths, read off-main in the watchdog. Lock-guarded because it's written
+    /// on MainActor and read on a background queue. Does NOT gate or alter any
+    /// rendering path — it only makes telemetry diagnostically useful.
+    struct PerformanceContext {
+        var isStreaming = false
+        var messageCount = 0
+        var isUserInteracting = false
+        var isScrolledNearBottom = true
+        var scrollOwner: String = "app"
+    }
+
+    private static let contextLock = NSLock()
+    private static var performanceContext = PerformanceContext()
+
+    /// Update the observed context. Call from MainActor (ChatViewModel /
+    /// ChatView) whenever the corresponding value changes. Cheap: assigns a
+    /// few value-type fields under a lock, no allocation.
+    static func setPerformanceContext(
+        isStreaming: Bool? = nil,
+        messageCount: Int? = nil,
+        isUserInteracting: Bool? = nil,
+        isScrolledNearBottom: Bool? = nil,
+        scrollOwner: String? = nil
+    ) {
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        if let isStreaming { performanceContext.isStreaming = isStreaming }
+        if let messageCount { performanceContext.messageCount = messageCount }
+        if let isUserInteracting { performanceContext.isUserInteracting = isUserInteracting }
+        if let isScrolledNearBottom { performanceContext.isScrolledNearBottom = isScrolledNearBottom }
+        if let scrollOwner { performanceContext.scrollOwner = scrollOwner }
+    }
+
+    /// Snapshot the current observed context (called off-main in watchdog).
+    static func snapshotPerformanceContext() -> PerformanceContext {
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        return performanceContext
+    }
+
     private let pingInterval: TimeInterval = 1.0
     private let hangThreshold: TimeInterval = 3.0
     // MUST stay strictly ABOVE pingInterval + jitter. The protocol measures
@@ -419,6 +462,7 @@ final class MainThreadWatchdog {
             if shouldReport {
                 let mainStack = MainThreadStackCapture.capture()
                 let heavyOp = HeavyOperationTracker.snapshot() ?? ""
+                let ctx = Self.snapshotPerformanceContext()
                 HermexLogger.shared.log(
                     type: "stutter",
                     durationMs: elapsed * 1000,
@@ -427,6 +471,11 @@ final class MainThreadWatchdog {
                     extras: [
                         "stack": mainStack,
                         "heavyOp": heavyOp,
+                        "isStreaming": ctx.isStreaming,
+                        "messageCount": ctx.messageCount,
+                        "isUserInteracting": ctx.isUserInteracting,
+                        "isScrolledNearBottom": ctx.isScrolledNearBottom,
+                        "scrollOwner": ctx.scrollOwner,
                     ]
                 )
             }
@@ -524,11 +573,19 @@ final class FrameTimeMonitor: NSObject {
         let now = Date()
         guard now.timeIntervalSince(lastReport) >= reportRateLimit else { return }
         lastReport = now
+        let ctx = Self.snapshotPerformanceContext()
         HermexLogger.shared.log(
             type: "jank",
             durationMs: avgMs,
             message: String(format: "UI jank avg %.0fms (%.0f fps) max %.0fms", avgMs, avgFps, maxMs),
-            extras: ["maxFrameMs": maxMs]
+            extras: [
+                "maxFrameMs": maxMs,
+                "isStreaming": ctx.isStreaming,
+                "messageCount": ctx.messageCount,
+                "isUserInteracting": ctx.isUserInteracting,
+                "isScrolledNearBottom": ctx.isScrolledNearBottom,
+                "scrollOwner": ctx.scrollOwner,
+            ]
         )
     }
 }

@@ -218,7 +218,17 @@ final class ChatViewModel {
     private var previousMessageCount: Int = 0
 
     private(set) var messages: [ChatMessage] = [] {
-        didSet { recomputeDisplayedTranscriptMessages() }
+        didSet {
+            recomputeDisplayedTranscriptMessages()
+            // Instrumentation-only (no perf impact): keep the watchdog context in
+            // sync so jank/stutter reports carry messageCount + isStreaming.
+            // messages in-place content edits do NOT fire didSet, so this runs
+            // only on structural changes (append/turn/merge) — cheap.
+            MainThreadWatchdog.setPerformanceContext(
+                messageCount: messages.count,
+                isStreaming: activeStreamID != nil
+            )
+        }
     }
     /// Memoized transcript mapping, recomputed once whenever `messages` or
     /// `messagesOffset` changes. Views read this single cached value instead of

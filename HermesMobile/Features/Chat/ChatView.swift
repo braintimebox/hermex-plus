@@ -2694,9 +2694,11 @@ struct ChatView: View {
         // is exactly the per-tick re-render churn this method exists to avoid.
         if isScrolledNearBottom != isNearBottom {
             isScrolledNearBottom = isNearBottom
+            MainThreadWatchdog.setPerformanceContext(isScrolledNearBottom: isNearBottom)
         }
         if isUserInteractingWithScroll != metrics.isUserInteracting {
             isUserInteractingWithScroll = metrics.isUserInteracting
+            MainThreadWatchdog.setPerformanceContext(isUserInteracting: metrics.isUserInteracting)
         }
 
         // F2 (scroll degradation): while the user is actively dragging/flicking,
@@ -2738,6 +2740,7 @@ struct ChatView: View {
         if scrollOwner != resolved {
             let previous = scrollOwner
             scrollOwner = resolved
+            MainThreadWatchdog.setPerformanceContext(scrollOwner: resolved == .app ? "app" : "user")
             // Telemetry: prove the yank on-device — owner transitions with the
             // position metrics that caused them. Rate-limited naturally: the
             // equality guard above fires only on flips.
