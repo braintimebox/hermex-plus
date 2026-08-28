@@ -80,6 +80,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         timestamp = container.decodeLossyDoubleIfPresent(forKey: .underscoredTimestamp)
             ?? container.decodeLossyDoubleIfPresent(forKey: .timestamp)
         messageId = container.decodeLossyStringIfPresent(forKey: .messageId)
+        serverID = container.decodeLossyIntIfPresent(forKey: .serverID)
         name = container.decodeLossyStringIfPresent(forKey: .name)
         toolCallId = container.decodeLossyStringIfPresent(forKey: .toolCallId)
         toolUseId = container.decodeLossyStringIfPresent(forKey: .toolUseId)
