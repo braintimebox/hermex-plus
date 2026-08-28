@@ -1880,7 +1880,8 @@ struct ChatView: View {
         }
     }
 
-    private func sendDraftMessage() async {
+    @discardableResult
+    private func sendDraftMessage() async -> Bool {
         let submittedDraft = draftMessage
 
         if submittedDraft.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/") {
@@ -1892,7 +1893,7 @@ struct ChatView: View {
                 if let lastError = viewModel.lastError {
                     onAPIError(lastError)
                 }
-                return
+                return false
             }
         }
 
@@ -1919,6 +1920,7 @@ struct ChatView: View {
         if let lastError = viewModel.lastError {
             onAPIError(lastError)
         }
+        return didStart
     }
 
     private func sendVoiceNote(audioData: Data, filename: String) async {
@@ -2866,12 +2868,20 @@ struct ChatView: View {
 
         let currentSessionId = session.sessionId ?? ""
         var deliveredSessionId: String?
+        var didSend = false
 
         // Target is THIS chat → send through the existing composer machinery.
         if sessionId == currentSessionId {
             draftMessage = text
-            await sendDraftMessage()
-            deliveredSessionId = currentSessionId
+            // sendDraftMessage returns whether the send actually STARTED. If it
+            // silently failed (viewModel guard / no streamID / cache-first) the
+            // optimistic row was already rolled back — so we must NOT delete the
+            // scheduled row or dismiss the sheet, or the message is lost entirely
+            // ("Send Now отправлено но не появилось").
+            didSend = await sendDraftMessage()
+            if didSend {
+                deliveredSessionId = currentSessionId
+            }
         } else {
             // Target is another/new chat → send directly via API.
             let apiClient = APIClient(baseURL: serverURL)
@@ -2901,9 +2911,17 @@ struct ChatView: View {
                     model: nil
                 )
                 deliveredSessionId = targetSessionId
+                didSend = true
             } catch {
                 onAPIError(error)
             }
+        }
+
+        guard didSend else {
+            // The send did not start — keep the scheduled row so the user can
+            // retry; do not dismiss the sheet. Losing the row on a failed send
+            // is exactly the reported "отправлено но не появилось" bug.
+            return
         }
 
         // Remove the pending row locally and on the server.
