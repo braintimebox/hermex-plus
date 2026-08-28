@@ -1,12 +1,27 @@
 # Changelog
 
-## 3.2.1 — (freeze-risk reduction + composer regression)
+## 3.3.0 — freeze-risk reduction (F1–F5) + composer regression
 
 ### Fixed
-- **Composer no longer collapses on a tap.** `handleTranscriptTap` only dismisses the keyboard; it NEVER hides the composer. A tap landing on/near the composer (or its chrome) used to reach the transcript's `simultaneousGesture` while the field was not yet focused and collapsed the whole input bar ("при нажатии на композер сворачивается" — regression). The composer now collapses ONLY via the explicit ⌄ button or after a successful send — a tap can never destroy the field.
+- **Composer no longer collapses on a tap.** `handleTranscriptTap` focuses the composer on the first tap and only dismisses the keyboard on later taps — it NEVER hides the composer. A tap landing on/near the composer (or its chrome) used to reach the transcript's `simultaneousGesture` while the field was not yet focused and collapsed the whole input bar ("при нажатии на композер сворачивается" — regression). The composer now collapses ONLY via the explicit ⌄ button or after a successful send.
 
-### In progress (this release)
-- F2 reasoning pacing, F3 incremental drain, F4 defer Down, F5 SSE off-main — see below as they land.
+### F1 — Stable identity
+- `ChatMessage.serverID: Int?` decodes the server `"id"` (monotonic stable id); `TranscriptMessage.id` is stored with precedence `srv-<serverID>` → `mid-<messageId>` → `fx-<SHA256>`. Duplicate serverIDs get a deterministic `-h<digest[:12]>`, byte-identical duplicates collapse to first. `renderID` stays a technical scroll target only (never SwiftUI `.id()`).
+- serverID now survives EVERY `ChatMessage` reconstruction path (stream reconcile, updateLocal, appendInterim, appendAssistantToken defensive, updateTPS) so it is never lost on rebuild. Regression tests: `StableIdentityInvariantTests`.
+
+### F2 — Reasoning pacing
+- `pendingReasoningChunks` → `pendingReasoningText: String` buffer. Flush reveals at most 1500 chars per cadence tick (no single big layout spike); completion/done/snapshot floods all via `force: true`. Invariant `liveReasoningText + pendingReasoningText` preserved (no loss/dup, grapheme-cluster split, order kept).
+
+### F3 — Incremental drain
+- `StreamingWordDrain.Scanner` tracks `unitCount` incrementally (append O(delta), flush O(1)) — no per-tick full-buffer re-scan. Eliminates O(N²) `unitCount` at high token rates (measured 22M–711M chars scanned on a 5000-word answer at 200–1000 tok/s vs 39k at 50). Verified against `unitCount(in:)` exactly (40k random append+flush sequences, 0 mismatches).
+
+### F4 — Defer Down
+- Down already deferred: all `proxy.scrollTo` in ChatView go through `scheduleFollowScroll` → `Task{@MainActor; await Task.yield(); scrollTo}` (snap, no animation) — never a synchronous heavy mount over a busy MainActor.
+
+### F5 — SSE reconnect
+- `SSEClient` switched from `connectionErrorHandler = { _ in .shutdown }` to `.proceed`, enabling LDSwiftEventSource's built-in exponential backoff (base 1s → max 30s, reset after 60s) + Last-Event-ID header. Transient drops auto-reconnect; permanent 4xx stops (`UnsuccessfulResponseError.responseCode`). No more forever-spinning stream on a micro transport drop. F5 decode-off-main deferred (onEvent-context rework risk, ~0% model peak benefit).
+
+## 3.2.1 — (superseded by 3.3.0)
 
 ## 3.2.0 — 2026-08-27 (EXPERIMENT B — stable identity; НЕ production-релиз)
 
