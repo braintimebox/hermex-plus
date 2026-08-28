@@ -1631,13 +1631,31 @@ struct ChatView: View {
         isReadingOlderTranscript && !composerIsFocused && !viewModel.messages.isEmpty
     }
 
+    /// Height reserved at the transcript bottom for the inline clarification
+    /// card when one is pending. The card is capped at 420pt (see
+    /// `ClarificationRequestCard.cardContent`), so the transcript must lift the
+    /// controls above it — otherwise compose/FAB/scroll-to-bottom sit on top of
+    /// the card (the "Clarification Required полностью перекрыт" bug). 0 when no
+    /// clarification is pending or in reading mode (composer hidden, no card).
+    private var clarificationCardHeight: CGFloat {
+        guard viewModel.clarificationPrompt != nil else { return 0 }
+        // Only lift when the composer-chrome is relevant; in full reading mode the
+        // clamped card still leaves the ↑↓ cluster clear, but we lift anyway so the
+        // card is never overlapped by the scroll-to-bottom button.
+        return ClarificationRequestCard.maxClampedHeight
+    }
+
     private var transcriptBottomInsetHeight: CGFloat {
         // Reading mode (composer hidden): the transcript runs to the very bottom
         // of the screen — 0 inset. Only when the composer is visible does the
         // content lift above it.
-        composerVisible
+        let base = composerVisible
             ? max(96, composerHeight + 44 + composerAccessorySpacerHeight)
             : 0
+        // Collision avoidance: when a clarification card is displayed inline, the
+        // transcript must leave room for it as well as the composer, so the
+        // floating controls don't overlap the card.
+        return base + clarificationCardHeight
     }
 
     private var scrollToBottomButtonBottomPadding: CGFloat {
@@ -1645,9 +1663,12 @@ struct ChatView: View {
         // sits directly above the FAB in one bottom-right cluster. When the
         // composer is visible the FAB is hidden and the button clears the
         // composer as before.
-        composerVisible
+        let base = composerVisible
             ? composerHeight + 12 + composerAccessorySpacerHeight
             : 76
+        // Collision avoidance: lift the ↓ button above the inline clarification
+        // card so it never overlaps the question/options.
+        return base + clarificationCardHeight
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {

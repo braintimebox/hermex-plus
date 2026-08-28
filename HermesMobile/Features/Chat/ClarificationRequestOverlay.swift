@@ -30,6 +30,12 @@ struct ClarificationRequestOverlay: View {
 }
 
 struct ClarificationRequestCard: View {
+    /// Overall height cap for the card. Keeps a long question + many/long
+    /// choices from ballooning to fill the viewport (inner ScrollViews max at
+    /// 220+240). Used both here (containment) and by ChatView to lift the
+    /// floating controls above the card (collision avoidance).
+    static let maxClampedHeight: CGFloat = 420
+
     let prompt: ClarificationPromptState
     let isResponding: Bool
     let errorMessage: String?
@@ -211,7 +217,14 @@ struct ClarificationRequestCard: View {
             footer
         }
         .padding(16)
-        .frame(maxWidth: 560, alignment: .leading)
+        // Containment: cap the OVERALL card height so a long question + many
+        // /long choices cannot expand the card to nearly the whole viewport
+        // (question ScrollView maxHeight 220 + choices ScrollView maxHeight 240
+        // add up to ~460pt, and header+field+padding push it past 580pt). The
+        // two inner ScrollViews keep their own max-height and remain scrollable,
+        // so nothing is cut off — the card just never balloons to fill the
+        // screen and collide with the floating controls below.
+        .frame(maxWidth: 560, maxHeight: ClarificationRequestCard.maxClampedHeight, alignment: .leading)
     }
 
     @ViewBuilder
