@@ -201,6 +201,12 @@ enum ActiveStreamRecoveryState: Equatable {
 final class ChatViewModel {
     private static let messagePageLimit = 50
 
+    /// F2: max reasoning characters revealed per cadence tick. Prevents a single
+    /// large reasoning block from being flushed as one MainActor layout spike.
+    /// Kept generous so a normal reasoning stream stays smooth; completion paths
+    /// (done/error/snapshot) bypass pacing via `flushPendingStreamingContent()`.
+    private static let reasoningFlushCharacterBudget = 1_500
+
     /// Scalars describing the previous tail of `messages`, used by incremental
     /// transcript update to detect a trailing stream-message content change in
     /// O(1) without keeping a full second copy of the message history in memory.
@@ -434,7 +440,7 @@ final class ChatViewModel {
     // Internal streaming state — kept on ChatViewModel for actor isolation
     @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
     @ObservationIgnored var pendingAssistantTokenText: String = ""
-    @ObservationIgnored var pendingReasoningChunks: [String] = []
+    @ObservationIgnored var pendingReasoningText: String = ""
     @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
     var hasPrimedInitialCachedMessages = false
     var pendingAttachments: [PendingAttachment] { attachmentCoordinator.pendingAttachments }
@@ -911,7 +917,7 @@ final class ChatViewModel {
             scheduleStreamingScrollTrigger()
         }
 
-        if !pendingAssistantTokenText.isEmpty {
+        if !pendingAssistantTokenText.isEmpty || !pendingReasoningText.isEmpty {
             scheduleStreamingContentFlush(afterNanoseconds: streamingWordRevealCadenceNanoseconds)
         }
     }
@@ -924,7 +930,7 @@ final class ChatViewModel {
     private func resetPendingStreamingContentBuffers() {
         cancelPendingStreamingContentFlush()
         pendingAssistantTokenText = ""
-        pendingReasoningChunks = []
+        pendingReasoningText = ""
         // Chunks are deduplicated at append time, so the replay matched-prefix
         // counters can reference unflushed content; dropping the buffers makes them
         // stale. Reset only the counters — the replay connection may still be live
@@ -940,7 +946,8 @@ final class ChatViewModel {
         if flushAssistantTokens() {
             didMutate = true
         }
-        if flushReasoningChunks() {
+        // Completion path: flood ALL reasoning, no pacing (done/error/snapshot).
+        if flushReasoningChunks(force: true) {
             didMutate = true
         }
 
@@ -4562,7 +4569,7 @@ final class ChatViewModel {
         // de-dup is the only consumer of the full live+pending reasoning join.
         let remainder: String
         if isActiveStreamReplayConnection {
-            let effectiveContent = liveReasoningText + pendingReasoningChunks.joined()
+            let effectiveContent = liveReasoningText + pendingReasoningText
             remainder = deduplicatedReplayText(
                 text,
                 existingContent: effectiveContent,
@@ -4573,18 +4580,38 @@ final class ChatViewModel {
         }
         guard !remainder.isEmpty else { return false }
 
-        pendingReasoningChunks.append(remainder)
+        pendingReasoningText += remainder
         scheduleStreamingContentFlush()
         return true
     }
 
     @discardableResult
-    private func flushReasoningChunks() -> Bool {
-        guard !pendingReasoningChunks.isEmpty else { return false }
+    private func flushReasoningChunks(force: Bool = false) -> Bool {
+        guard !pendingReasoningText.isEmpty else { return false }
 
-        // Chunks were deduplicated at append time, so flushing is pure concatenation.
-        let appendedText = pendingReasoningChunks.joined()
-        pendingReasoningChunks = []
+        // F2 (reasoning pacing): never flush a whole large reasoning block in one
+        // tick — that is a single big layout/recompute spike on MainActor. Instead
+        // reveal a bounded prefix per tick, leaving the tail pending for the next
+        // cadence tick. `liveReasoningText + pendingReasoningText` is invariant
+        // (no data loss, no duplicates, order preserved); completion paths bypass
+        // pacing via `flushPendingStreamingContent()` which floods everything.
+        let budget = Self.reasoningFlushCharacterBudget
+        let appendedText: String
+        if !force, pendingReasoningText.count > budget {
+            // Split on a grapheme-cluster boundary (never split a surrogate/ZWJ pair).
+            let boundary = pendingReasoningText.index(
+                pendingReasoningText.startIndex,
+                offsetBy: budget,
+                limitedBy: pendingReasoningText.endIndex
+            ) ?? pendingReasoningText.endIndex
+            let head = String(pendingReasoningText[..<boundary])
+            let tail = String(pendingReasoningText[boundary...])
+            appendedText = head
+            pendingReasoningText = tail
+        } else {
+            appendedText = pendingReasoningText
+            pendingReasoningText = ""
+        }
 
         let messageID = ensureStreamingAssistantMessage()
         if reasoningAnchorMessageID == nil {

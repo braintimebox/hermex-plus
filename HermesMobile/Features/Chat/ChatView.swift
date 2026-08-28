@@ -2586,15 +2586,17 @@ struct ChatView: View {
     /// collapse back to the FAB. Matches chat-app tap-to-dismiss semantics.
     private func handleTranscriptTap() {
         guard composerVisible else { return }
-        // Only dismiss the keyboard. NEVER collapse the composer from a tap:
-        // the ScrollView's simultaneousGesture and the composer's own hit-testing
-        // overlap, so a tap that lands on/near the composer (or its chrome)
-        // reaches here while the field is not yet focused and was collapsing the
-        // whole input bar ("тап по композеру сворачивает" — 3.2.1 REGRESSION).
-        // The composer collapses ONLY via the explicit ⌄ button (onCollapseComposer)
-        // or after a successful send — a tap must never destroy the field.
+        // ONE tap activates (focuses) the composer; further taps are harmless —
+        // they only dismiss the keyboard. The composer NEVER collapses from a
+        // tap: the ScrollView's simultaneousGesture and the composer's own
+        // hit-testing overlap, so a tap landing on/near the composer while the
+        // field is not yet focused must focus it, not destroy the input bar
+        // ("тап по композеру сворачивает" — regression). Collapse happens ONLY
+        // via the explicit ⌄ button (onCollapseComposer) or after a send.
         if composerIsFocused {
             dismissKeyboard()
+        } else {
+            requestComposerFocusIfPossible()
         }
     }
 
