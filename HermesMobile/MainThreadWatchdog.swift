@@ -573,7 +573,7 @@ final class FrameTimeMonitor: NSObject {
         let now = Date()
         guard now.timeIntervalSince(lastReport) >= reportRateLimit else { return }
         lastReport = now
-        let ctx = Self.snapshotPerformanceContext()
+        let ctx = MainThreadWatchdog.snapshotPerformanceContext()
         HermexLogger.shared.log(
             type: "jank",
             durationMs: avgMs,

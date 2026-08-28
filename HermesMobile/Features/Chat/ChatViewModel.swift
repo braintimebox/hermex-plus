@@ -225,8 +225,8 @@ final class ChatViewModel {
             // messages in-place content edits do NOT fire didSet, so this runs
             // only on structural changes (append/turn/merge) — cheap.
             MainThreadWatchdog.setPerformanceContext(
-                messageCount: messages.count,
-                isStreaming: activeStreamID != nil
+                isStreaming: activeStreamID != nil,
+                messageCount: messages.count
             )
         }
     }
