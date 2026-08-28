@@ -37,7 +37,27 @@ final class SSEClient: SSEStreamingClient {
             onEvent: onEvent
         )
         var config = EventSource.Config(handler: handler, url: url)
-        config.connectionErrorHandler = { _ in .shutdown }
+        // F5 (reconnect): `LDSwiftEventSource` has a BUILT-IN exponential backoff
+        // (base `reconnectTime`, doubling to `maxReconnectTime`, resetting after
+        // `backoffResetThreshold`). The old `{ _ in .shutdown }` disabled it —
+        // ANY transient TCP/HTTP failure killed the stream and the UI spun forever
+        // ("зависший стрим"). `.proceed` turns reconnection back on so a transient
+        // drop reconnects automatically with backoff; `lastEventID` feeds the
+        // `Last-Event-ID` header (the library sets it on each (re)connect).
+        //
+        // Classify: permanent client/HTTP errors (4xx) stop reconnecting so the
+        // stream surfaces the error and resets loading; transient network errors
+        // and 5xx reconnect automatically with the library's exponential backoff.
+        config.connectionErrorHandler = { error in
+            if let http = error as? UnsuccessfulResponseError,
+               (400..<500).contains(http.responseCode) {
+                return .shutdown
+            }
+            return .proceed
+        }
+        config.reconnectTime = 1.0
+        config.maxReconnectTime = 30.0
+        config.backoffResetThreshold = 60.0
         // Custom headers merged underneath the built-ins so the built-ins win on
         // collision; an empty list leaves the built-in three unchanged (#255).
         config.headers = customHeaderProvider().merged(under: [
