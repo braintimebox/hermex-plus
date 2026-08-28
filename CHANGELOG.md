@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.1 — (freeze-risk reduction + composer regression)
+
+### Fixed
+- **Composer no longer collapses on a tap.** `handleTranscriptTap` only dismisses the keyboard; it NEVER hides the composer. A tap landing on/near the composer (or its chrome) used to reach the transcript's `simultaneousGesture` while the field was not yet focused and collapsed the whole input bar ("при нажатии на композер сворачивается" — regression). The composer now collapses ONLY via the explicit ⌄ button or after a successful send — a tap can never destroy the field.
+
+### In progress (this release)
+- F2 reasoning pacing, F3 incremental drain, F4 defer Down, F5 SSE off-main — see below as they land.
+
 ## 3.2.0 — 2026-08-27 (EXPERIMENT B — stable identity; НЕ production-релиз)
 
 ### Changed (identity only — A/B test B arm)
