@@ -440,6 +440,10 @@ final class ChatViewModel {
     // Internal streaming state — kept on ChatViewModel for actor isolation
     @ObservationIgnored var pendingStreamingScrollTriggerTask: Task<Void, Never>?
     @ObservationIgnored var pendingAssistantTokenText: String = ""
+    /// F3 (incremental drain): keeps `unitCount` of `pendingAssistantTokenText`
+    /// in sync without re-scanning the whole buffer every tick. Mirrors the same
+    /// append/flush mutations as `pendingAssistantTokenText`.
+    @ObservationIgnored private var pendingWordScanner = StreamingWordDrain.Scanner()
     @ObservationIgnored var pendingReasoningText: String = ""
     @ObservationIgnored var pendingStreamingContentFlushTask: Task<Void, Never>?
     var hasPrimedInitialCachedMessages = false
@@ -902,7 +906,7 @@ final class ChatViewModel {
     private func drainStreamingContentTick() {
         var didMutate = false
         let quota = StreamingWordDrain.drainQuota(
-            backlogUnitCount: StreamingWordDrain.unitCount(in: pendingAssistantTokenText),
+            backlogUnitCount: pendingWordScanner.unitCount,
             cadenceNanoseconds: streamingWordRevealCadenceNanoseconds,
             maxLagNanoseconds: streamingMaxRevealLagNanoseconds
         )
@@ -930,6 +934,7 @@ final class ChatViewModel {
     private func resetPendingStreamingContentBuffers() {
         cancelPendingStreamingContentFlush()
         pendingAssistantTokenText = ""
+        pendingWordScanner.reset()
         pendingReasoningText = ""
         // Chunks are deduplicated at append time, so the replay matched-prefix
         // counters can reference unflushed content; dropping the buffers makes them
@@ -4779,6 +4784,7 @@ final class ChatViewModel {
         guard !remainder.isEmpty else { return false }
 
         pendingAssistantTokenText += remainder
+        pendingWordScanner.append(remainder)
         scheduleStreamingContentFlush()
         return true
     }
@@ -4801,9 +4807,11 @@ final class ChatViewModel {
             guard !head.isEmpty else { return false }
             appendedContent = head
             pendingAssistantTokenText = tail
+            pendingWordScanner.flush(units: maxWordUnits, tail: tail)
         } else {
             appendedContent = pendingText
             pendingAssistantTokenText = ""
+            pendingWordScanner.reset()
         }
 
         let messageID = ensureStreamingAssistantMessage()
