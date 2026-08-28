@@ -57,6 +57,18 @@ enum StreamingTextFadeDefaults {
     /// How long after a block's last append its cascade is provably finished
     /// (queue fully revealed), making it safe to absorb into the solid head.
     static var blockAbsorbDelay: TimeInterval { maxStampLead + fadeDuration + 0.25 }
+
+    /// F2 (scroll degradation): when the user is actively scrolling the
+    /// transcript, skip the expensive per-glyph fade pass so the frame budget
+    /// goes to scroll. Text stays fully correct (solid draw) and the fade
+    /// resumes once scrolling stops. Lock-guarded because `TextRenderer.draw`
+    /// runs off the main actor while the flag is written on MainActor.
+    private static let renderLock = NSLock()
+    private static var _isScrollDegraded = false
+    static var isScrollDegraded: Bool {
+        get { renderLock.withLock { _isScrollDegraded } }
+        set { renderLock.withLock { _isScrollDegraded = newValue } }
+    }
 }
 
 #if DEBUG

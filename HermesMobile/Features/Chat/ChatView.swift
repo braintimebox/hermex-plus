@@ -2666,6 +2666,13 @@ struct ChatView: View {
             isUserInteractingWithScroll = metrics.isUserInteracting
         }
 
+        // F2 (scroll degradation): while the user is actively dragging/flicking,
+        // degrade the per-glyph streaming fade so the frame budget goes to scroll.
+        // Solid text stays correct; the fade resumes once the gesture ends.
+        if StreamingTextFadeDefaults.isScrollDegraded != metrics.isUserInteracting {
+            StreamingTextFadeDefaults.isScrollDegraded = metrics.isUserInteracting
+        }
+
         // Touching the scroll view pauses auto-follow for a short window so
         // streaming layout growth cannot yank the viewport mid-gesture.
         if metrics.isUserInteracting {

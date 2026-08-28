@@ -14,6 +14,12 @@ struct StreamingTextFadeRenderer: TextRenderer {
     let store: StreamingTextFadeStampStore<Text.Layout.CharacterIndex>
 
     func draw(layout: Text.Layout, in ctx: inout GraphicsContext) {
+        // F2 (scroll degradation): during an active scroll skip the per-glyph
+        // fade computation and draw solid — text stays fully correct and the
+        // frame budget goes to scroll. Registration still runs so the reveal
+        // queue keeps its baseline and the fade resumes correctly after scroll.
+        let degraded = StreamingTextFadeDefaults.isScrollDegraded
+
         // First pass: hand every slice to the reveal queue in reading order,
         // so glyphs that arrived together cascade instead of fading as one
         // chunk. A ligature slice can span several characters; the newest one
@@ -30,20 +36,31 @@ struct StreamingTextFadeRenderer: TextRenderer {
         }
         store.register(orderedKeys, clock: clock)
 
-        for line in layout {
-            for run in line {
-                for slice in run {
-                    let opacity = store.opacity(
-                        for: slice.characterIndices.max(),
-                        clock: clock
-                    )
-
-                    if opacity >= 1 {
+        if degraded {
+            // Solid draw: one flat pass, no per-glyph GraphicsContext copies.
+            for line in layout {
+                for run in line {
+                    for slice in run {
                         ctx.draw(slice)
-                    } else if opacity > 0 {
-                        var faded = ctx
-                        faded.opacity = opacity
-                        faded.draw(slice)
+                    }
+                }
+            }
+        } else {
+            for line in layout {
+                for run in line {
+                    for slice in run {
+                        let opacity = store.opacity(
+                            for: slice.characterIndices.max(),
+                            clock: clock
+                        )
+
+                        if opacity >= 1 {
+                            ctx.draw(slice)
+                        } else if opacity > 0 {
+                            var faded = ctx
+                            faded.opacity = opacity
+                            faded.draw(slice)
+                        }
                     }
                 }
             }

@@ -5,31 +5,42 @@ enum MarkdownMathSegment: Equatable {
     case displayMath(String)
 }
 
-struct MarkdownMathSegmenter {
-    /// Memoized last result. `segments(in:)` is a pure function of `content`,
-    /// but it does an O(N) `Array(content)` copy plus a full protection-mask
-    /// scan on every call — and it runs inside `body` (both the static and
-    /// streaming renderers call it per token flush, ~16ms). Caching by the last
-    /// content string mirrors StreamingMarkdownBlockSplitter and removes the
-    /// repeated O(N) work from the streaming hot path; a single-entry cache is
-    /// correct here because the same message's content only ever grows (append).
+enum MarkdownMathSegmenter {
+    /// Memoized results keyed by content. `segments(in:)` is a pure function of
+    /// `content`, but it does an O(N) `Array(content)` copy plus a full
+    /// protection-mask scan on every call — and it runs inside `body` (both the
+    /// static and streaming renderers call it per token flush, ~16ms). Caching
+    /// by content removes the repeated O(N) work.
+    ///
+    /// F1 (scroll perf): a multi-entry (LRU) cache instead of a single entry so
+    /// a fast scroll back through history (A→B→A) does NOT re-miss and re-scan a
+    /// message that was already segmented. Bounded to avoid unbounded memory;
+    /// results are value-type and cheap to hold. Lock-guarded because `body`
+    /// can be evaluated off the main actor.
     private static let cacheLock = NSLock()
-    private static var cachedContent: String?
-    private static var cachedResult: [MarkdownMathSegment]?
+    private static var cache: [(content: String, result: [MarkdownMathSegment])] = []
+    private static let cacheLimit = 24
 
     static func segments(in content: String) -> [MarkdownMathSegment] {
+        // Fast path: read the cache, but do NOT hold the lock over the
+        // O(N) compute (that would serialize any other caller). A miss may
+        // race another thread computing the same content — harmless, both
+        // produce the same value-type result.
         cacheLock.lock()
-        if let cachedContent, cachedContent == content, let cachedResult {
+        for i in cache.indices where cache[i].content == content {
+            let hit = cache[i].result
             cacheLock.unlock()
-            return cachedResult
+            return hit
         }
         cacheLock.unlock()
 
         let result = computeSegments(in: content)
 
         cacheLock.lock()
-        cachedContent = content
-        cachedResult = result
+        if cache.count >= cacheLimit {
+            cache.removeFirst()
+        }
+        cache.append((content: content, result: result))
         cacheLock.unlock()
         return result
     }
