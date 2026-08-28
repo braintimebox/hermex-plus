@@ -52,6 +52,15 @@ struct ScheduledMessagesView: View {
                                 isSending = true
                                 Task {
                                     await onSendNow(msg)
+                                    // Drop the row from the in-memory snapshot IMMEDIATELY.
+                                    // sendScheduledNow deletes from the ModelContext and then
+                                    // dismisses the sheet; the snapshot (@State messages) is
+                                    // NOT a live @Query, so it would keep showing the sent
+                                    // row unless we remove it here (the sheet is being torn
+                                    // down, so relying on the loadMessages() below to re-read
+                                    // and reflect the delete is racy / too late). Mirrors
+                                    // deleteLocal.
+                                    messages.removeAll { $0.scheduleKey == msg.scheduleKey }
                                     await loadMessages()
                                     isSending = false
                                 }
