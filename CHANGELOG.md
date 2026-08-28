@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.3.1 — scroll perf + Send Now + clarification layout
+
+### Scroll performance (`e2c9c23`)
+- **F1 (markdown cache):** `MarkdownMathSegmenter` single-entry memo → bounded LRU (24) keyed by content. A fast scroll back through history (A→B→A) no longer re-misses and re-scans a message that was already segmented; only the visible-window mount pays O(content). The `O(N)` compute stays **outside** the lock (no serialization).
+- **F2 (streaming fade degradation):** `StreamingTextFadeRenderer` skips the expensive per-glyph fade pass while the user is actively dragging/flicking (`metrics.isUserInteracting`) — solid draw, no per-glyph GraphicsContext copies. Text stays fully correct; the fade resumes once scrolling stops. Flag is lock-guarded (render path runs off main); `updateScrollMetrics` toggles it only on real interaction.
+- **F3 (state churn):** confirmed the existing scroll pipeline already flip-gates `isScrolledNearBottom`/`isUserInteractingWithScroll`/`scrollOwner` and quantizes `onMetrics` (8pt + lastMetrics guard); `.equatable()` + stable identity prevent row re-eval — no per-tick ChatView recompute cascade. No new observers added.
+- Pagination unchanged (event-driven, not proven an ordinary-scroll jank).
+
+### Send Now (`f43f542`)
+- `sendScheduledNow` never checked whether the send actually started. If `sendDraftMessage()` silently failed (viewModel guard / no streamID / cache-first) the optimistic row was already rolled back, yet the code still deleted the pending row and closed the scheduled list — the message was lost and never appeared ("отправлено, но не появилось"). Now `sendDraftMessage` returns `Bool` (`@discardableResult`); `sendScheduledNow` deletes/dismisses only on `didSend`, and on a failed send the scheduled row is kept so the user can retry.
+
+### Clarification panel layout (`62a1214`, `de47d5f`)
+- **Containment:** `ClarificationRequestCard.cardContent` had `maxWidth` but NO `maxHeight`. question ScrollView (max 220) + choices ScrollView (max 240) + header + field + padding summed to ~580pt — on smaller screens the card filled most of the viewport and the floating controls sat on top of it. Capped the overall card at `maxClampedHeight = 420`; the two inner ScrollViews keep their own max and remain scrollable (nothing is cut off).
+- **Collision avoidance:** `transcriptBottomInsetHeight` and `scrollToBottomButtonBottomPadding` only considered composerHeight/accessory. When a clarification card was shown inline they never accounted for it, so compose/↓ sat on the card. Now the controls lift by the **measured** card height (via `onGeometryChange`, reported up through `onClarificationCardHeightChange`) — not a fixed max — so short cards don't over-lift. Reset to 0 on dismissal; value-equality guard avoids extra re-invalidation.
+
+### Fixed (from the 3.3.0 baseline, re-listed here since this is the first post-3.3.0 release)
+- Composer no longer collapses on a tap; F1 stable ID, F2 reasoning pacing, F3 incremental drain, F4 defer Down, F5 SSE reconnect — see 3.3.0.
+
 ## 3.3.0 — freeze-risk reduction (F1–F5) + composer regression
 
 ### Fixed
