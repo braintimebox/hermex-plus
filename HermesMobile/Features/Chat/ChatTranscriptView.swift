@@ -75,6 +75,10 @@ struct ChatTranscriptView: View {
     let onPreviewTranscriptMedia: (TranscriptMediaReference) -> Void
     let onToggleListening: (MessageActionContext) -> Void
     let onSubmitClarification: (String) -> Void
+    /// Reports the measured height of the inline clarification card so the
+    /// parent can lift the floating controls above it (collision avoidance) —
+    /// 0 when no card is shown. Uses onGeometryChange (iOS 18+).
+    var onClarificationCardHeightChange: (CGFloat) -> Void = { _ in }
     let onSelectText: (MessageActionContext) -> Void
     let onRegenerate: (MessageActionContext) -> Void
     let onEdit: (MessageActionContext) -> Void
@@ -347,6 +351,11 @@ struct ChatTranscriptView: View {
                 transcriptLooseBlocks
                 liveResponseBlocks
                 inlineClarificationCard
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        onClarificationCardHeightChange(height)
+                    }
                 typingIndicator
                 turnChangesCard
                 inlineCommitButton

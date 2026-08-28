@@ -287,6 +287,10 @@ struct ChatView: View {
     @State private var isScrolledNearBottom = true
     @State private var isReadingOlderTranscript = false
     @State private var showsPendingDecisionOverlay = false
+    /// Measured height of the inline clarification card (0 when none). Drives
+    /// the collision-avoidance lift for the floating controls so they clear the
+    /// actual card, not a fixed maximum (which would over-lift for short cards).
+    @State private var clarificationCardHeight: CGFloat = 0
     /// Single source of truth for who may scroll the transcript (see
     /// `ChatScrollPolicy.resolveOwner`). All scroll sites read only this.
     @State private var scrollOwner: ChatScrollOwner = .app
@@ -737,6 +741,14 @@ struct ChatView: View {
                 // Open a brief snap window so the cache-first reconcile re-pin (and any
                 // message-count auto-follow racing it) lands without an animated jump (#289).
                 cacheFirstSnapUntil = Date().addingTimeInterval(0.35)
+            }
+            .onChange(of: viewModel.clarificationPrompt?.id) {
+                // When the clarification card disappears the inline view is removed and
+                // `onGeometryChange` no longer fires, so its @State would stay stale and
+                // keep the controls lifted. Reset it explicitly on dismissal.
+                if viewModel.clarificationPrompt == nil {
+                    clarificationCardHeight = 0
+                }
             }
             .onChange(of: viewModel.isUploadingAttachment) { _, isUploading in
                 if !isUploading {
@@ -1462,6 +1474,13 @@ struct ChatView: View {
                     }
                 }
             },
+            onClarificationCardHeightChange: { height in
+                // Only bounce the @State when the value actually changes, so a
+                // steady card doesn't re-invalidate ChatView.body every layout.
+                if clarificationCardHeight != height {
+                    clarificationCardHeight = height
+                }
+            },
             onSelectText: { context in
                 selectableResponseText = SelectableResponseText(context: context)
             },
@@ -1632,19 +1651,10 @@ struct ChatView: View {
     }
 
     /// Height reserved at the transcript bottom for the inline clarification
-    /// card when one is pending. The card is capped at 420pt (see
-    /// `ClarificationRequestCard.cardContent`), so the transcript must lift the
-    /// controls above it — otherwise compose/FAB/scroll-to-bottom sit on top of
-    /// the card (the "Clarification Required полностью перекрыт" bug). 0 when no
-    /// clarification is pending or in reading mode (composer hidden, no card).
-    private var clarificationCardHeight: CGFloat {
-        guard viewModel.clarificationPrompt != nil else { return 0 }
-        // Only lift when the composer-chrome is relevant; in full reading mode the
-        // clamped card still leaves the ↑↓ cluster clear, but we lift anyway so the
-        // card is never overlapped by the scroll-to-bottom button.
-        return ClarificationRequestCard.maxClampedHeight
-    }
-
+    /// card when one is pending. Drives the collision-avoidance lift so the
+    /// floating controls clear the ACTUAL card height (measured via
+    /// `onClarificationCardHeightChange`) — not a fixed max, which would
+    /// over-lift for short cards. 0 when no card is on screen.
     private var transcriptBottomInsetHeight: CGFloat {
         // Reading mode (composer hidden): the transcript runs to the very bottom
         // of the screen — 0 inset. Only when the composer is visible does the
