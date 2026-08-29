@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.3.6 — streaming Markdown cap (core lightening: O(1) on long live answers)
+
+### Core hot path
+- **Root cause:** while a long answer streams in, `Markdown` (`StreamingMarkdownChunkedView`) re-parses and re-lays-out the **entire accumulated text** through CoreText on the main thread on every `displayedContent` commit. That's quadratic in reply length — the verified long-answer `CTLineCreate…` freeze on the hot path, already present even with the incremental splitter + 16ms commit debounce.
+- **Fix:** split the Markdown fallback threshold into a **streaming-specific cap**. `MarkdownContentRenderingPolicy.fallbackReason(for:isStreaming:)` now uses `maxStreamingMarkdownCharacterCount = 4_000` while a stream is live (vs `maxMarkdownCharacterCount = 80_000` for settled). Above the streaming cap, the live text renders as plain `Text(verbatim:)` — O(1) — and only becomes full Markdown once the stream settles (`done`, the settled branch keeps the 80k cap). Short replies stay under 4k → live Markdown formatting preserved for them.
+- **Effect:** long agent answers no longer re-layout the whole accumulated body per tick; the hot path degrades gracefully to plain text during the stream and upgrades to formatted Markdown at completion. Short messages keep the Hermex formatting throughout.
+
 ## 3.3.5 — P0 scroll yank fix + P1 reload amplification fix
 
 ### P0 — Scroll yank during streaming (viewport jumps back down)

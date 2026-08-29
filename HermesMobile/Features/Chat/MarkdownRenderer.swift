@@ -105,7 +105,7 @@ struct StreamingMarkdownRenderer: View {
         Group {
             if displayedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(verbatim: " ")
-            } else if let fallbackReason = MarkdownContentRenderingPolicy.fallbackReason(for: displayedContent) {
+            } else if let fallbackReason = MarkdownContentRenderingPolicy.fallbackReason(for: displayedContent, isStreaming: true) {
                 PlainMarkdownFallbackView(
                     content: displayedContent,
                     reason: fallbackReason
@@ -896,8 +896,20 @@ enum MarkdownContentRenderingPolicy {
     static let maxMarkdownCharacterCount = 80_000
     static let maxMarkdownLineCount = 2_000
 
-    static func fallbackReason(for content: String) -> MarkdownContentFallbackReason? {
-        if content.count > maxMarkdownCharacterCount {
+    /// STREAMING cap. While a long answer streams in, `Markdown` (
+    /// `StreamingMarkdownChunkedView`) re-parses and re-lays-out the ENTIRE
+    /// accumulated text through CoreText on the main thread on every
+    /// `displayedContent` commit. That's quadratic in reply length — the
+    /// verified source of the long-answer `CTLineCreate…` freeze. Above this
+    /// threshold a live stream renders plain `Text(verbatim:)` (O(1)) and only
+    /// becomes full Markdown once the stream settles (`done`), because the
+    /// settled branch uses `maxMarkdownCharacterCount`. Short replies stay
+    /// below it, so live Markdown formatting is preserved for them.
+    static let maxStreamingMarkdownCharacterCount = 4_000
+
+    static func fallbackReason(for content: String, isStreaming: Bool = false) -> MarkdownContentFallbackReason? {
+        let cap = isStreaming ? maxStreamingMarkdownCharacterCount : maxMarkdownCharacterCount
+        if content.count > cap {
             return .tooManyCharacters
         }
 
