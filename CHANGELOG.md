@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.3 — P0 freeze fix (equatable) + freeze telemetry (row count)
+
+### Fixed (P0 — main-thread freeze on send / long chats)
+- **`.equatable()` no longer compares `hasActiveStream` per row.** `hasActiveStream: activeStreamID != nil` is a *global* per-row input that flips for every row when a stream starts (`activeStreamID` nil→id at send). Comparing it made `ChatTranscriptMessageBlock ==` return false for **all N rows** → every settled row re-parsed `Markdown(content)` (MarkdownUI, uncached) + CoreText on the MainActor → O(N × markdown) starvation on long chats (force-quit freezes 18–26s logged on 3.3.1). Settled rows never render differently on this flag (`shouldUseStreamingBubbleRendering` gates on `messageID == streamingAssistantMessageID`; live reasoning/tool blocks gate on `anchorID`), and the streaming row already re-evaluates via `streamingAssistantMessageID` + changing content — so excluding it is render-safe and lets `.equatable()` skip settled rows on send.
+
+### Telemetry (more signal in freeze/stutter reports)
+- **`displayedRowCount` added to `PerformanceContext`** — the *rendered* transcript row count (the N in the O(N × markdown) model), distinct from `messageCount` (message-array count). Updated from the transcript recompute path (all branches), O(1) lock-guarded assignment.
+- **Freeze reports now carry the scenario context** (`isStreaming`, `messageCount`, `displayedRowCount`, `isUserInteracting`, `isScrolledNearBottom`, `scrollOwner`) in `extras` — previously only stack/memoryMB/heavyOp, so a freeze couldn't be tied to streaming state or transcript size. Stutter reports also gained `displayedRowCount`.
+
+### Not changed
+- **Load older**: re-audited 29.08 — 31 logged `load older` events on 3.3.1, 0× `didAddMessages=false`, offsets advance correctly (641→589, +52). The 26.08 `didAddMessages=FALSE` failure was a symptom of the pre-3.3.0 positional/fallback `ChatMessage.id` collisions defeating dedup; stable identity (3.3.0) fixed the root. Track closed → monitor only.
+
 ## 3.3.2 — scheduled delete: row vanishes immediately (mirrors Send Now)
 
 ### Fixed

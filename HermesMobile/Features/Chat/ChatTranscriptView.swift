@@ -626,7 +626,16 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
             lhs.localAttachmentPreviews == rhs.localAttachmentPreviews &&
             lhs.listeningMessageID == rhs.listeningMessageID &&
             lhs.isViewingCachedData == rhs.isViewingCachedData &&
-            lhs.hasActiveStream == rhs.hasActiveStream &&
+            // P0 (3.3.3): `hasActiveStream` is a GLOBAL per-row input that flips
+            // for every row when a stream starts (activeStreamID nil→id at send).
+            // Comparing it here made .equatable() return false for ALL N rows →
+            // every settled row re-parsed MarkdownUI on MainActor (O(N × md)
+            // freeze on long chats). Settled rows never render differently on
+            // this flag (shouldUseStreamingBubbleRendering gates on
+            // messageID == streamingAssistantMessageID, live reasoning/tool
+            // blocks gate on anchorID), and the streaming row already
+            // re-evaluates via streamingAssistantMessageID + changing content.
+            // Excluding it lets .equatable() skip settled rows on send.
             lhs.isRegeneratingMessage == rhs.isRegeneratingMessage &&
             lhs.isEditingMessage == rhs.isEditingMessage &&
             lhs.isForkingMessage == rhs.isForkingMessage &&

@@ -262,6 +262,10 @@ final class MainThreadWatchdog {
         var isUserInteracting = false
         var isScrolledNearBottom = true
         var scrollOwner: String = "app"
+        /// Number of rows actually rendered in the transcript — the N in the
+        /// O(N × markdown) freeze model (messageCount is the message-array
+        /// count, not the rendered-row count). Updated from the recompute path.
+        var displayedRowCount = 0
     }
 
     private static let contextLock = NSLock()
@@ -275,7 +279,8 @@ final class MainThreadWatchdog {
         messageCount: Int? = nil,
         isUserInteracting: Bool? = nil,
         isScrolledNearBottom: Bool? = nil,
-        scrollOwner: String? = nil
+        scrollOwner: String? = nil,
+        displayedRowCount: Int? = nil
     ) {
         contextLock.lock()
         defer { contextLock.unlock() }
@@ -284,6 +289,7 @@ final class MainThreadWatchdog {
         if let isUserInteracting { performanceContext.isUserInteracting = isUserInteracting }
         if let isScrolledNearBottom { performanceContext.isScrolledNearBottom = isScrolledNearBottom }
         if let scrollOwner { performanceContext.scrollOwner = scrollOwner }
+        if let displayedRowCount { performanceContext.displayedRowCount = displayedRowCount }
     }
 
     /// Snapshot the current observed context (called off-main in watchdog).
@@ -432,6 +438,7 @@ final class MainThreadWatchdog {
                 let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
                 let heavyOp = HeavyOperationTracker.snapshot() ?? ""
                 let mainStack = MainThreadStackCapture.capture()
+                let ctx = Self.snapshotPerformanceContext()
                 HermexLogger.shared.log(
                     type: "freeze",
                     durationMs: totalFrozen * 1000,
@@ -443,6 +450,12 @@ final class MainThreadWatchdog {
                         "stack": mainStack,
                         "memoryMB": memoryMB,
                         "heavyOp": heavyOp,
+                        "isStreaming": ctx.isStreaming,
+                        "messageCount": ctx.messageCount,
+                        "displayedRowCount": ctx.displayedRowCount,
+                        "isUserInteracting": ctx.isUserInteracting,
+                        "isScrolledNearBottom": ctx.isScrolledNearBottom,
+                        "scrollOwner": ctx.scrollOwner,
                     ]
                 )
             }
@@ -473,6 +486,7 @@ final class MainThreadWatchdog {
                         "heavyOp": heavyOp,
                         "isStreaming": ctx.isStreaming,
                         "messageCount": ctx.messageCount,
+                        "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
                         "scrollOwner": ctx.scrollOwner,

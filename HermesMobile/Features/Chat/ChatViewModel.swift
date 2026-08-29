@@ -401,6 +401,12 @@ final class ChatViewModel {
             recomputeCompressionReferenceCard()
         }
 
+        // Instrumentation-only: the rendered row count is the N in the
+        // O(N × markdown) freeze model — messageCount alone can't distinguish
+        // a 50-row transcript from a 5k-row one. Runs after every recompute
+        // branch, so the value tracks what is actually rendered.
+        MainThreadWatchdog.setPerformanceContext(displayedRowCount: displayedTranscriptMessages.count)
+
 #if DEBUG
         let churnReason = isTrailingContentChange
             ? "trailing"
