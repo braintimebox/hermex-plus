@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.3.4 — composer text cleared on streaming-path send
+
+### Fixed
+- **Sent message text stayed in the composer when the send went through the streaming path.** `sendDraftMessage` → `submitStreamingMessage` (used whenever a stream is already active) never cleared `draftMessage` — only `sendStandardMessage` did. After the first message started a stream, sending another one (or re-sending from a Share Sheet import while the previous response was still streaming) left the text in the field, looking like it "hung" after being sent. The draft is now cleared on success in `sendDraftMessage` itself (single point for both paths); on failure the text is preserved so nothing is lost.
+
 ## 3.3.3 — P0 freeze fix (equatable) + freeze telemetry (row count)
 
 ### Fixed (P0 — main-thread freeze on send / long chats)

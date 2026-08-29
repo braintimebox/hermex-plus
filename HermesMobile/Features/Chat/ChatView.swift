@@ -1942,6 +1942,12 @@ struct ChatView: View {
         }
 
         if didStart {
+            // Streaming path (submitStreamingMessage) never cleared draftMessage —
+            // only sendStandardMessage did. When a send lands while a stream is
+            // already active the text stayed in the composer after being sent
+            // ("shared message kept hanging after send"). Clear it on success,
+            // like the standard path; on failure the text is preserved below.
+            draftMessage = ""
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
             // Reading-first: after a successful send the composer collapses back
             // to the FAB and the response streams on the full screen.
