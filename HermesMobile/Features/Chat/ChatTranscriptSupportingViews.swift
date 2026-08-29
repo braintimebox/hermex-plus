@@ -163,6 +163,21 @@ struct ChatScrollObserver: UIViewRepresentable {
                 }
             ]
 
+            // P0 scroll-yank (3.3.5): the KVO above fires ONLY when
+            // contentOffset changes. The instant a finger lands on the scroll
+            // view (pan .began, offset still unchanged) is invisible to it, so
+            // ownership can stay `.app` through the next stream token → size
+            // change → `defaultScrollAnchor(.bottom, .sizeChanges)` yanks the
+            // viewport down mid-read ("листаю вверх — отбрасывает назад").
+            // Observing the pan gesture reports metrics at .began, flipping
+            // ownership to `.user` BEFORE the first token/layout. .changed is
+            // included so a pause mid-drag (offset frozen) cannot silently
+            // re-arm app ownership; reportMetrics' 8pt quantization + equality
+            // guard keep this cheap.
+            let pan = scrollView.panGestureRecognizer
+            pan.removeTarget(self, action: #selector(handlePanGesture(_:)))
+            pan.addTarget(self, action: #selector(handlePanGesture(_:)))
+
             // Programmatic scroll commands (the ↓ button) must pre-empt an active
             // deceleration, otherwise `ScrollViewProxy.scrollTo` is silently ignored
             // until the user's flick fully stops. Listen for the explicit request and
@@ -189,6 +204,9 @@ struct ChatScrollObserver: UIViewRepresentable {
 
         func detach() {
             observations.removeAll()
+            if let scrollView {
+                scrollView.panGestureRecognizer.removeTarget(self, action: #selector(handlePanGesture(_:)))
+            }
             if let observer = cancelDecelerationObserver {
                 NotificationCenter.default.removeObserver(observer)
                 cancelDecelerationObserver = nil
@@ -198,6 +216,22 @@ struct ChatScrollObserver: UIViewRepresentable {
             pendingMetrics = nil
             hasScheduledMetricDelivery = false
             scrollView = nil
+        }
+
+        /// Reports metrics the moment a finger lands on the scroll view.
+        /// The contentOffset/contentSize KVO only fires once the offset
+        /// actually moves, so without this hook scroll ownership stays `.app`
+        /// through the stream token that lands between touch and first
+        /// movement — and the `.sizeChanges` bottom anchor then yanks the
+        /// viewport down. Flipping ownership at pan `.began` closes that
+        /// window (see the attach comment above).
+        @objc private func handlePanGesture(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .began, .changed:
+                reportMetrics(delivery: .immediate)
+            default:
+                break
+            }
         }
 
         func reportMetrics(delivery: MetricDelivery) {
