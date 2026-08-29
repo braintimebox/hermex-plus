@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.3.5 — P0 scroll yank fix + P1 reload amplification fix
+
+### P0 — Scroll yank during streaming (viewport jumps back down)
+- **Root cause (validated EXP-Y1):** `ChatScrollObserver` only learned about user interaction through KVO on `contentOffset`/`contentSize`, which fire **only after the offset actually moves**. Between the finger landing (pan `.began`, offset still unchanged) and the first pixel of movement, scroll ownership stayed `.app`; the next stream token → size change → `defaultScrollAnchor(.bottom, for: .sizeChanges)` yanked the viewport down while the user was about to scroll up ("листаю вверх — отбрасывает назад"). Telemetry confirmed the window: `app→user` transitions arriving with `distanceFromBottom` of 2088–14720pt and `isInteracting=false` during streaming.
+- **Fix:** the scroll observer now also reports metrics on the scroll view's pan gesture at `.began`/`.changed` (`handlePanGesture`), so ownership flips to `.user` **the moment a finger lands**, before the first token/layout. `.changed` keeps a mid-drag pause (offset frozen) from silently re-arming app ownership; the existing 8pt quantization + equality guard keep this cheap. No changes to owner logic, follow channels, or animation.
+
+### P1 — Reload amplification (scene-active / `.done` reload → transcript-scale rebuild)
+- **Root cause:** `applyReloadedMessages` fallback (`messages = reloadedMessages`, equal-offset case) rebuilt every `ChatMessage` with fresh string buffers → synthesized-Equatable O(N×content) comparisons + per-row MarkdownUI re-parse + COW/retain storm on the MainActor (freeze family, 6/6 runtime correlation).
+- **Fix:** replaced the full replacement with `identityPreservingMerge(reloaded:current:)` — rows whose server copy is byte-identical keep the **existing** `ChatMessage` object (same string buffers), so `.equatable()` compares equal by buffer identity (O(1)) and SwiftUI skips their markdown-heavy bodies. Semantics preserved: server order wins; new/changed rows come from the server copy; deletions propagate; streaming row keeps its local object only while identical; merging/trimming paths unchanged.
+
+### Telemetry
+- Existing scroll-owner events already carry `distanceFromBottom`/`isStreaming`/`isInteracting`; freeze reports carry `messageCount`/`displayedRowCount`/context. No new metrics added — the open question (yank window) is answered by the existing ones.
+
 ## 3.3.4 — composer text cleared on streaming-path send
 
 ### Fixed
