@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.0 — new lightweight streaming render engine
+
+### New engine (core rebuild of the live path, not a patch)
+- **Root cause (verified):** while a long answer streams, `StreamingMarkdownChunkedView` rendered the assistant text through `MarkdownUI.Markdown`, which re-parses **and** re-lays-out the entire accumulated text through CoreText on the main thread on every `content` commit. Even after the incremental splitter (3.0.6), the 16ms commit debounce, and the 3.3.6 streaming cap, the live path still carried a CoreText re-layout that grows with reply length — the long-answer `CTLineCreate…` freeze driver.
+- **New engine (`LightStreamingRenderer`):** the live assistant text is now rendered as **plain `Text(verbatim:)`** — O(1) per token, no markdown re-parse, no per-glyph fade, no TimelineView frame clock, no CoreText layout on the hot path. Formatting (MarkdownUI) and math appear when the stream **settles** (`markdownContent` path), so the hot streaming path never pays for them while the settled view keeps the full Hermex look.
+- **What stays:** tool cards, reasoning block, sessions, pins, scheduled, scroll-ownership state machine, identity-preserving reload — untouched. This is a surgical swap of the single hot-path renderer, not a feature cut.
+- **Behavior note:** during a live stream the answer appears as plain text (fastest possible); it becomes formatted Markdown at completion. Short answers / settled messages are unchanged.
+
+## 3.3.6 — streaming Markdown cap (core lightening: O(1) on long live answers)
 ## 3.3.6 — streaming Markdown cap (core lightening: O(1) on long live answers)
 
 ### Core hot path

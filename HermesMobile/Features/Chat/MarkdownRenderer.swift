@@ -145,32 +145,10 @@ struct StreamingMarkdownRenderer: View {
 
     @ViewBuilder
     private var streamingMarkdownContent: some View {
-        let segments = MarkdownMathSegmenter.segments(in: displayedContent)
-
-        if segments.containsMath {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    switch segment {
-                    case .markdown(let markdown):
-                        if !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            StreamingMarkdownChunkedView(
-                                content: markdown,
-                                colorScheme: colorScheme,
-                                forceFadeDisabled: forceFadeDisabled
-                            )
-                        }
-                    case .displayMath(let latex):
-                        DisplayMathView(latex: latex)
-                    }
-                }
-            }
-        } else {
-            StreamingMarkdownChunkedView(
-                content: MarkdownMathFormatter.replacingInlineMath(in: displayedContent),
-                colorScheme: colorScheme,
-                forceFadeDisabled: forceFadeDisabled
-            )
-        }
+        // NEW ENGINE (3.4.0): plain-text live renderer. No MarkdownUI re-parse
+        // of the accumulated body per commit — O(1) per token. Formatting and
+        // math appear when the stream settles (markdownContent path).
+        LightStreamingRenderer(content: displayedContent)
     }
 
 }
@@ -1414,4 +1392,27 @@ private extension Logger {
         subsystem: Bundle.main.bundleIdentifier ?? "HermesMobile",
         category: "MarkdownRendering"
     )
+}
+
+
+// MARK: - LightStreamingRenderer (NEW ENGINE 3.4.0)
+// Lightweight live-streaming text renderer. Replaces StreamingMarkdownChunkedView
+// on the live path: MarkdownUI re-parses and re-lays-out the entire accumulated
+// text through CoreText on the main thread on every content commit — quadratic in
+// reply length, the verified long-answer CTLineCreate… freeze driver. This engine
+// renders the growing assistant text as plain Text(verbatim:): O(1) per token, no
+// re-parse, no per-glyph fade, no TimelineView frame clock. When the stream
+// settles, the outer MarkdownRenderer switches to the settled markdownContent
+// (MarkdownUI + math), so formatting appears on completion but the hot streaming
+// path never pays for it.
+struct LightStreamingRenderer: View {
+    let content: String
+
+    var body: some View {
+        Text(verbatim: content)
+            .font(.body)
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
