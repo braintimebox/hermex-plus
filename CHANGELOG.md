@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.3.2 — scheduled delete: row vanishes immediately (mirrors Send Now)
+
+### Fixed
+- **Deleted scheduled row stayed in the list until reopen/refresh.** `deleteLocal` staged `modelContext.delete(msg)` in the main context but never called `save()`. The `onDelete` closure then awaits the server DELETE and calls `loadMessages()` — a detached-context fetch that reads the *store*. The staged (unsaved) delete was invisible to that fetch, so the row came straight back into `@State messages`. Now `deleteLocal` persists (`try? modelContext.save()`) before removing the row from the in-memory snapshot — exactly the pattern `sendScheduledNow` already used for Send Now.
+
 ## 3.3.1 — scroll perf + Send Now + clarification layout
 
 ### Scroll performance (`e2c9c23`)

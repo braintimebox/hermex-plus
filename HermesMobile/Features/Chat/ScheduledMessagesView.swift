@@ -155,6 +155,16 @@ struct ScheduledMessagesView: View {
 
     private func deleteLocal(_ msg: PendingScheduledMessage) {
         modelContext.delete(msg)
+        // Persist NOW. Without save() the follow-up loadMessages() — a detached
+        // context fetch that reads the store — resurrects the row: the delete
+        // is only staged in the main context, and the store still contains it.
+        // This was the "deleted row stays in the list until reopen/refresh"
+        // bug. Mirrors sendScheduledNow (delete + save).
+        do {
+            try modelContext.save()
+        } catch {
+            print("[ScheduledMessage] local save after delete error: \(error.localizedDescription)")
+        }
         // Drop it from the in-memory list immediately so the UI reflects the
         // delete without waiting on the network round-trip to the scheduled
         // endpoint (deleteScheduledFromServer can be slow or hang, which used to
