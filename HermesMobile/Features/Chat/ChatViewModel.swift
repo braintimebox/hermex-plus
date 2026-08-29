@@ -1937,7 +1937,16 @@ final class ChatViewModel {
             return
         }
 
-        messages = reloadedMessages
+        // P1 reload-amplification (3.3.5): a full `messages = reloadedMessages`
+        // replacement (when merging/trimming don't apply — e.g. equal offsets)
+        // rebuilt every ChatMessage with fresh string buffers → O(N×content)
+        // synthesized-Equatable comparisons + per-row markdown re-parse on the
+        // MainActor (freeze family). Keep the EXISTING ChatMessage objects for
+        // rows whose server copy is identical, so unchanged rows keep their
+        // buffers: SwiftUI `.equatable()`/AttributeGraph see equal inputs and
+        // skip them. Changed/new rows take the server copy; order follows the
+        // server; deletions propagate (absent ids simply drop out).
+        messages = Self.identityPreservingMerge(reloaded: reloadedMessages, current: previousMessages)
         updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
     }
 
@@ -1956,6 +1965,38 @@ final class ChatViewModel {
         }
 
         return Array(currentMessages[..<overlapIndex]) + reloadedMessages
+    }
+
+    /// Fallback replace path that keeps EXISTING ChatMessage objects for rows
+    /// whose server copy is identical. Unchanged rows keep their string
+    /// buffers, so the synthesized Equatable in `.equatable()` compares equal
+    /// by buffer identity (O(1)) and SwiftUI skips their markdown-heavy
+    /// bodies — the full-replace path otherwise re-parses every row on the
+    /// MainActor after every reload (`.done`, foreground-reconnect).
+    /// Semantics: server order wins; new/changed rows come from `reloaded`;
+    /// rows missing from `reloaded` are dropped (deletion); an active
+    /// streaming row keeps its local object only while byte-identical.
+    nonisolated private static func identityPreservingMerge(
+        reloaded: [ChatMessage],
+        current: [ChatMessage]
+    ) -> [ChatMessage] {
+        guard !current.isEmpty else { return reloaded }
+
+        var currentByID: [String: ChatMessage] = [:]
+        currentByID.reserveCapacity(current.count)
+        for message in current {
+            currentByID[message.id] = message
+        }
+
+        var merged = reloaded
+        for index in merged.indices {
+            let reloadedMessage = merged[index]
+            if let existing = currentByID[reloadedMessage.id],
+               existing == reloadedMessage {
+                merged[index] = existing
+            }
+        }
+        return merged
     }
 
     /// Mid-session reloads (turn-end `.done`, the completion refresh, or a
