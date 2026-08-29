@@ -256,11 +256,22 @@ struct SessionListView: View {
                             initialAttachments: pendingSharedAttachments
                         )
                     )
+                    // Consume-once: the shared draft is routed to ONE destination.
+                    // Clear it here (mirrors the "Choose existing…" branch) so a
+                    // stale shared draft can't leak into a later New Chat.
+                    pendingSharedDraft = nil
+                    pendingSharedAttachments = []
                 }
                 Button("Choose existing…") {
                     showExistingSessionPicker = true
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) {
+                    // Abandoning the shared import: clear the staged draft so a
+                    // cancelled Share Sheet action can't leak into a later chat.
+                    pendingSharedDraft = nil
+                    pendingSharedAttachments = []
+                    sharedDraftForExistingSession = nil
+                }
             }
             .sheet(isPresented: $showExistingSessionPicker) {
                 ExistingSessionPicker(
@@ -446,6 +457,12 @@ struct SessionListView: View {
                 initialAttachments: initialAttachments
             )
                 .id(session.id)
+                // Consume-once: `sharedDraftForExistingSession` carries the
+                // shared (Share Sheet) draft routed into ONE destination chat.
+                // ChatView reads `initialDraft` once in its @State init, so
+                // clearing here after first appearance prevents the stale
+                // draft leaking into every OTHER session opened this launch.
+                .onAppear { sharedDraftForExistingSession = nil }
         case .newChat(let route):
             PendingNewChatView(
                 initialDraft: route.initialDraft,
