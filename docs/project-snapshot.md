@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 3257880 |
+| HEAD | ff98aae |
 | Версия | 3.4.1 |
 | Обновлено | 2026-08-30 |
 
 **Последние коммиты:**
 ```
+ff98aae chore: finalize snapshot — save diagnostics archive, gitignore pycache
 3257880 refactor: consolidate project state into ONE snapshot
 c949b8b docs: refresh HEAD in project metrics
 09a8952 docs: add project metrics (single source of truth for size/lineage/root-cause)
 7c2193d docs: update Download link to v3.4.1 (pipeline)
 0e48798 v3.4.1: default didAddMessages=true for non-pagination offset sync calls
-86c911e v3.4.1: pagination cursor fix (Load older / black transcript) + Kanban SSE reconnect
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
