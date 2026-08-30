@@ -157,7 +157,15 @@ struct ChatTranscriptView: View {
                             // with the app's follow path and blocks reading what
                             // is already rendered — the "chat is inaccessible
                             // while the agent thinks" behaviour.
-                            isStreaming: streamingAssistantMessageID != nil && liveReasoningText.isEmpty
+                            // Streaming render is OFF (answer delivered when
+                            // ready): the transcript content does NOT grow while
+                            // the agent works, so a `.bottom` size-change anchor
+                            // only glues the viewport on any incidental re-measure
+                            // (scroll tick, row re-measure, typing indicator) and
+                            // drives a main-thread re-layout storm — any post-send
+                            // scroll/↓ trigger froze dead. Keep the anchor inactive
+                            // while the answer is not streaming (no content growth).
+                            isStreaming: false
                         ),
                         for: .sizeChanges
                     )

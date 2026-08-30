@@ -1,3 +1,11 @@
+## 3.4.3 — post-send scroll/trigger freeze fix
+
+### Fixed — any trigger (scroll, ↓ button, token) right after sending froze the app (dead)
+
+- **Root cause:** after a send, the transcript sat in a streaming state with a `.bottom` `sizeChangeAnchor` while (since 3.4.2) the answer is no longer streamed in — so content does **not** grow during the response. The `.bottom` size-change anchor therefore glued the viewport on any incidental re-measure (a scroll tick, a row re-measuring, the typing indicator) instead of only on real content growth, driving a main-thread re-layout storm — hence "any trigger after send freezes." The streaming anchor was now inconsistent with the no-streaming (`deliver when ready`) change from 3.4.2.
+- **Fix:** keep the size-change anchor inactive while the answer is not streaming (no content growth), matching the thinking state. The viewport is no longer re-glued on incidental re-measures, so a post-send scroll/↓ is a plain scroll, not a layout storm.
+- **Effect:** the post-send state is stable — scrolling and the ↓ button no longer trigger a full re-layout freeze.
+
 ## 3.4.2 — no-streaming freeze fix (answer delivered when ready)
 
 ### Fixed — dead freeze on the main thread while an answer streams in (P0)

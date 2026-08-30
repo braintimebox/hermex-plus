@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | eb24b42 |
-| Версия | 3.4.2 |
+| HEAD | b59f343 |
+| Версия | 3.4.3 |
 | Обновлено | 2026-08-30 |
 
 **Последние коммиты:**
 ```
+b59f343 fix: @ViewBuilder on streaming bubble branch (mismatching view types)
+9b69b52 v3.4.2: no-streaming freeze fix — deliver answer when ready
 eb24b42 docs: refresh HEAD in snapshot
 ff98aae chore: finalize snapshot — save diagnostics archive, gitignore pycache
 3257880 refactor: consolidate project state into ONE snapshot
 c949b8b docs: refresh HEAD in project metrics
-09a8952 docs: add project metrics (single source of truth for size/lineage/root-cause)
-7c2193d docs: update Download link to v3.4.1 (pipeline)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -54,7 +54,7 @@ _Закрыто недавно:_ пагинация/load-older (3.4.1), Kanban S
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 193 | 199 | +6 |
-| Строк приложения | 71,094 | 74,203 | **+3,109** |
-| Строк Chat | 27,421 | 30,170 | +2,749 |
+| Строк приложения | 71,094 | 74,212 | **+3,118** |
+| Строк Chat | 27,421 | 30,179 | +2,758 |
 | ChatViewModel | 5,952 | 6,640 | +688 |
-| IPA | ~44 MB | 47 MB (HermesPlus-3.4.1.ipa) | +1–2 MB |
+| IPA | ~44 MB | 47 MB (HermesPlus-3.4.2.ipa) | +1–2 MB |
