@@ -812,19 +812,36 @@ private struct ChatTranscriptMessageRow: View {
     }
 
     private var bubble: some View {
-        MessageBubbleView(
-            message: message,
-            loadAttachmentImage: loadAttachmentImage,
-            loadAttachmentData: loadAttachmentData,
-            loadTranscriptMediaImage: loadTranscriptMediaImage,
-            loadTranscriptMediaData: loadTranscriptMediaData,
-            transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
-            localAttachmentPreviews: localAttachmentPreviews,
-            onPreviewAttachment: onPreviewAttachment,
-            onPreviewTranscriptMedia: onPreviewTranscriptMedia,
-            isStreaming: isStreaming,
-            liveTokensPerSecond: liveTokensPerSecond
-        )
+        // P0 freeze (verified driver: every incoming token changes
+        // `message.content`, breaks `ChatTranscriptMessageBlock.Equatable`, and
+        // forces a full transcript re-layout on the main thread — the
+        // `AttributeGraph + LayoutProxy.dimensions` dead-freeze family, freezes
+        // of 5+s that need a force-quit). While the assistant message is still
+        // streaming we render a STABLE typing indicator instead of the growing
+        // `MessageBubbleView`, so the row (and the transcript layout) never
+        // re-lays-out per token. The full formatted answer renders ONCE on
+        // stream completion (`isStreaming` → false), matching the
+        // "don't stream — deliver when ready" decision.
+        if isStreaming {
+            AssistantTypingIndicatorView()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(true)
+                .transition(.opacity)
+        } else {
+            MessageBubbleView(
+                message: message,
+                loadAttachmentImage: loadAttachmentImage,
+                loadAttachmentData: loadAttachmentData,
+                loadTranscriptMediaImage: loadTranscriptMediaImage,
+                loadTranscriptMediaData: loadTranscriptMediaData,
+                transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
+                localAttachmentPreviews: localAttachmentPreviews,
+                onPreviewAttachment: onPreviewAttachment,
+                onPreviewTranscriptMedia: onPreviewTranscriptMedia,
+                isStreaming: isStreaming,
+                liveTokensPerSecond: liveTokensPerSecond
+            )
+        }
     }
 }
 

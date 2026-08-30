@@ -1,3 +1,11 @@
+## 3.4.2 — no-streaming freeze fix (answer delivered when ready)
+
+### Fixed — dead freeze on the main thread while an answer streams in (P0)
+
+- **Root cause (verified):** every incoming token mutated `message.content` on the streaming assistant row, which broke `ChatTranscriptMessageBlock.Equatable`, so `.equatable()` re-evaluated its body and forced a full transcript re-layout on the main thread (`AttributeGraph + LayoutProxy.dimensions`) — the dead-freeze family (freezes of 5+s that require a force-quit). The growing `MessageBubbleView` also drove the O(N) fade/splitter hot path per token.
+- **Fix (deliver when ready):** while the assistant message is still streaming (`isStreaming == true`), the row renders a **stable typing indicator** (`AssistantTypingIndicatorView`) instead of the growing bubble. Layout never re-lays-out per token; the full formatted answer renders once on stream completion (`isStreaming` → false). Non-anchor / non-streaming rows already receive stable scoped live inputs and are skipped by `.equatable()`, so no O(N) markdown re-parse.
+- **Effect:** the live path no longer grows the transcript per token — no per-token re-layout, no fade/splitter O(N) work, no scroll-fight while printing.
+
 ## 3.4.1 — pagination cursor fix + Kanban SSE reconnect
 
 ### Fixed — "Load older does nothing" / black transcript with only the button (proven live)
