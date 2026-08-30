@@ -1455,16 +1455,17 @@ struct ChatView: View {
             },
             onLoadOlderMessages: {
                 let start = Date()
-                await loadOlderMessages()
+                let didAdd = await loadOlderMessages()
                 let elapsed = Date().timeIntervalSince(start) * 1000
                 if elapsed > 100 {
                     HermexLogger.shared.log(
                         type: "event",
                         screen: "ChatView",
                         message: "loadOlderMessages slow",
-                        extras: ["elapsedMs": Int(elapsed)]
+                        extras: ["elapsedMs": Int(elapsed), "didAdd": didAdd]
                     )
                 }
+                return didAdd
             },
             onUpdateScrollMetrics: updateScrollMetrics,
             onDismissKeyboard: handleTranscriptTap,
