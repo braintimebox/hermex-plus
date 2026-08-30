@@ -254,6 +254,14 @@ private struct ListenPlaybackBar: View {
 }
 
 struct ChatView: View {
+    // Telemetry: track body computation time across re-evaluations
+    private static let bodyTimingLock = NSLock()
+    private static var lastBodyTime: CFAbsoluteTime = 0
+    private static var bodyReevaluations = 0
+    
+    private static func bodyTimingStart() -> CFAbsoluteTime {
+        CFAbsoluteTimeGetCurrent()
+    }
     private let bottomAnchorID = "chat-bottom-anchor"
     private let transcriptMessageSpacing: CGFloat = 10
     private let transcriptBlockSpacing: CGFloat = 6
@@ -896,6 +904,8 @@ struct ChatView: View {
     }
 
     var body: some View {
+        // Telemetry: measure body computation time to detect layout bottlenecks
+        let _ = Self.bodyTimingStart()
         chatViewContent
             .sheet(item: $attachmentPreviewItem) { item in
                 ChatAttachmentPreviewView(
@@ -1444,7 +1454,17 @@ struct ChatView: View {
                 await loadMessages()
             },
             onLoadOlderMessages: {
+                let start = Date()
                 await loadOlderMessages()
+                let elapsed = Date().timeIntervalSince(start) * 1000
+                if elapsed > 100 {
+                    HermexLogger.shared.log(
+                        type: "event",
+                        screen: "ChatView",
+                        message: "loadOlderMessages slow",
+                        extras: ["elapsedMs": Int(elapsed)]
+                    )
+                }
             },
             onUpdateScrollMetrics: updateScrollMetrics,
             onDismissKeyboard: handleTranscriptTap,
@@ -2750,6 +2770,7 @@ struct ChatView: View {
             // Telemetry: prove the yank on-device — owner transitions with the
             // position metrics that caused them. Rate-limited naturally: the
             // equality guard above fires only on flips.
+            let ctx = MainThreadWatchdog.snapshotPerformanceContext()
             HermexLogger.shared.log(
                 type: "event",
                 screen: "ChatView",
@@ -2759,6 +2780,9 @@ struct ChatView: View {
                     "isStreaming": isStreaming,
                     "isInteracting": metrics.isUserInteracting,
                     "isNearBottom": isNearBottom,
+                    "messageCount": ctx.messageCount,
+                    "displayedRowCount": ctx.displayedRowCount,
+                    "scrollOwner": previous == .app ? "app" : "user",
                 ]
             )
         }

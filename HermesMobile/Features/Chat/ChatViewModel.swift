@@ -350,6 +350,8 @@ final class ChatViewModel {
     }
 
     private func recomputeDisplayedTranscriptMessages() {
+        HeavyOperationTracker.begin("recomputeDisplayedTranscriptMessages")
+        defer { HeavyOperationTracker.end() }
         // Incremental fast path (hot, per-token): the streaming assistant message
         // is ALWAYS the last element (ensureStreamingAssistantMessage appends it),
         // so "content-only growth" is detectable in O(1) from the previous tail
@@ -1486,9 +1488,17 @@ final class ChatViewModel {
         let renderedCacheFirst = !cacheFirstPlaceholder.isEmpty
 
         do {
+            let networkStart = Date()
             let response = try await clientSessionWithRetry(sessionID: sessionID)
+            let networkMs = Int(Date().timeIntervalSince(networkStart) * 1000)
             let session = response.session
             let loadedMessages = session?.messages ?? []
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "loadMessages network",
+                extras: ["networkMs": networkMs, "messageCount": loadedMessages.count]
+            )
             let loadedActiveStreamID = session?.activeStreamId?.trimmingCharacters(in: .whitespacesAndNewlines)
             let reloadedMessages: [ChatMessage]
             if let modelContext {
@@ -1761,6 +1771,8 @@ final class ChatViewModel {
 
     @discardableResult
     func loadOlderMessages(modelContext: ModelContext? = nil) async -> Bool {
+        HeavyOperationTracker.begin("loadOlderMessages")
+        defer { HeavyOperationTracker.end() }
         guard let sessionID else {
             errorMessage = String(localized: "The server did not provide a session ID.")
             return false
@@ -1958,6 +1970,8 @@ final class ChatViewModel {
         previousMessages: [ChatMessage],
         previousMessagesOffset: Int
     ) {
+        HeavyOperationTracker.begin("applyReloadedMessages")
+        defer { HeavyOperationTracker.end() }
 #if DEBUG
         debugTagIdentitySource("reload")
 #endif
@@ -1999,7 +2013,17 @@ final class ChatViewModel {
         // buffers: SwiftUI `.equatable()`/AttributeGraph see equal inputs and
         // skip them. Changed/new rows take the server copy; order follows the
         // server; deletions propagate (absent ids simply drop out).
+        let mergeStart = Date()
         messages = Self.identityPreservingMerge(reloaded: reloadedMessages, current: previousMessages)
+        let mergeMs = Int(Date().timeIntervalSince(mergeStart) * 1000)
+        if mergeMs > 50 {
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "identityPreservingMerge slow",
+                extras: ["mergeMs": mergeMs, "messageCount": messages.count]
+            )
+        }
         updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
     }
 

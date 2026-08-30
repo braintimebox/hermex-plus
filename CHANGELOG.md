@@ -1119,3 +1119,12 @@ the rhythmic ~30 s idle stutter:
 
 ### Forked from
 - [Hermex](https://github.com/uzairansaruzi/hermex) — native iOS client for Hermes Agent
+# Changelog
+
+## v3.4.5
+
+- **Telemetry**: layout timing (recomputeDisplayedTranscriptMessages, loadOlderMessages, applyReloadedMessages)
+- **Telemetry**: network request timing (loadMessages), identityPreservingMerge timing
+- **Telemetry**: scroll owner transitions with messageCount/displayedRowCount context
+- **Telemetry**: body computation timing in ChatView
+- **Telemetry**: loadOlderMessages slow path logging (>100ms)
