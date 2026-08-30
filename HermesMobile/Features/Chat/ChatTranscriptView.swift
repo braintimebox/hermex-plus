@@ -335,9 +335,7 @@ struct ChatTranscriptView: View {
                 onSave: onSave,
                 onPin: onPin,
                 isMessagePinned: isMessagePinned,
-                olderMessagesButton: { proxy in
-                    AnyView(olderMessagesButton(proxy: proxy))
-                },
+                olderMessagesButton: AnyView(olderMessagesButton(proxy: proxy)),
                 liveResponseBlocks: AnyView(liveResponseBlocks),
                 inlineClarificationCard: AnyView(inlineClarificationCard
                     .onGeometryChange(for: CGFloat.self) { proxy in
@@ -966,7 +964,7 @@ private struct TranscriptMessageContent: View, Equatable {
     let onSave: (MessageActionContext) -> Void
     let onPin: ((MessageActionContext) -> Void)?
     let isMessagePinned: (String) -> Bool
-    let olderMessagesButton: (ScrollViewProxy) -> AnyView
+    let olderMessagesButton: AnyView
     let liveResponseBlocks: AnyView
     let inlineClarificationCard: AnyView
     let typingIndicator: AnyView
