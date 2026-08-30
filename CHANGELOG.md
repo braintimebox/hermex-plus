@@ -1,3 +1,14 @@
+## 3.4.5 — telemetry: layout timing, scroll context
+
+### Added — observability for freeze root-cause analysis
+
+- **HeavyOperationTracker** wrapped around `recomputeDisplayedTranscriptMessages`, `loadOlderMessages`, `applyReloadedMessages` — freeze reports now carry the exact operation that was in flight.
+- **Network timing** in `loadMessages` — `loadMessages network` event with `networkMs` + `messageCount` to distinguish slow network from slow layout.
+- **identityPreservingMerge timing** — logs when merge exceeds 50ms (O(N×content) red flag).
+- **Scroll owner transitions** enriched with `messageCount`, `displayedRowCount`, `scrollOwner` — proves the yank scenario with concrete N.
+- **loadOlderMessages slow** — logs when the full load cycle exceeds 100ms.
+- **ChatView body timing** — `bodyTimingStart()` captured on every body evaluation (foundation for future frame-time correlation).
+
 ## 3.4.4 — freeze stack write-through observability
 
 ### Fixed — dead freezes were invisible (no telemetry from force-quit sessions)
@@ -40,21 +51,6 @@
 - New event `transcript empty guard fired` (messageCount / messagesOffset / hasOlderMessages) — catches residual empty-transcript cases if the pagination fixes miss one.
 - Existing `load older` event already carries beforeOffset/fetchedCount/didAddMessages/resolvedOffset/hasOlderMessages — will show `didAddMessages=true` on the same chats after this fix.
 
-# Changelog
-
-## 3.4.5 — telemetry: layout timing, scroll context
-
-### Added — observability for freeze root-cause analysis
-
-- **HeavyOperationTracker** wrapped around `recomputeDisplayedTranscriptMessages`, `loadOlderMessages`, `applyReloadedMessages` — freeze reports now carry the exact operation that was in flight.
-- **Network timing** in `loadMessages` — `loadMessages network` event with `networkMs` + `messageCount` to distinguish slow network from slow layout.
-- **identityPreservingMerge timing** — logs when merge exceeds 50ms (O(N×content) red flag).
-- **Scroll owner transitions** enriched with `messageCount`, `displayedRowCount`, `scrollOwner` — proves the yank scenario with concrete N.
-- **loadOlderMessages slow** — logs when the full load cycle exceeds 100ms.
-- **ChatView body timing** — `bodyTimingStart()` captured on every body evaluation (foundation for future frame-time correlation).
-
-
-## 3.4.0 — new lightweight streaming render engine
 
 ### New engine (core rebuild of the live path, not a patch)
 - **Root cause (verified):** while a long answer streams, `StreamingMarkdownChunkedView` rendered the assistant text through `MarkdownUI.Markdown`, which re-parses **and** re-lays-out the entire accumulated text through CoreText on the main thread on every `content` commit. Even after the incremental splitter (3.0.6), the 16ms commit debounce, and the 3.3.6 streaming cap, the live path still carried a CoreText re-layout that grows with reply length — the long-answer `CTLineCreate…` freeze driver.
