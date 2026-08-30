@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | c949b8b |
+| HEAD | 3257880 |
 | Версия | 3.4.1 |
 | Обновлено | 2026-08-30 |
 
 **Последние коммиты:**
 ```
+3257880 refactor: consolidate project state into ONE snapshot
 c949b8b docs: refresh HEAD in project metrics
 09a8952 docs: add project metrics (single source of truth for size/lineage/root-cause)
 7c2193d docs: update Download link to v3.4.1 (pipeline)
 0e48798 v3.4.1: default didAddMessages=true for non-pagination offset sync calls
 86c911e v3.4.1: pagination cursor fix (Load older / black transcript) + Kanban SSE reconnect
-334c1b6 docs: update Download link to v3.4.0 (pipeline)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -34,6 +34,13 @@ c949b8b docs: refresh HEAD in project metrics
 4. 🟡 **God-object ChatViewModel (~6.6k строк @MainActor)** — архитектурный риск.
    Расщепление = рефакторинг (EXP-4), не патч.
 5. 🟡 **Сетевые таймауты/отмена** — часть вызовов без явного таймаута.
+6. 🟡 **Аватарка не восстанавливается после переустановки** — требует СЕРВЕРНОЙ
+   синхронизации (эндпоинт avatar в hermes-webui + загрузка/сохранение). Клиентский
+   фикс невозможен (данные в Keychain-блобе стираются при reinstall через SideStore).
+   Отложено в отдельный заход — надо серверное изменение.
+7. 🟡 **«Верх-вниз при думании»** — sizeChangeAnchor активен при подключённом стриме,
+   но текст не растёт → плавное автоколебание. Нужен сигнал «контент реально
+   печатается». Hot-path стриминга — не править вслепую. Отложено.
 
 _Закрыто недавно:_ пагинация/load-older (3.4.1), Kanban SSE (3.4.1),
 стрим-фриз хот-пути (3.4.0), streaming markdown cap (3.3.6), scroll yank (3.3.5).
