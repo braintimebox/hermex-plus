@@ -831,9 +831,15 @@ private struct ChatTranscriptMessageRow: View {
         // stream completion (`isStreaming` → false), matching the
         // "don't stream — deliver when ready" decision.
         if isStreaming {
-            AssistantTypingIndicatorView()
+            // P0 (3.4.2→3.4.6): replaced AssistantTypingIndicatorView with
+            // LightStreamingRenderer — plain Text(verbatim:) O(1) per token.
+            // The user sees text appearing in real-time during streaming instead
+            // of static dots. Markdown formatting appears once the stream settles
+            // (isStreaming → false → MessageBubbleView → MarkdownRenderer).
+            // Equatable fixes (3.3.3 hasActiveStream, 3.4.6 toolCallGroups) ensure
+            // settled rows skip re-evaluation even as the streaming row updates.
+            LightStreamingRenderer(content: message.content ?? "")
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityHidden(true)
                 .transition(.opacity)
         } else {
             MessageBubbleView(

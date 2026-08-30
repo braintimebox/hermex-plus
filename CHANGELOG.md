@@ -1,3 +1,11 @@
+## 3.4.7 — streaming text: LightStreamingRenderer (visible progress during generation)
+
+### Changed — user sees text appearing during streaming instead of static dots
+
+- **What:** streaming assistant row now renders `LightStreamingRenderer` (`Text(verbatim:)`, O(1) per token) instead of `AssistantTypingIndicatorView` (static dots). The user sees the answer appearing in real-time during generation.
+- **Why safe:** equatable fixes (3.3.3 `hasActiveStream`, 3.4.6 `reasoningGroups`+`toolCallGroups`) ensure settled rows skip re-evaluation. Only the streaming row (identified by `streamingAssistantMessageID`) re-evaluates per token. Markdown formatting appears once the stream settles (`isStreaming → false → MessageBubbleView → MarkdownRenderer`).
+- **Effect:** streaming feels responsive — text grows in the bubble as the agent generates. No freeze from per-token re-layout on settled rows.
+
 ## 3.4.6 — P0 freeze fix: exclude reasoningGroups + toolCallGroups from equatable
 
 ### Fixed — tool call / reasoning completion froze the chat (AttributeGraph AGGraphGetValue)
