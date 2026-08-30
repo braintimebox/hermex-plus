@@ -286,88 +286,72 @@ struct ChatTranscriptView: View {
         // non-lazy 1pt marker at the content's true end is always mounted and
         // always resolvable.
         VStack(spacing: 0) {
-            LazyVStack(spacing: transcriptMessageSpacing) {
-                olderMessagesButton(proxy: proxy)
-
-                if let compressionReferenceCard, compressionReferenceCard.afterRenderID == nil {
-                    compressionReferenceCardView(compressionReferenceCard)
-                }
-
-                ForEach(displayedTranscriptMessages) { transcriptMessage in
-                    // Scope live-streaming state to the row that actually displays it.
-                    // Non-anchor / non-streaming rows receive stable empty/nil values so
-                    // their inputs don't change on every ~16ms flush; combined with the
-                    // `.equatable()` wrapper below, SwiftUI then skips re-evaluating their
-                    // (markdown-heavy) bodies while a response streams in.
-                    let isReasoningAnchor = reasoningAnchorMessageID == transcriptMessage.anchorID
-                    let isToolCallAnchor = toolCallAnchorMessageID == transcriptMessage.anchorID
-                    let isStreamingRow = streamingAssistantMessageID != nil
-                        && transcriptMessage.message.messageId == streamingAssistantMessageID
-
-                    ChatTranscriptMessageBlock(
-                        transcriptMessage: transcriptMessage,
-                        transcriptBlockSpacing: transcriptBlockSpacing,
-                        showsThinkingAndToolCards: showsThinkingAndToolCards,
-                        reasoningGroups: reasoningGroups,
-                        toolCallGroups: completedToolCallGroupsForAnchor(transcriptMessage.anchorID),
-                        liveReasoningText: isReasoningAnchor ? liveReasoningText : "",
-                        reasoningAnchorMessageID: isReasoningAnchor ? reasoningAnchorMessageID : nil,
-                        liveToolCalls: isToolCallAnchor ? liveToolCalls : [],
-                        toolCallAnchorMessageID: isToolCallAnchor ? toolCallAnchorMessageID : nil,
-                        streamingAssistantMessageID: isStreamingRow ? streamingAssistantMessageID : nil,
-                        liveTokensPerSecond: isStreamingRow ? liveTokensPerSecond : nil,
-                        localAttachmentPreviews: localAttachmentPreviews[transcriptMessage.message.id],
-                        listeningMessageID: listeningMessageID,
-                        isViewingCachedData: isViewingCachedData,
-                        hasActiveStream: activeStreamID != nil,
-                        isRegeneratingMessage: isRegeneratingMessage,
-                        isEditingMessage: isEditingMessage,
-                        isForkingMessage: isForkingMessage,
-                        loadAttachmentImage: loadAttachmentImage,
-                        loadAttachmentData: loadAttachmentData,
-                        loadTranscriptMediaImage: loadTranscriptMediaImage,
-                        loadTranscriptMediaData: loadTranscriptMediaData,
-                        transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
-                        actionContext: actionContext,
-                        shouldRenderMessageRow: shouldRenderMessageRow,
-                        onPreviewAttachment: onPreviewAttachment,
-                        onPreviewTranscriptMedia: onPreviewTranscriptMedia,
-                        onToggleListening: onToggleListening,
-                        onSelectText: onSelectText,
-                        onRegenerate: onRegenerate,
-                        onEdit: onEdit,
-                        onFork: onFork,
-                        onCopy: onCopy,
-                        onReply: onReply,
-                        onForward: onForward,
-                        onSave: onSave,
-                        onPin: onPin,
-                        isMessagePinned: isMessagePinned
-                    )
-                    .equatable()
-                    // ForEach identity uses TranscriptMessage.id (messageId ?? renderID):
-                    // unique AND stable, avoiding both the anchorID duplicate-id bug
-                    // (2.4.5 regression) and the full-list re-diff of positional renderID.
-                    .id(transcriptMessage.id)
-
-                    if let compressionReferenceCard,
-                       compressionReferenceCard.afterRenderID == transcriptMessage.renderID {
-                        compressionReferenceCardView(compressionReferenceCard)
-                    }
-                }
-
-                transcriptLooseBlocks
-                liveResponseBlocks
-                inlineClarificationCard
+            // P0 ROOT CAUSE FIX (3.4.8): The LazyVStack + ForEach content is wrapped
+            // in an EquatableView so scroll/composer state changes in ChatView do NOT
+            // trigger Markdown re-layout for N visible rows. Without this, every scroll
+            // owner change, composer height update, or near-bottom flip re-evaluated
+            // ChatTranscriptView body → ForEach created N ChatTranscriptMessageBlock
+            // structs → SwiftUICore re-laid-out all visible Markdown views → 2-4s freeze.
+            // EquatableView prevents body re-evaluation when content inputs are stable.
+            EquatableView(content: TranscriptMessageContent(
+                displayedTranscriptMessages: displayedTranscriptMessages,
+                compressionReferenceCard: compressionReferenceCard,
+                reasoningGroups: reasoningGroups,
+                completedToolCallGroupsForAnchor: completedToolCallGroupsForAnchor,
+                liveReasoningText: liveReasoningText,
+                reasoningAnchorMessageID: reasoningAnchorMessageID,
+                liveToolCalls: liveToolCalls,
+                toolCallAnchorMessageID: toolCallAnchorMessageID,
+                streamingAssistantMessageID: streamingAssistantMessageID,
+                liveTokensPerSecond: liveTokensPerSecond,
+                activeStreamID: activeStreamID,
+                localAttachmentPreviews: localAttachmentPreviews,
+                listeningMessageID: listeningMessageID,
+                isViewingCachedData: isViewingCachedData,
+                isRegeneratingMessage: isRegeneratingMessage,
+                isEditingMessage: isEditingMessage,
+                isForkingMessage: isForkingMessage,
+                showsThinkingAndToolCards: showsThinkingAndToolCards,
+                showsCompressingStatus: showsCompressingStatus,
+                transcriptBlockSpacing: transcriptBlockSpacing,
+                transcriptMessageSpacing: transcriptMessageSpacing,
+                actionContext: actionContext,
+                shouldRenderMessageRow: shouldRenderMessageRow,
+                loadAttachmentImage: loadAttachmentImage,
+                loadAttachmentData: loadAttachmentData,
+                loadTranscriptMediaImage: loadTranscriptMediaImage,
+                loadTranscriptMediaData: loadTranscriptMediaData,
+                transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
+                onPreviewAttachment: onPreviewAttachment,
+                onPreviewTranscriptMedia: onPreviewTranscriptMedia,
+                onToggleListening: onToggleListening,
+                onSelectText: onSelectText,
+                onRegenerate: onRegenerate,
+                onEdit: onEdit,
+                onFork: onFork,
+                onCopy: onCopy,
+                onReply: onReply,
+                onForward: onForward,
+                onSave: onSave,
+                onPin: onPin,
+                isMessagePinned: isMessagePinned,
+                olderMessagesButton: { proxy in
+                    AnyView(olderMessagesButton(proxy: proxy))
+                },
+                liveResponseBlocks: AnyView(liveResponseBlocks),
+                inlineClarificationCard: AnyView(inlineClarificationCard
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.height
                     } action: { height in
                         onClarificationCardHeightChange(height)
-                    }
-                typingIndicator
-                turnChangesCard
-                inlineCommitButton
-            }
+                    }),
+                typingIndicator: AnyView(typingIndicator),
+                turnChangesCard: AnyView(turnChangesCard),
+                inlineCommitButton: AnyView(inlineCommitButton),
+                transcriptLooseBlocks: AnyView(transcriptLooseBlocks),
+                bottomAnchorID: bottomAnchorID,
+                compressionReferenceCardView: { card in AnyView(compressionReferenceCardView(card)) }
+            ))
 
             Color.clear
                 .frame(height: 1)
@@ -932,4 +916,157 @@ private struct LoadOlderMessagesButton: View {
         .frame(maxWidth: .infinity)
         .accessibilityLabel(isLoading ? String(localized: "Loading older messages") : String(localized: "Load older messages"))
     }
+}\n
+
+// MARK: - P0 ROOT CAUSE FIX (3.4.8): TranscriptMessageContent
+// Extracted from ChatTranscriptView to prevent scroll/composer state changes
+// from triggering N x Markdown re-layout. This struct receives ONLY content-
+// relevant props and has custom Equatable that skips scroll/chrome fields.
+
+private struct TranscriptMessageContent: View, Equatable {
+    let displayedTranscriptMessages: [TranscriptMessage]
+    let compressionReferenceCard: CompressionReferenceCard?
+    let reasoningGroups: [ReasoningGroup]
+    let completedToolCallGroupsForAnchor: (String?) -> [ToolCallGroup]
+    let liveReasoningText: String
+    let reasoningAnchorMessageID: String?
+    let liveToolCalls: [ToolCall]
+    let toolCallAnchorMessageID: String?
+    let streamingAssistantMessageID: String?
+    let liveTokensPerSecond: Double?
+    let activeStreamID: String?
+    let localAttachmentPreviews: [String: [String: Data]]
+    let listeningMessageID: String?
+    let isViewingCachedData: Bool
+    let isRegeneratingMessage: Bool
+    let isEditingMessage: Bool
+    let isForkingMessage: Bool
+    let showsThinkingAndToolCards: Bool
+    let showsCompressingStatus: Bool
+    let transcriptBlockSpacing: CGFloat
+    let transcriptMessageSpacing: CGFloat
+    let actionContext: (ChatMessage, Int) -> MessageActionContext?
+    let shouldRenderMessageRow: (ChatMessage) -> Bool
+    let loadAttachmentImage: (String) async -> Data?
+    let loadAttachmentData: (String) async -> Data?
+    let loadTranscriptMediaImage: (TranscriptMediaReference) async -> Data?
+    let loadTranscriptMediaData: (TranscriptMediaReference) async -> Data?
+    let transcriptMediaCacheNamespace: String
+    let onPreviewAttachment: (MessageAttachment, Data?) -> Void
+    let onPreviewTranscriptMedia: (TranscriptMediaReference) -> Void
+    let onToggleListening: (MessageActionContext) -> Void
+    let onSelectText: (MessageActionContext) -> Void
+    let onRegenerate: (MessageActionContext) -> Void
+    let onEdit: (MessageActionContext) -> Void
+    let onFork: (MessageActionContext) -> Void
+    let onCopy: (MessageActionContext) -> Void
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
+    let onPin: ((MessageActionContext) -> Void)?
+    let isMessagePinned: (String) -> Bool
+    let olderMessagesButton: (ScrollViewProxy) -> AnyView
+    let liveResponseBlocks: AnyView
+    let inlineClarificationCard: AnyView
+    let typingIndicator: AnyView
+    let turnChangesCard: AnyView
+    let inlineCommitButton: AnyView
+    let transcriptLooseBlocks: AnyView
+    let bottomAnchorID: String
+    let compressionReferenceCardView: (CompressionReferenceCard) -> AnyView
+
+    static func == (lhs: TranscriptMessageContent, rhs: TranscriptMessageContent) -> Bool {
+        lhs.displayedTranscriptMessages == rhs.displayedTranscriptMessages &&
+            lhs.compressionReferenceCard == rhs.compressionReferenceCard &&
+            lhs.streamingAssistantMessageID == rhs.streamingAssistantMessageID &&
+            lhs.activeStreamID == rhs.activeStreamID &&
+            lhs.liveReasoningText == rhs.liveReasoningText &&
+            lhs.reasoningAnchorMessageID == rhs.reasoningAnchorMessageID &&
+            lhs.toolCallAnchorMessageID == rhs.toolCallAnchorMessageID &&
+            lhs.isViewingCachedData == rhs.isViewingCachedData &&
+            lhs.isRegeneratingMessage == rhs.isRegeneratingMessage &&
+            lhs.isEditingMessage == rhs.isEditingMessage &&
+            lhs.isForkingMessage == rhs.isForkingMessage &&
+            lhs.listeningMessageID == rhs.listeningMessageID &&
+            lhs.showsThinkingAndToolCards == rhs.showsThinkingAndToolCards &&
+            lhs.showsCompressingStatus == rhs.showsCompressingStatus
+    }
+
+    var body: some View {
+        LazyVStack(spacing: transcriptMessageSpacing) {
+            olderMessagesButton
+
+            if let compressionReferenceCard, compressionReferenceCard.afterRenderID == nil {
+                compressionReferenceCardView(compressionReferenceCard)
+            }
+
+            ForEach(displayedTranscriptMessages) { transcriptMessage in
+                let isReasoningAnchor = reasoningAnchorMessageID == transcriptMessage.anchorID
+                let isToolCallAnchor = toolCallAnchorMessageID == transcriptMessage.anchorID
+                let isStreamingRow = streamingAssistantMessageID != nil
+                    && transcriptMessage.message.messageId == streamingAssistantMessageID
+
+                ChatTranscriptMessageBlock(
+                    transcriptMessage: transcriptMessage,
+                    transcriptBlockSpacing: transcriptBlockSpacing,
+                    showsThinkingAndToolCards: showsThinkingAndToolCards,
+                    reasoningGroups: reasoningGroups,
+                    toolCallGroups: completedToolCallGroupsForAnchor(transcriptMessage.anchorID),
+                    liveReasoningText: isReasoningAnchor ? liveReasoningText : "",
+                    reasoningAnchorMessageID: isReasoningAnchor ? reasoningAnchorMessageID : nil,
+                    liveToolCalls: isToolCallAnchor ? liveToolCalls : [],
+                    toolCallAnchorMessageID: isToolCallAnchor ? toolCallAnchorMessageID : nil,
+                    streamingAssistantMessageID: isStreamingRow ? streamingAssistantMessageID : nil,
+                    liveTokensPerSecond: isStreamingRow ? liveTokensPerSecond : nil,
+                    localAttachmentPreviews: localAttachmentPreviews[transcriptMessage.message.id],
+                    listeningMessageID: listeningMessageID,
+                    isViewingCachedData: isViewingCachedData,
+                    hasActiveStream: activeStreamID != nil,
+                    isRegeneratingMessage: isRegeneratingMessage,
+                    isEditingMessage: isEditingMessage,
+                    isForkingMessage: isForkingMessage,
+                    loadAttachmentImage: loadAttachmentImage,
+                    loadAttachmentData: loadAttachmentData,
+                    loadTranscriptMediaImage: loadTranscriptMediaImage,
+                    loadTranscriptMediaData: loadTranscriptMediaData,
+                    transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
+                    actionContext: actionContext,
+                    shouldRenderMessageRow: shouldRenderMessageRow,
+                    onPreviewAttachment: onPreviewAttachment,
+                    onPreviewTranscriptMedia: onPreviewTranscriptMedia,
+                    onToggleListening: onToggleListening,
+                    onSelectText: onSelectText,
+                    onRegenerate: onRegenerate,
+                    onEdit: onEdit,
+                    onFork: onFork,
+                    onCopy: onCopy,
+                    onReply: onReply,
+                    onForward: onForward,
+                    onSave: onSave,
+                    onPin: onPin,
+                    isMessagePinned: isMessagePinned
+                )
+                .equatable()
+                .id(transcriptMessage.id)
+
+                if let compressionReferenceCard,
+                   compressionReferenceCard.afterRenderID == transcriptMessage.renderID {
+                    compressionReferenceCardView(compressionReferenceCard)
+                }
+            }
+
+            transcriptLooseBlocks
+            liveResponseBlocks
+            inlineClarificationCard
+            typingIndicator
+            turnChangesCard
+            inlineCommitButton
+        }
+
+        Color.clear
+            .frame(height: 1)
+            .id(bottomAnchorID)
+            .allowsHitTesting(false)
+    }
 }
+
