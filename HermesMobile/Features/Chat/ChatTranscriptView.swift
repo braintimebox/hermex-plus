@@ -916,7 +916,8 @@ private struct LoadOlderMessagesButton: View {
         .frame(maxWidth: .infinity)
         .accessibilityLabel(isLoading ? String(localized: "Loading older messages") : String(localized: "Load older messages"))
     }
-}\n
+}
+
 
 // MARK: - P0 ROOT CAUSE FIX (3.4.8): TranscriptMessageContent
 // Extracted from ChatTranscriptView to prevent scroll/composer state changes

@@ -1,3 +1,11 @@
+## 3.4.8 — P0 root cause fix: TranscriptMessageContent (scroll/layout isolation)
+
+### Fixed — scroll/composer events triggered N× Markdown re-layout → 2-4s freeze
+
+- **Root cause (verified):** `ChatTranscriptView` received scroll/chrome props (`scrollOwner`, `isScrolledNearBottom`, `isAutoScrollPaused`, `showsScrollToBottomButton`) that changed on every scroll interaction. Each change re-evaluated `ChatTranscriptView` body → `ForEach` over N rows → `SwiftUICore` re-laid-out ALL visible `Markdown(content)` views → 2-4s freeze. Confirmed by 14 freeze/stutter events — all with `isScrolledNearBottom=False`, `scrollOwner=user`, stacks in SwiftUICore layout internals.
+- **Fix:** extracted `LazyVStack` + `ForEach` content into `TranscriptMessageContent` — a separate `Equatable` struct that receives ONLY content-relevant props (messages, streaming state, tool groups). Scroll/chrome props stay in `ChatTranscriptView` but do NOT reach the content struct. When scroll state changes → `ChatTranscriptView` body re-evaluates → but `TranscriptMessageContent.Equatable` returns `true` (content unchanged) → SwiftUI skips entire `LazyVStack` → no Markdown re-layout → no freeze.
+- **Effect:** scroll interactions no longer trigger transcript re-layout. Markdown rows are only re-laid-out when their actual content changes (new message, streaming token, tool call update).
+
 ## 3.4.7 — streaming text: LightStreamingRenderer (visible progress during generation)
 
 ### Changed — user sees text appearing during streaming instead of static dots
