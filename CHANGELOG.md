@@ -1,3 +1,11 @@
+## 3.4.4 — freeze stack write-through observability
+
+### Fixed — dead freezes were invisible (no telemetry from force-quit sessions)
+
+- **Root cause:** every 3.4.2/3.4.3 session ended in a force-quit from the freeze BEFORE the buffered `HermexLogger` batch could ship, so ~0 freeze events reached the log and the freeze's location was never captured — the agent was diagnosing blind.
+- **Fix:** the main-thread freeze stack is now persisted to disk at capture time (survives a force-quit) and included in the "previous run died frozen" report on the next launch. The next dead freeze reports its own exact stack — no more guessing.
+- **Purpose:** this is the observability fix (snapshot #2), the blocker for pinpointing the freeze (snapshot #1). It does NOT fix the freeze itself — it makes the NEXT one diagnosable.
+
 ## 3.4.3 — post-send scroll/trigger freeze fix
 
 ### Fixed — any trigger (scroll, ↓ button, token) right after sending froze the app (dead)

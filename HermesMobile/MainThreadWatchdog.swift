@@ -328,6 +328,11 @@ final class MainThreadWatchdog {
     /// marker survives — the next launch logs "previous run died frozen", which
     /// is hard proof of a dead hang (a 3s report alone proves nothing).
     private static let frozenMarkerKey = "hermex.watchdog.frozenSince"
+    /// Persisted FREEZE STACK, written at freeze time so it survives a force-quit.
+    /// Read on the next launch and included in the "died frozen" report — the
+    /// dead-freeze location is no longer lost with the unsent log batch (the
+    /// reason ~0 freeze events ship from force-quit-happy sessions).
+    private static let frozenStackKey = "hermex.watchdog.frozenStack"
 
     private init() {}
 
@@ -348,13 +353,18 @@ final class MainThreadWatchdog {
         // lifecycle callback. Log it on THIS launch so a dead hang becomes a
         // recorded fact with a frozen-since timestamp, then clear the marker.
         if let frozenTs = UserDefaults.standard.object(forKey: Self.frozenMarkerKey) as? Double {
+            let frozenStack = UserDefaults.standard.string(forKey: Self.frozenStackKey)
             HermexLogger.shared.log(
                 type: "freeze",
                 screen: "startup",
                 message: "previous run died while main thread was frozen (force-quit) — frozen since epoch \(Int(frozenTs)), \(Int(Date().timeIntervalSince1970 - frozenTs))s before this launch",
-                extras: ["previousRunFrozenSince": frozenTs]
+                extras: [
+                    "previousRunFrozenSince": frozenTs,
+                    "stack": frozenStack ?? ""
+                ]
             )
             UserDefaults.standard.removeObject(forKey: Self.frozenMarkerKey)
+            UserDefaults.standard.removeObject(forKey: Self.frozenStackKey)
         }
 
         let queue = DispatchQueue(label: "hermex.watchdog", qos: .utility)
@@ -438,6 +448,10 @@ final class MainThreadWatchdog {
                 let memoryMB = MemoryFootprint.currentBytes().map { Int64($0 / 1_048_576) } ?? -1
                 let heavyOp = HeavyOperationTracker.snapshot() ?? ""
                 let mainStack = MainThreadStackCapture.capture()
+                // Persist the stack NOW so a force-quit during the hang leaves the
+                // exact location behind (the buffered HermexLogger batch is lost
+                // on force-quit — the source of 0 shipped freeze reports).
+                UserDefaults.standard.set(mainStack, forKey: Self.frozenStackKey)
                 let ctx = Self.snapshotPerformanceContext()
                 HermexLogger.shared.log(
                     type: "freeze",
@@ -514,6 +528,7 @@ final class MainThreadWatchdog {
             // Main thread recovered — clear the persisted marker so the next
             // launch does NOT report a false force-quit.
             UserDefaults.standard.removeObject(forKey: Self.frozenMarkerKey)
+            UserDefaults.standard.removeObject(forKey: Self.frozenStackKey)
             HermexLogger.shared.log(
                 type: "recovered",
                 durationMs: frozenFor * 1000,
