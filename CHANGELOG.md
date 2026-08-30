@@ -1,3 +1,11 @@
+## 3.4.6 — P0 freeze fix: exclude reasoningGroups + toolCallGroups from equatable
+
+### Fixed — tool call / reasoning completion froze the chat (AttributeGraph AGGraphGetValue)
+
+- **Root cause (verified via 2 freeze stacks):** when a tool call completed or reasoning block updated, `reasoningGroups` and `toolCallGroups` changed for the ANCHOR row. These arrays were compared by `.equatable()` on `ChatTranscriptMessageBlock` — so every settled row (non-anchor) saw different global inputs → `.equatable()` returned false → ALL N rows re-evaluated → `Markdown(content)` (MarkdownUI) → `AttributeGraph AGGraphGetValue` + `LayoutProxy.dimensions` → main thread blocked → freeze. Same mechanism as the 3.3.3 `hasActiveStream` P0.
+- **Fix:** exclude `reasoningGroups` + `toolCallGroups` from the `.equatable()` comparison. Settled rows never render reasoning/tool blocks (gated by `reasoningAnchorMessageID` / `toolCallAnchorMessageID`). The anchor row already re-evaluates via `streamingAssistantMessageID` + changing content. Freezing N-row markdown re-layout on every tool-call tick is eliminated.
+- **Effect:** settled rows are now skipped by `.equatable()` even when tool calls / reasoning update mid-stream. No more `AttributeGraph AGGraphGetValue` freeze on long chats with active tool use.
+
 ## 3.4.5 — telemetry: layout timing, scroll context
 
 ### Added — observability for freeze root-cause analysis

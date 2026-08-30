@@ -623,8 +623,17 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
         lhs.transcriptMessage == rhs.transcriptMessage &&
             lhs.transcriptBlockSpacing == rhs.transcriptBlockSpacing &&
             lhs.showsThinkingAndToolCards == rhs.showsThinkingAndToolCards &&
-            lhs.reasoningGroups == rhs.reasoningGroups &&
-            lhs.toolCallGroups == rhs.toolCallGroups &&
+            // P0 (3.3.3): `hasActiveStream` — GLOBAL per-row flip on send →
+            // all N rows re-evaluate. Excluded: streaming row already gates
+            // on streamingAssistantMessageID + changing content.
+            //
+            // P0 (3.4.5): `reasoningGroups` + `toolCallGroups` — GLOBAL arrays
+            // that change when any tool call / reasoning block updates. For
+            // settled rows (non-anchor) these are always empty []. Including
+            // them in equatable meant a single tool-call completion re-evaluated
+            // ALL N rows → Markdown → AttributeGraph layout → freeze. The anchor
+            // row already re-evaluates via streamingAssistantMessageID + changing
+            // content; non-anchor rows never render reasoning/tool blocks.
             lhs.liveReasoningText == rhs.liveReasoningText &&
             lhs.reasoningAnchorMessageID == rhs.reasoningAnchorMessageID &&
             lhs.liveToolCalls == rhs.liveToolCalls &&
@@ -634,16 +643,6 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
             lhs.localAttachmentPreviews == rhs.localAttachmentPreviews &&
             lhs.listeningMessageID == rhs.listeningMessageID &&
             lhs.isViewingCachedData == rhs.isViewingCachedData &&
-            // P0 (3.3.3): `hasActiveStream` is a GLOBAL per-row input that flips
-            // for every row when a stream starts (activeStreamID nil→id at send).
-            // Comparing it here made .equatable() return false for ALL N rows →
-            // every settled row re-parsed MarkdownUI on MainActor (O(N × md)
-            // freeze on long chats). Settled rows never render differently on
-            // this flag (shouldUseStreamingBubbleRendering gates on
-            // messageID == streamingAssistantMessageID, live reasoning/tool
-            // blocks gate on anchorID), and the streaming row already
-            // re-evaluates via streamingAssistantMessageID + changing content.
-            // Excluding it lets .equatable() skip settled rows on send.
             lhs.isRegeneratingMessage == rhs.isRegeneratingMessage &&
             lhs.isEditingMessage == rhs.isEditingMessage &&
             lhs.isForkingMessage == rhs.isForkingMessage &&
