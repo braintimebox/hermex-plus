@@ -39,7 +39,7 @@
 | Поле | Значение |
 |---|---|
 | VERSION | 3.4.1 |
-| HEAD | 7c2193d |
+| HEAD | 09a8952 |
 | Last metrics recompute | 2026-08-30 |
 
 ## Rediscovered root-cause (2026-08-30)
