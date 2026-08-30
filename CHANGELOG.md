@@ -1,3 +1,21 @@
+## 3.4.1 — pagination cursor fix + Kanban SSE reconnect
+
+### Fixed — "Load older does nothing" / black transcript with only the button (proven live)
+
+- **Root cause:** `prependingOlderMessages` deduplicated by `ChatMessage.id`, which falls back to a synthesized `role-timestamp-content` key when `messageId` is absent (ChatMessage.swift:4). Two distinct server rows with identical content/timestamp (empty tool results, repeated system rows) collide → the second is dropped as "already present". On long chats the whole 50-message page could be rejected (`fetchedCount=50, didAddMessages=FALSE`, logged 2026-08-29 13:53), while `updateOlderMessagePagination` still advanced `messagesOffset` from the server response — cursor ran past content the client never rendered, the button stayed forever, and `displayedTranscriptMessages` could be empty with `messages` non-empty → black screen + Load older.
+- **Fix 1 (dedup):** pagination now deduplicates by stable server identity — `serverID` (monotonic, server-minted) → `messageId` → synthesized id fallback (local-only rows). Collisions are gone; a page that adds real rows lands.
+- **Fix 2 (cursor):** `updateOlderMessagePagination` only advances `messagesOffset` when `didAddMessages == true`. If nothing landed, the cursor stays put (next tap retries the same window); the button collapses only when the server confirms `messagesTruncated == false && messagesOffset == 0`.
+- **Fix 3 (guard):** `recomputeDisplayedTranscriptMessages` now refuses to render an empty transcript over a non-empty `messages` — if the display filters (tool rows, tool-result-only) drop every row, it recomputes once without filters so the user sees raw rows instead of a black void, and logs `transcript empty guard fired` with messageCount/offset for telemetry.
+
+### Fixed — Kanban board silently freezes on network blips
+
+- **Root cause:** `KanbanEventStreamClient` configured `connectionErrorHandler = { _ in .shutdown }` — same bug fixed for chat SSE in F5 (v3.2.1) but never propagated to the second, independent SSE client. Any transient TCP/HTTP failure (host sleep, network switch, tunnel blip) killed the Kanban stream permanently; the board stayed stale until the section was reopened.
+- **Fix:** copied the chat client's reconnect policy — `.proceed` on transient errors with LDSwiftEventSource built-in exponential backoff (`reconnectTime 1.0`, `maxReconnectTime 30.0`, `backoffResetThreshold 60.0`), `.shutdown` only on permanent 4xx client errors.
+
+### Telemetry
+- New event `transcript empty guard fired` (messageCount / messagesOffset / hasOlderMessages) — catches residual empty-transcript cases if the pagination fixes miss one.
+- Existing `load older` event already carries beforeOffset/fetchedCount/didAddMessages/resolvedOffset/hasOlderMessages — will show `didAddMessages=true` on the same chats after this fix.
+
 # Changelog
 
 ## 3.4.0 — new lightweight streaming render engine

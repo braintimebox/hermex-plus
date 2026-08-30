@@ -86,7 +86,23 @@ final class KanbanEventStreamClient: KanbanEventStreamingClient {
         stop()
         let handler = Handler(onFrame: onFrame, onFailure: onFailure)
         var config = EventSource.Config(handler: handler, url: url)
-        config.connectionErrorHandler = { _ in .shutdown }
+        // Same reconnect policy as the chat SSE client (F5, v3.2.1): the old
+        // `{ _ in .shutdown }` disabled LDSwiftEventSource's built-in exponential
+        // backoff — ANY transient TCP/HTTP failure (host sleep, network switch,
+        // tunnel blip) killed the Kanban stream for good and the board silently
+        // froze (stale data until the section is reopened). `.proceed` reconnects
+        // with backoff; permanent client/HTTP errors (4xx) stop reconnecting so
+        // the stream surfaces the failure. (3.4.1)
+        config.connectionErrorHandler = { error in
+            if let http = error as? UnsuccessfulResponseError,
+               (400..<500).contains(http.responseCode) {
+                return .shutdown
+            }
+            return .proceed
+        }
+        config.reconnectTime = 1.0
+        config.maxReconnectTime = 30.0
+        config.backoffResetThreshold = 60.0
         config.headers = customHeaderProvider().merged(under: [
             "Accept": "text/event-stream",
             "Cache-Control": "no-cache, no-transform",

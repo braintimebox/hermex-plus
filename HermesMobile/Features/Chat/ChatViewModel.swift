@@ -407,6 +407,35 @@ final class ChatViewModel {
         // branch, so the value tracks what is actually rendered.
         MainThreadWatchdog.setPerformanceContext(displayedRowCount: displayedTranscriptMessages.count)
 
+        // Guard (3.4.1): a non-empty `messages` array must never render as an
+        // empty transcript — the "black screen with only a Load older button"
+        // failure mode. The filters above (tool rows, tool-result-only user
+        // rows) can drop every row of a window, leaving hasOlderMessages=true
+        // and zero content. Recompute once WITHOUT the display filters so the
+        // user sees raw rows instead of a void; log the event for telemetry.
+        if displayedTranscriptMessages.isEmpty, !messages.isEmpty {
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatView",
+                message: "transcript empty guard fired",
+                extras: [
+                    "messageCount": messages.count,
+                    "messagesOffset": messagesOffset,
+                    "hasOlderMessages": hasOlderMessages,
+                ]
+            )
+            displayedTranscriptMessages = messages.enumerated().map { index, message in
+                TranscriptMessage(
+                    loadedIndex: index,
+                    renderID: "transcript-guard-\(message.id)",
+                    anchorID: message.messageId ?? message.id,
+                    message: message,
+                    id: message.id
+                )
+            }
+            MainThreadWatchdog.setPerformanceContext(displayedRowCount: displayedTranscriptMessages.count)
+        }
+
 #if DEBUG
         let churnReason = isTrailingContentChange
             ? "trailing"
@@ -1778,7 +1807,7 @@ final class ChatViewModel {
                 in: messages
             )
             responseCompletionNeedsTranscriptRefresh = false
-            updateOlderMessagePagination(from: session, loadedMessageCount: messages.count)
+            updateOlderMessagePagination(from: session, loadedMessageCount: messages.count, didAddMessages: didAddMessages)
             isViewingCachedData = false
             contextWindowSnapshot = ContextWindowSnapshot(
                 contextLength: session.contextLength,
@@ -1887,16 +1916,40 @@ final class ChatViewModel {
     ) -> [ChatMessage] {
         guard !olderMessages.isEmpty else { return currentMessages }
 
-        var seenIDs = Set(currentMessages.map(\.id))
+        // Dedup key = stable server identity, NOT the synthesized `id`.
+        // `ChatMessage.id` falls back to `role-timestamp-content` when
+        // `messageId` is absent — two distinct server rows with identical
+        // content/timestamp (empty tool results, repeated system rows) then
+        // collide, the second is dropped as "already present", and a whole
+        // 50-message page can vanish (didAddMessages=false, offset still
+        // shrinks → "Load older does nothing" + black transcript with the
+        // button). `serverID` is the monotonic server-minted row id; keep it
+        // first, `messageId` second, and only fall back to the synthesized id
+        // for rows carrying neither (local-only).
+        var seenKeys = Set(currentMessages.map(chatMessageStableDeduplicationKey))
         var uniqueOlderMessages: [ChatMessage] = []
         uniqueOlderMessages.reserveCapacity(olderMessages.count)
 
         for message in olderMessages {
-            guard seenIDs.insert(message.id).inserted else { continue }
+            guard seenKeys.insert(chatMessageStableDeduplicationKey(message)).inserted else { continue }
             uniqueOlderMessages.append(message)
         }
 
         return uniqueOlderMessages + currentMessages
+    }
+
+    /// Stable, collision-resistant deduplication key for pagination merges.
+    /// Precedence: serverID (monotonic, server-minted) → messageId (stream/local
+    /// UUID, stable within a session) → synthesized role-timestamp-content id
+    /// (only for rows carrying neither — local-only, rare in pagination pages).
+    nonisolated private static func chatMessageStableDeduplicationKey(_ message: ChatMessage) -> String {
+        if let serverID = message.serverID {
+            return "srv-\(serverID)"
+        }
+        if let messageId = message.messageId, !messageId.isEmpty {
+            return "mid-\(messageId)"
+        }
+        return message.id
     }
 
     private func applyReloadedMessages(
@@ -2035,7 +2088,24 @@ final class ChatViewModel {
         return Array(reloadedMessages[overlapIndex...])
     }
 
-    private func updateOlderMessagePagination(from session: SessionDetail?, loadedMessageCount: Int) {
+    private func updateOlderMessagePagination(from session: SessionDetail?, loadedMessageCount: Int, didAddMessages: Bool) {
+        // The offset is the pagination cursor: it must advance ONLY by what was
+        // actually appended to `messages`. Taking the server's `messagesOffset`
+        // blindly while dedup dropped the whole page (didAddMessages=false)
+        // advanced the cursor past content the client never rendered — the
+        // "Load older does nothing / black transcript + button" loop (3.4.1).
+        if !didAddMessages {
+            // Nothing new landed: keep the cursor where it is so the next tap
+            // retries the same window (server may have returned rows that are
+            // already present, or dedup rejected a page). Only collapse the
+            // button when the server confirms there is genuinely nothing older.
+            if session?.messagesTruncated == false && (session?.messagesOffset ?? 0) == 0 {
+                messagesOffset = 0
+                hasOlderMessages = false
+            }
+            return
+        }
+
         let resolvedOffset = Self.resolvedMessagesOffset(
             from: session,
             loadedMessageCount: loadedMessageCount
