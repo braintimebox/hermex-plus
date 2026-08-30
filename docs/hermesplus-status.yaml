@@ -1,0 +1,42 @@
+# Hermex Plus — data-driven state (version-pinned priority tracker).
+# Single source for snapshot section 2. The release pipeline updates this;
+# `scripts/project_snapshot.py` renders it. Never hand-edit status while a
+# release script owns it; hand-edit only to add a NEW surfaced item.
+version: 3.4.4
+items:
+  - id: 1
+    priority: "🔴"
+    title: "FREEZE на малых чатах после отправки (любой триггер)"
+    status: open
+    note: "Не закрыт. 3.4.2 no-streaming и 3.4.3 якорь НЕ сняли (пользователь: 3.4.3 снова завис после отправки). Ждём стек из 3.4.4 (write-through) для точного места."
+  - id: 2
+    priority: "🔴"
+    title: "STACK-CAPTURE — стек фриза теряется при force-quit"
+    status: closed
+    note: "Закрыто в 3.4.4: стек зависания пишется на диск в момент фриза (переживает force-quit) и попадает в отчёт 'previous run died frozen'. Разблокирует диагноз №1."
+  - id: 3
+    priority: "🟠"
+    title: "Скролл / чёрный экран"
+    status: open
+    note: "Частично лучше, но не всё. Несколько входов (пустой чат / после скролла / фильтры)."
+  - id: 4
+    priority: "🟡"
+    title: "God-object ChatViewModel (~6.6k строк @MainActor)"
+    status: open
+    note: "Архитектурный риск. Расщепление = рефакторинг (EXP-4), не патч."
+  - id: 5
+    priority: "🟡"
+    title: "Сетевые таймауты/отмена"
+    status: open
+    note: "Часть вызовов без явного таймаута."
+  - id: 6
+    priority: "🟡"
+    title: "Аватарка не восстанавливается после переустановки"
+    status: open
+    note: "Требует серверного изменения (эндпоинт avatar в hermes-webui). Клиентский фикс невозможен."
+  - id: 7
+    priority: "🟡"
+    title: "«Верх-вниз при думании» (sizeChangeAnchor при нерастущем тексте)"
+    status: closed
+    note: "Закрыто в 3.4.3: sizeChangeAnchor неактивен при no-streaming (isStreaming:false), контент не растёт — автоколебание ушло."
+closed_note: "Закрыто: пагинация/load-older (3.4.1), Kanban SSE (3.4.1), стрим-фриз хот-пути (3.4.0), streaming markdown cap (3.3.6), scroll yank (3.3.5), стек-захват №2 (3.4.4), верх-вниз №7 (3.4.3)."

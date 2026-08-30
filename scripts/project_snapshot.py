@@ -78,9 +78,8 @@ def glob_ipas() -> list[str]:
     return sorted(glob.glob(str(Path.home() / "workspace" / "HermesPlus-*.ipa")))
 
 
-def critical_tracks() -> str:
-    """What to fix next — priority ordered. Agent should update this block at the
-    end of each work session (mark what closed, add what surfaced)."""
+def _critical_tracks_legacy() -> str:
+    """Legacy hardcoded section 2 (used only if docs/hermesplus-status.yaml is absent)."""
     return """## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
 
 1. 🔴 **FREEZE на малых чатах** (N<100) — главная боль, НЕ закрыт.
@@ -103,6 +102,46 @@ def critical_tracks() -> str:
 
 _Закрыто недавно:_ пагинация/load-older (3.4.1), Kanban SSE (3.4.1),
 стрим-фриз хот-пути (3.4.0), streaming markdown cap (3.3.6), scroll yank (3.3.5)."""
+
+
+def critical_tracks() -> str:
+    """Render snapshot section 2 from docs/hermesplus-status.yaml (data-driven).
+
+    The release pipeline (scripts/pipelines/release_hermesplus.py) updates the
+    YAML (marks items closed by version) so the snapshot's critical-list never
+    goes stale. Falls back to the legacy block if the YAML/PyYAML is missing.
+    """
+    status_path = ROOT / "docs" / "hermesplus-status.yaml"
+    if not status_path.exists():
+        return _critical_tracks_legacy()
+    try:
+        import yaml
+    except ImportError:
+        return _critical_tracks_legacy()
+    try:
+        data = yaml.safe_load(status_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return _critical_tracks_legacy()
+    if not isinstance(data, dict) or "items" not in data:
+        return _critical_tracks_legacy()
+
+    open_items = [it for it in data["items"] if str(it.get("status", "")).lower() == "open"]
+    closed_items = [it for it in data["items"] if str(it.get("status", "")).lower() == "closed"]
+
+    lines = ["## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)", ""]
+    for it in sorted(open_items, key=lambda x: x.get("id", 0)):
+        lines.append(f"{it.get('id','?')}. {it.get('priority','🟡')} **{it.get('title','')}** — **OPEN**.")
+        if it.get("note"):
+            lines.append(f"   {it['note']}")
+    if closed_items:
+        lines.append("")
+        lines.append("_Закрыто:_ " + ", ".join(
+            f"№{it.get('id','?')} {it.get('title','')}" for it in sorted(closed_items, key=lambda x: x.get('id', 0))
+        ))
+    if data.get("closed_note"):
+        lines.append("")
+        lines.append(str(data["closed_note"]))
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:
