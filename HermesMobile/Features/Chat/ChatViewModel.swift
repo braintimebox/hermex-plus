@@ -2088,7 +2088,7 @@ final class ChatViewModel {
         return Array(reloadedMessages[overlapIndex...])
     }
 
-    private func updateOlderMessagePagination(from session: SessionDetail?, loadedMessageCount: Int, didAddMessages: Bool) {
+    private func updateOlderMessagePagination(from session: SessionDetail?, loadedMessageCount: Int, didAddMessages: Bool = true) {
         // The offset is the pagination cursor: it must advance ONLY by what was
         // actually appended to `messages`. Taking the server's `messagesOffset`
         // blindly while dedup dropped the whole page (didAddMessages=false)
