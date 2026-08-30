@@ -42,6 +42,18 @@
 
 # Changelog
 
+## 3.4.5 — telemetry: layout timing, scroll context
+
+### Added — observability for freeze root-cause analysis
+
+- **HeavyOperationTracker** wrapped around `recomputeDisplayedTranscriptMessages`, `loadOlderMessages`, `applyReloadedMessages` — freeze reports now carry the exact operation that was in flight.
+- **Network timing** in `loadMessages` — `loadMessages network` event with `networkMs` + `messageCount` to distinguish slow network from slow layout.
+- **identityPreservingMerge timing** — logs when merge exceeds 50ms (O(N×content) red flag).
+- **Scroll owner transitions** enriched with `messageCount`, `displayedRowCount`, `scrollOwner` — proves the yank scenario with concrete N.
+- **loadOlderMessages slow** — logs when the full load cycle exceeds 100ms.
+- **ChatView body timing** — `bodyTimingStart()` captured on every body evaluation (foundation for future frame-time correlation).
+
+
 ## 3.4.0 — new lightweight streaming render engine
 
 ### New engine (core rebuild of the live path, not a patch)
