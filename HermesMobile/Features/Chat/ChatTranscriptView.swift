@@ -811,6 +811,7 @@ private struct ChatTranscriptMessageRow: View {
         }
     }
 
+    @ViewBuilder
     private var bubble: some View {
         // P0 freeze (verified driver: every incoming token changes
         // `message.content`, breaks `ChatTranscriptMessageBlock.Equatable`, and
