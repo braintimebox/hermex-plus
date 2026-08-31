@@ -301,7 +301,9 @@ struct ChatView: View {
     @State private var clarificationCardHeight: CGFloat = 0
     /// Single source of truth for who may scroll the transcript (see
     /// `ChatScrollPolicy.resolveOwner`). All scroll sites read only this.
-    @State private var scrollOwner: ChatScrollOwner = .app
+    /// Observable scroll-ownership container — isolated from ChatView body to
+    /// prevent AttributeGraph freezes on owner transitions (see ScrollOwnershipState).
+    @State private var scrollOwnership = ScrollOwnershipState()
     @State private var followScrollGeneration = 0
     @State private var isUserInteractingWithScroll = false
     @State private var userScrollCooldownUntil: Date?
@@ -1412,7 +1414,7 @@ struct ChatView: View {
             showsThinkingAndToolCards: showsThinkingAndToolCards,
             showsAssistantTypingIndicator: showsAssistantTypingIndicator,
             showsCompressingStatus: viewModel.isCompressingContext,
-            // scrollOwner is now read from Environment
+            scrollOwnership: scrollOwnership,
             activeStreamID: viewModel.activeStreamID,
             streamingScrollTrigger: viewModel.streamingScrollTrigger,
             cacheFirstReconcileScrollToken: viewModel.cacheFirstReconcileScrollToken,
@@ -1550,10 +1552,10 @@ struct ChatView: View {
                 turnDiffPresentation = .file(file)
             }
         )
-        .environment(\.scrollOwner, scrollOwner)
+        // scrollOwnership is passed directly to ChatTranscriptView (no environment cascade)
         .environment(\.isScrolledNearBottom, isScrolledNearBottom)
         .environment(\.isAutoScrollPaused, isAutoFollowScrollPaused)
-        .environment(\.showsScrollToBottomButton, showsScrollToBottomButton)
+        // showsScrollToBottomButton is now derived inside ChatTranscriptView from scrollOwnership
         .environment(\.scrollToBottomButtonPadding, scrollToBottomButtonBottomPadding)
         .environment(\.latestTranscriptMessageRole, latestTranscriptMessageRole)
         }
@@ -1644,10 +1646,6 @@ struct ChatView: View {
     /// sidebar, settings, and navigation chrome stay in the default direction.
     private var chatLayoutDirection: LayoutDirection {
         ChatTranscriptDisplaySettings.chatLayoutDirection(rtlEnabled: rtlChatLayoutEnabled)
-    }
-
-    private var showsScrollToBottomButton: Bool {
-        scrollOwner == .user
     }
 
     private var showsAssistantTypingIndicator: Bool {
@@ -1897,7 +1895,7 @@ struct ChatView: View {
     }
 
     private func loadOlderMessages() async -> Bool {
-        scrollOwner = .user
+        scrollOwnership.owner = .user
         if !isReadingOlderTranscript {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
                 isReadingOlderTranscript = true
@@ -2553,9 +2551,9 @@ struct ChatView: View {
 
         if isUserInitiated {
             // An explicit ↓ tap / send is an unconditional re-arm of follow-latest.
-            scrollOwner = .app
+            scrollOwnership.owner = .app
             userScrollCooldownUntil = nil
-        } else if scrollOwner == .user {
+        } else if scrollOwnership.owner == .user {
             // Auto channels (streaming size changes, new message rows) must never
             // re-arm follow-latest. If the reader owns the viewport, ownership
             // stays with them until they explicitly tap ↓ or send. Re-arming here
@@ -2592,7 +2590,7 @@ struct ChatView: View {
                     "targetID": targetID,
                     "anchor": anchor == .bottom ? "bottom" : "top",
                     "generation": generation,
-                    "scrollOwner": scrollOwner == .app ? "app" : "user",
+                    "scrollOwner": scrollOwnership.owner == .app ? "app" : "user",
                     "isUserInitiated": isUserInitiated,
                     "animated": animated,
                 ]
@@ -2759,15 +2757,15 @@ struct ChatView: View {
         // because the transcript re-anchored — the "composer jumps when I tap
         // ↓" bug. Reading mode clears only on explicit write intent.
         let resolved = ChatScrollPolicy.resolveOwner(
-            current: scrollOwner,
+            current: scrollOwnership.owner,
             isStreaming: isStreaming,
             isUserInteracting: metrics.isUserInteracting,
             isAtVeryBottom: isAtVeryBottom,
             isInCooldown: userScrollCooldownUntil.map { Date() < $0 } ?? false
         )
-        if scrollOwner != resolved {
-            let previous = scrollOwner
-            scrollOwner = resolved
+        if scrollOwnership.owner != resolved {
+            let previous = scrollOwnership.owner
+            scrollOwnership.owner = resolved
             MainThreadWatchdog.setPerformanceContext(scrollOwner: resolved == .app ? "app" : "user")
             // Telemetry: prove the yank on-device — owner transitions with the
             // position metrics that caused them. Rate-limited naturally: the
@@ -2809,7 +2807,7 @@ struct ChatView: View {
     }
 
     private func prepareTranscriptForExplicitSend() {
-        scrollOwner = .app
+        scrollOwnership.owner = .app
         // Explicit send re-pins to the tail: the new message must be visible even
         // if the reader had scrolled up. Mark near-bottom so the `.onChange`
         // channels let the scroll-to-latest run instead of silently suppressing

@@ -3,16 +3,10 @@ import UIKit
 
 
 
-private struct ScrollOwnerKey: EnvironmentKey {
-    static let defaultValue: ChatScrollOwner = .app
-}
 private struct IsScrolledNearBottomKey: EnvironmentKey {
     static let defaultValue: Bool = true
 }
 private struct IsAutoScrollPausedKey: EnvironmentKey {
-    static let defaultValue: Bool = false
-}
-private struct ShowsScrollToBottomButtonKey: EnvironmentKey {
     static let defaultValue: Bool = false
 }
 private struct ScrollToBottomButtonPaddingKey: EnvironmentKey {
@@ -23,10 +17,6 @@ private struct LatestTranscriptMessageRoleKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var scrollOwner: ChatScrollOwner {
-        get { self[ScrollOwnerKey.self] }
-        set { self[ScrollOwnerKey.self] = newValue }
-    }
     var isScrolledNearBottom: Bool {
         get { self[IsScrolledNearBottomKey.self] }
         set { self[IsScrolledNearBottomKey.self] = newValue }
@@ -34,10 +24,6 @@ extension EnvironmentValues {
     var isAutoScrollPaused: Bool {
         get { self[IsAutoScrollPausedKey.self] }
         set { self[IsAutoScrollPausedKey.self] = newValue }
-    }
-    var showsScrollToBottomButton: Bool {
-        get { self[ShowsScrollToBottomButtonKey.self] }
-        set { self[ShowsScrollToBottomButtonKey.self] = newValue }
     }
     var scrollToBottomButtonPadding: CGFloat {
         get { self[ScrollToBottomButtonPaddingKey.self] }
@@ -85,8 +71,10 @@ struct ChatTranscriptView: View {
     let showsThinkingAndToolCards: Bool
     let showsAssistantTypingIndicator: Bool
     let showsCompressingStatus: Bool
-    @Environment(\.showsScrollToBottomButton) private var showsScrollToBottomButton
-    @Environment(\.scrollOwner) private var scrollOwner
+    let scrollOwnership: ScrollOwnershipState
+    /// Derived from scrollOwnership — no environment cascade needed.
+    private var scrollOwner: ChatScrollOwner { scrollOwnership.owner }
+    private var showsScrollToBottomButton: Bool { scrollOwnership.owner == .user }
     @Environment(\.isAutoScrollPaused) private var isAutoScrollPaused
     @Environment(\.latestTranscriptMessageRole) private var latestTranscriptMessageRole
     @Environment(\.isScrolledNearBottom) private var isScrolledNearBottom

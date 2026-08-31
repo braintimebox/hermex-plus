@@ -24,6 +24,22 @@ enum ChatScrollOwner: Equatable {
     case app
 }
 
+/// Observable container for scroll ownership state.
+///
+/// Extracted from ChatView `@State` to isolate scroll-ownership changes from
+/// the ChatView body evaluation. When `owner` changes, only views that
+/// directly observe this object re-evaluate — not the entire ChatView body
+/// (3400+ lines) and not the environment cascade to all descendants.
+///
+/// This eliminates the 3–14s AttributeGraph freeze that occurred on every
+/// `app→user` scroll-owner transition (the freeze was caused by SwiftUI
+/// re-evaluating the full ChatView body + environment propagation to
+/// ChatTranscriptView and all its children).
+@Observable
+final class ScrollOwnershipState {
+    var owner: ChatScrollOwner = .app
+}
+
 enum ChatScrollPolicy {
     /// Existing transcripts should enter at their latest content as part of the
     /// scroll view's first layout, before the destination becomes visible.

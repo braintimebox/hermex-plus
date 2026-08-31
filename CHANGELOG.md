@@ -1,3 +1,11 @@
+## 3.5.2 — P0 freeze fix: scrollOwner isolation (eliminate environment cascade)
+
+### Fixed — scroll owner transition (app→user) caused 3-14s AttributeGraph freeze
+
+- **Root cause (verified across 7 stream=false freeze events, all on ChatView):** scrollOwner was a `@State` property in ChatView (3400+ lines). When it changed (app→user), SwiftUI re-evaluated ChatView's entire body AND propagated the change via `.environment(\.scrollOwner)` to ALL descendants — including ChatTranscriptView with its ForEach over N rows. The environment cascade forced AttributeGraph to recalculate the full view tree, causing 3-14s main-thread blocks. Confirmed by freeze stacks: `AttributeGraph`, `swift_weakDestroy → SwiftUI`, `SwiftUICore`.
+- **Fix:** extracted scrollOwner into `ScrollOwnershipState` (@Observable class in ChatScrollPolicy.swift). ChatView stores it as `@State` but passes it directly to ChatTranscriptView as a parameter — NO environment cascade. ChatTranscriptView derives `scrollOwner` and `showsScrollToBottomButton` from the object. Only ChatTranscriptView (not the entire descendant tree) re-evaluates on owner transitions.
+- **Effect:** scroll owner transitions no longer trigger environment cascade → no full tree recalculation → no AttributeGraph freeze. Telemetry keys preserved for backward compatibility.
+
 ## 3.5.0 — P0 root cause: scroll/chrome props → Environment (layout storm fix)
 
 ### Fixed — scroll interactions triggered N× Markdown re-layout → 2-15s freeze
