@@ -50,10 +50,6 @@ extension EnvironmentValues {
 }
 
 
-        set { self[ScrollOwnerKey.self] = newValue }
-    }
-}
-
 struct ChatTranscriptView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
