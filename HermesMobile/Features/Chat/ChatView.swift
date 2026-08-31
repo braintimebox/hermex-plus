@@ -1551,7 +1551,7 @@ struct ChatView: View {
             }
         )
         .environment(\.scrollOwner, scrollOwner)
-        .environment(\.isScrolledNearBottom, isNearBottom)
+        .environment(\.isScrolledNearBottom, isScrolledNearBottom)
         .environment(\.isAutoScrollPaused, isAutoFollowScrollPaused)
         .environment(\.showsScrollToBottomButton, showsScrollToBottomButton)
         .environment(\.scrollToBottomButtonPadding, scrollToBottomButtonBottomPadding)
