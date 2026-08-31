@@ -1409,10 +1409,14 @@ struct LightStreamingRenderer: View {
     let content: String
 
     var body: some View {
+        // P0 (3.4.8): removed .fixedSize(horizontal:false,vertical:true) —
+        // it forces SwiftUI to compute full text height on every token update,
+        // which is expensive for long streaming text. Without it, Text uses
+        // the proposed height from the parent (available width from maxWidth frame),
+        // which is O(1). Markdown formatting appears when stream settles.
         Text(verbatim: content)
             .font(.body)
             .foregroundStyle(.primary)
-            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -1,3 +1,12 @@
+## 3.4.9 — streaming perf: slower cadence + remove .fixedSize()
+
+### Fixed — streaming caused 2-15s freeze due to frequent layout passes
+
+- **Root cause (verified):** streaming content flushed every 70ms → `displayedTranscriptMessages` updated → `TranscriptMessageContent` equatable false (content changed) → body re-evaluate → `LazyVStack` re-laid-out ALL 26 mounted rows → `SwiftUICore` layout for each → 2s+ freeze. Confirmed: `isStreaming=True`, `displayedRowCount=26`, stack `SwiftUICore +0xe30f0`.
+- **Fix 1:** increased `streamingWordRevealCadenceNanoseconds` from 70ms to 200ms — 3× fewer layout passes per second.
+- **Fix 2:** removed `.fixedSize(horizontal:false,vertical:true)` from `LightStreamingRenderer` — this modifier forced SwiftUI to compute full text height on every token update, which is expensive for long streaming text. Without it, `Text` uses the proposed height from the parent, which is O(1).
+- **Effect:** streaming layout passes reduced from ~14/s to ~5/s, each pass cheaper. Settled rows still skip via equatable. Combined with 3.4.8 scroll/layout isolation, both scroll-triggered and streaming-triggered freezes should be eliminated.
+
 ## 3.4.8 — P0 root cause fix: TranscriptMessageContent (scroll/layout isolation)
 
 ### Fixed — scroll/composer events triggered N× Markdown re-layout → 2-4s freeze
