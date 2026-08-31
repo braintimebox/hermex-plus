@@ -1,6 +1,59 @@
 import SwiftUI
 import UIKit
 
+
+
+private struct ScrollOwnerKey: EnvironmentKey {
+    static let defaultValue: ChatScrollOwner = .app
+}
+private struct IsScrolledNearBottomKey: EnvironmentKey {
+    static let defaultValue: Bool = true
+}
+private struct IsAutoScrollPausedKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+private struct ShowsScrollToBottomButtonKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+private struct ScrollToBottomButtonPaddingKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+private struct LatestTranscriptMessageRoleKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var scrollOwner: ChatScrollOwner {
+        get { self[ScrollOwnerKey.self] }
+        set { self[ScrollOwnerKey.self] = newValue }
+    }
+    var isScrolledNearBottom: Bool {
+        get { self[IsScrolledNearBottomKey.self] }
+        set { self[IsScrolledNearBottomKey.self] = newValue }
+    }
+    var isAutoScrollPaused: Bool {
+        get { self[IsAutoScrollPausedKey.self] }
+        set { self[IsAutoScrollPausedKey.self] = newValue }
+    }
+    var showsScrollToBottomButton: Bool {
+        get { self[ShowsScrollToBottomButtonKey.self] }
+        set { self[ShowsScrollToBottomButtonKey.self] = newValue }
+    }
+    var scrollToBottomButtonPadding: CGFloat {
+        get { self[ScrollToBottomButtonPaddingKey.self] }
+        set { self[ScrollToBottomButtonPaddingKey.self] = newValue }
+    }
+    var latestTranscriptMessageRole: String? {
+        get { self[LatestTranscriptMessageRoleKey.self] }
+        set { self[LatestTranscriptMessageRoleKey.self] = newValue }
+    }
+}
+
+
+        set { self[ScrollOwnerKey.self] = newValue }
+    }
+}
+
 struct ChatTranscriptView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -36,11 +89,11 @@ struct ChatTranscriptView: View {
     let showsThinkingAndToolCards: Bool
     let showsAssistantTypingIndicator: Bool
     let showsCompressingStatus: Bool
-    let showsScrollToBottomButton: Bool
-    let scrollOwner: ChatScrollOwner
-    let isAutoScrollPaused: Bool
-    let latestTranscriptMessageRole: String?
-    let isScrolledNearBottom: Bool
+    @Environment(\.showsScrollToBottomButton) private var showsScrollToBottomButton
+    @Environment(\.scrollOwner) private var scrollOwner
+    @Environment(\.isAutoScrollPaused) private var isAutoScrollPaused
+    @Environment(\.latestTranscriptMessageRole) private var latestTranscriptMessageRole
+    @Environment(\.isScrolledNearBottom) private var isScrolledNearBottom
     let activeStreamID: String?
     let streamingScrollTrigger: Int
     let cacheFirstReconcileScrollToken: Int
@@ -48,7 +101,7 @@ struct ChatTranscriptView: View {
     let transcriptMessageSpacing: CGFloat
     let transcriptBlockSpacing: CGFloat
     let transcriptBottomInsetHeight: CGFloat
-    let scrollToBottomButtonBottomPadding: CGFloat
+    @Environment(\.scrollToBottomButtonPadding) private var scrollToBottomButtonBottomPadding
     let localAttachmentPreviews: [String: [String: Data]]
     let listeningMessageID: String?
     let isViewingCachedData: Bool

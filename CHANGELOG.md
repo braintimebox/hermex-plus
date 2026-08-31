@@ -1,3 +1,9 @@
+## 3.5.0 — P0 root cause: scroll/chrome props → Environment (layout storm fix)
+
+### Fixed — scroll interactions triggered N× Markdown re-layout → 2-15s freeze
+
+- **Root cause (verified across 100+ freeze/stutter events, all versions 1.3→3.4.9):** `ChatTranscriptView` received scroll/chrome props (`scrollOwner`, `isScrolledNearBottom`, `isAutoScrollPaused`, `showsScrollToBottomButton`, `scrollToBottomButtonBottomPadding`, `latestTranscriptMessageRole`) as `let` parameters. Every scroll interaction changed `scrollOwner` in ChatView → ChatView body re-evaluated → ChatTranscriptView body re-evaluated → new VStack/ScrollView created → `.defaultScrollAnchor()` modifier changed → SwiftUI re-configured ScrollView → layout pass for ALL mounted Markdown rows → freeze.
+- **Fix:** moved all 6 scroll/chrome props to SwiftUI `@Environment` (custom `EnvironmentKey` values). `ChatTranscriptView` now reads them via `@Environment` instead of `let` params. Environment reads do NOT trigger body re-evaluation → ChatTranscriptView body does NOT re-run when scroll state changes → no ScrollView re-configuration → no layout storm.
 ## 3.4.9 — streaming perf: slower cadence + remove .fixedSize()
 
 ### Fixed — streaming caused 2-15s freeze due to frequent layout passes

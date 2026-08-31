@@ -1412,11 +1412,7 @@ struct ChatView: View {
             showsThinkingAndToolCards: showsThinkingAndToolCards,
             showsAssistantTypingIndicator: showsAssistantTypingIndicator,
             showsCompressingStatus: viewModel.isCompressingContext,
-            showsScrollToBottomButton: showsScrollToBottomButton,
-            scrollOwner: scrollOwner,
-            isAutoScrollPaused: isAutoFollowScrollPaused,
-            latestTranscriptMessageRole: latestTranscriptMessageRole,
-            isScrolledNearBottom: isScrolledNearBottom,
+            // scrollOwner is now read from Environment
             activeStreamID: viewModel.activeStreamID,
             streamingScrollTrigger: viewModel.streamingScrollTrigger,
             cacheFirstReconcileScrollToken: viewModel.cacheFirstReconcileScrollToken,
@@ -1424,7 +1420,6 @@ struct ChatView: View {
             transcriptMessageSpacing: transcriptMessageSpacing,
             transcriptBlockSpacing: transcriptBlockSpacing,
             transcriptBottomInsetHeight: transcriptBottomInsetHeight,
-            scrollToBottomButtonBottomPadding: scrollToBottomButtonBottomPadding,
             localAttachmentPreviews: viewModel.localAttachmentPreviews,
             listeningMessageID: viewModel.listeningMessageID,
             isViewingCachedData: viewModel.isViewingCachedData,
@@ -3442,7 +3437,13 @@ struct ScheduleMessageSheet: View {
                     // Choosing an explicit existing chat must clear "Attach to
                     // current". The attach toggle stays on by default when the
                     // sheet opens from a chat, and `target` returns .currentChat
-                    // while it's on — so without this the user's explicit pick is
+                    // while it's on — so without this the user's explicit pick
+            .environment(\.scrollOwner, scrollOwner)
+            .environment(\.isScrolledNearBottom, isNearBottom)
+            .environment(\.isAutoScrollPaused, isAutoFollowScrollPaused)
+            .environment(\.showsScrollToBottomButton, showsScrollToBottomButton)
+            .environment(\.scrollToBottomButtonPadding, scrollToBottomButtonBottomPadding)
+            .environment(\.latestTranscriptMessageRole, latestTranscriptMessageRole) is
                     // silently ignored and the message goes to the current/new
                     // chat instead of the one they chose.
                     attachToChat = false

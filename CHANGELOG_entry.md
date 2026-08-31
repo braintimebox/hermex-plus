@@ -1,0 +1,8 @@
+## 3.5.0 — P0 root cause: scroll/chrome props → Environment (layout storm fix)
+
+### Fixed — scroll interactions triggered N× Markdown re-layout → 2-15s freeze
+
+- **Root cause (verified across 100+ freeze/stutter events, all versions 1.3→3.4.9):** `ChatTranscriptView` received scroll/chrome props (`scrollOwner`, `isScrolledNearBottom`, `isAutoScrollPaused`, `showsScrollToBottomButton`, `scrollToBottomButtonBottomPadding`, `latestTranscriptMessageRole`) as `let` parameters. Every scroll interaction changed `scrollOwner` in ChatView → ChatView body re-evaluated → ChatTranscriptView body re-evaluated → new VStack/ScrollView created → `.defaultScrollAnchor()` modifier changed → SwiftUI re-configured ScrollView → layout pass for ALL mounted Markdown rows → freeze.
+- **Evidence:** 14 freeze/stutter events on v3.4.8-3.4.9, all preceded by rapid `scroll owner app→user` events, stacks in SwiftUICore layout internals (`libswiftCore.dylib`, `AttributeGraph`, `swift_bridgeObjectRetain`). EquatableView (3.4.8) did NOT prevent this because layout runs independently of body evaluation.
+- **Fix:** moved all 6 scroll/chrome props to SwiftUI `@Environment` (custom `EnvironmentKey` values). `ChatTranscriptView` now reads them via `@Environment` instead of `let` params. Environment reads do NOT trigger body re-evaluation → ChatTranscriptView body does NOT re-run when scroll state changes → no ScrollView re-configuration → no layout storm.
+- **Effect:** scroll interactions no longer trigger transcript re-layout. Markdown rows are only re-laid-out when their actual content changes (message append, streaming token, tool call update).
