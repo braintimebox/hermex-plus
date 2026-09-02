@@ -765,7 +765,7 @@ final class ChatViewModel {
         showsLiveActivityResponseExcerpts: Bool = false,
         pollingIntervals: ChatPollingIntervals = .standard,
         streamingScrollCoalescingDelayNanoseconds: UInt64 = 16_000_000,
-        streamingWordRevealCadenceNanoseconds: UInt64 = 200_000_000,
+        streamingWordRevealCadenceNanoseconds: UInt64 = 16_000_000,
         streamingMaxRevealLagNanoseconds: UInt64 = 2_000_000_000,
         speechSynthesizerFactory: @escaping () -> any ChatSpeechSynthesizing = { AVSpeechSynthesizer() },
         listenAudioSession: (any ListenAudioSessionControlling)? = nil,

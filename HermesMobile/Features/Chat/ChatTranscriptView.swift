@@ -183,29 +183,10 @@ struct ChatTranscriptView: View {
                         ChatScrollPolicy.initialTranscriptAnchor,
                         for: .initialOffset
                     )
-                    .defaultScrollAnchor(
-                        ChatScrollPolicy.sizeChangeAnchor(
-                            owner: scrollOwner,
-                            isAutoScrollPaused: isAutoScrollPaused,
-                            // Only glue the viewport to the bottom while content
-                            // is actually being printed. While the agent is still
-                            // thinking (liveReasoningText non-empty) the size is
-                            // NOT growing, so a `.bottom` anchor only competes
-                            // with the app's follow path and blocks reading what
-                            // is already rendered — the "chat is inaccessible
-                            // while the agent thinks" behaviour.
-                            // Streaming render is OFF (answer delivered when
-                            // ready): the transcript content does NOT grow while
-                            // the agent works, so a `.bottom` size-change anchor
-                            // only glues the viewport on any incidental re-measure
-                            // (scroll tick, row re-measure, typing indicator) and
-                            // drives a main-thread re-layout storm — any post-send
-                            // scroll/↓ trigger froze dead. Keep the anchor inactive
-                            // while the answer is not streaming (no content growth).
-                            isStreaming: false
-                        ),
-                        for: .sizeChanges
-                    )
+                    // sizeChangeAnchor removed: follow-latest is driven
+                    // explicitly by onChange(of: messages.count), not by
+                    // system glue. This eliminates the "scroll won't listen"
+                    // jump when content re-measures.
                     .frame(width: viewportWidth)
                     .refreshable {
                         if hasOlderMessages {
@@ -267,11 +248,9 @@ struct ChatTranscriptView: View {
                         onScrollToLatestContent(proxy, true, "newRow")
                     }
                 }
-                .onChange(of: streamingScrollTrigger) {
-                    if scrollOwner == .app {
-                        onScrollToLatestContent(proxy, true, "streamingTrigger")
-                    }
-                }
+                // streamingScrollTrigger removed: onChange(of: messages.count)
+                // handles follow-latest. The trigger was redundant and caused
+                // fight when user scrolled up during streaming.
                 .onChange(of: cacheFirstReconcileScrollToken) {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no

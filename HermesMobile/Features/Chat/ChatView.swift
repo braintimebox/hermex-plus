@@ -2712,13 +2712,11 @@ struct ChatView: View {
     private func updateScrollMetrics(_ metrics: ChatScrollMetrics) {
         let isStreaming = viewModel.activeStreamID != nil
         let isNearBottom = ChatScrollPolicy.isNearBottom(
-            distanceFromBottom: metrics.distanceFromBottom,
-            isStreaming: isStreaming
+            distanceFromBottom: metrics.distanceFromBottom
         )
-        // Ownership uses a MUCH stricter threshold: the reader owns the viewport
-        // unless they are literally at the bottom (≤8pt). UI bands (80/160pt)
-        // still drive chrome state below.
-        let isAtVeryBottom = metrics.distanceFromBottom <= ChatScrollPolicy.ownershipBottomThreshold
+        // Ownership uses the unified threshold: the reader owns the viewport
+        // unless they are within 80pt of the bottom.
+        let isAtVeryBottom = metrics.distanceFromBottom <= ChatScrollPolicy.bottomThreshold
         // Only assign when the value actually flips — reassigning an identical
         // Bool still fans a @State write through the whole ChatView body, which
         // is exactly the per-tick re-render churn this method exists to avoid.
@@ -2794,8 +2792,7 @@ struct ChatView: View {
         if !isNearBottom,
            !isReadingOlderTranscript,
            ChatScrollPolicy.shouldEnterReadingOlder(
-               distanceFromBottom: metrics.distanceFromBottom,
-               isStreaming: isStreaming
+               distanceFromBottom: metrics.distanceFromBottom
            ) {
             withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
                 isReadingOlderTranscript = true

@@ -101,21 +101,9 @@ enum ChatScrollPolicy {
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as
-    /// pinned to the latest content while idle (drives chrome state).
-    static let bottomDetectionThreshold: CGFloat = 80
-
-    /// Looser bottom threshold while a response is streaming, so small layout
-    /// jitter from incoming tokens does not flip follow state off.
-    static let streamingBottomDetectionThreshold: CGFloat = 160
-
-    /// OWNERSHIP threshold — much stricter than the UI bands. The reader owns
-    /// the viewport unless they are literally AT the bottom (≤8pt) or pressed
-    /// ↓ / sent a message. The old 80/160pt bands re-armed the app while the
-    /// reader was 30-70pt up (still "near bottom"), so a quiet event (stream
-    /// end reload, cache reconcile, keyboard) slammed the viewport down —
-    /// "листаю вверх — меня отбрасывает, агент даже не печатает", and the
-    /// same fight is what makes a fast flick feel jerky.
-    static let ownershipBottomThreshold: CGFloat = 8
+    /// pinned to the latest content. Unified threshold for all purposes:
+    /// ownership, UI chrome, and streaming detection.
+    static let bottomThreshold: CGFloat = 80
 
     /// Extra distance past the bottom threshold required before the composer
     /// chrome collapses into its compact "reading older" presentation.
@@ -125,19 +113,15 @@ enum ChatScrollPolicy {
     /// interacted with the scroll view.
     static let userScrollCooldown: TimeInterval = 0.25
 
-    static func bottomThreshold(isStreaming: Bool) -> CGFloat {
-        isStreaming ? streamingBottomDetectionThreshold : bottomDetectionThreshold
-    }
-
-    static func isNearBottom(distanceFromBottom: CGFloat, isStreaming: Bool) -> Bool {
-        distanceFromBottom <= bottomThreshold(isStreaming: isStreaming)
+    static func isNearBottom(distanceFromBottom: CGFloat) -> Bool {
+        distanceFromBottom <= bottomThreshold
     }
 
     /// True once the user has scrolled far enough above the bottom that the
     /// composer chrome should collapse. The hysteresis keeps the chrome stable
     /// when hovering right around the bottom threshold.
-    static func shouldEnterReadingOlder(distanceFromBottom: CGFloat, isStreaming: Bool) -> Bool {
-        distanceFromBottom > bottomThreshold(isStreaming: isStreaming) + readingOlderHysteresis
+    static func shouldEnterReadingOlder(distanceFromBottom: CGFloat) -> Bool {
+        distanceFromBottom > bottomThreshold + readingOlderHysteresis
     }
 
     static func cooldownDeadline(after date: Date = Date()) -> Date {
