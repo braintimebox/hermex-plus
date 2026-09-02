@@ -1721,11 +1721,15 @@ final class ChatViewModel {
         isLoading = true
         guard messages.isEmpty else { return }
 
-        let cachedMessages = renderCachedMessagesBeforeReload(
-            sessionID: sessionID,
-            modelContext: modelContext
-        )
-        hasPrimedInitialCachedMessages = !cachedMessages.isEmpty
+        // Show skeleton immediately; load cache in background to avoid
+        // blocking the main thread with a synchronous SwiftData fetch.
+        Task { @MainActor in
+            let cachedMessages = renderCachedMessagesBeforeReload(
+                sessionID: sessionID,
+                modelContext: modelContext
+            )
+            hasPrimedInitialCachedMessages = !cachedMessages.isEmpty
+        }
     }
 
     /// Cache-first render (#289): on a cold session open, paint the cached transcript

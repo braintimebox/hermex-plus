@@ -225,10 +225,14 @@ final class SessionListViewModel {
         // The network result below replaces this placeholder on success, keeps it
         // on a connectivity failure (offline fallback), and reverts it on a real
         // server error so stale data can't mask a live failure.
+        // Load cache in background to avoid blocking the main thread with a
+        // synchronous SwiftData fetch — shows skeleton instantly.
         let cachedSessions: [SessionSummary]
         if let modelContext {
-            cachedSessions = ((try? CacheStore.cachedSessions(serverURL: server, in: modelContext)) ?? [])
-                .filter(\.shouldAppearInSessionList)
+            cachedSessions = await Task { @MainActor in
+                ((try? CacheStore.cachedSessions(serverURL: server, in: modelContext)) ?? [])
+                    .filter(\.shouldAppearInSessionList)
+            }.value
         } else {
             cachedSessions = []
         }

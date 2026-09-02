@@ -2650,22 +2650,18 @@ struct ChatView: View {
         )
     }
 
-    /// Transcript tap gesture (outside the composer): two-step close.
-    /// First tap with the keyboard up → dismiss the keyboard, keep the
-    /// composer. Next tap (or tap while the keyboard is already down) →
-    /// collapse back to the FAB. Matches chat-app tap-to-dismiss semantics.
+    /// Transcript tap gesture (outside the composer): toggle keyboard.
+    /// Tap with keyboard up → dismiss keyboard. Tap with keyboard down →
+    /// show composer + open keyboard. One-tap toggle, no two-step dance.
     private func handleTranscriptTap() {
-        guard composerVisible else { return }
-        // ONE tap activates (focuses) the composer; further taps are harmless —
-        // they only dismiss the keyboard. The composer NEVER collapses from a
-        // tap: the ScrollView's simultaneousGesture and the composer's own
-        // hit-testing overlap, so a tap landing on/near the composer while the
-        // field is not yet focused must focus it, not destroy the input bar
-        // ("тап по композеру сворачивает" — regression). Collapse happens ONLY
-        // via the explicit ⌄ button (onCollapseComposer) or after a send.
         if composerIsFocused {
             dismissKeyboard()
-        } else {
+        } else if canFocusComposer {
+            if !composerVisible {
+                withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                    composerVisible = true
+                }
+            }
             requestComposerFocusIfPossible()
         }
     }
