@@ -116,7 +116,7 @@ final class ChatStreamCoordinator {
         liveActivityManager: any AgentLiveActivityManaging,
         showsLiveActivityResponseExcerpts: Bool,
         timing: ChatStreamCoordinatorTiming = .standard,
-        suppressesReasoningAndToolUpdates: Bool = false
+        suppressesReasoningAndToolUpdates: Bool = true
     ) {
         self.client = client
         self.streamClient = streamClient

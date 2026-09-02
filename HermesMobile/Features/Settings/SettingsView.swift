@@ -78,7 +78,7 @@ struct SettingsView: View {
     @AppStorage(ChatTranscriptDisplaySettings.showsAssistantTurnTimestampsKey) private var showsAssistantTurnTimestamps = false
     @AppStorage(ChatTranscriptDisplaySettings.showsResponseSpeedKey) private var showsResponseSpeed = false
     @AppStorage(ChatTranscriptDisplaySettings.wrapsCodeBlockLinesKey) private var wrapsCodeBlockLines = false
-    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = false
+    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = true
     @AppStorage(ChatTranscriptDisplaySettings.rtlChatLayoutEnabledKey) private var rtlChatLayoutEnabled = ChatTranscriptDisplaySettings.rtlChatLayoutDefaultEnabled
     @AppStorage(StreamedTextAnimationSettings.isEnabledKey) private var isStreamedTextAnimationEnabled = true
     @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex

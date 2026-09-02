@@ -279,7 +279,7 @@ struct ChatView: View {
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
     @AppStorage(AgentRunLiveActivityPrivacy.showsResponseExcerptsKey) private var showsLiveActivityResponseExcerpts = false
     @AppStorage(ChatTranscriptDisplaySettings.showsThinkingAndToolCardsKey) private var showsThinkingAndToolCards = true
-    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = false
+    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = true
     @AppStorage(ChatTranscriptDisplaySettings.rtlChatLayoutEnabledKey) private var rtlChatLayoutEnabled = ChatTranscriptDisplaySettings.rtlChatLayoutDefaultEnabled
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsGitControls = true
