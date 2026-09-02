@@ -90,6 +90,10 @@ final class ChatStreamCoordinator {
     private let liveActivityManager: any AgentLiveActivityManaging
     private let timing: ChatStreamCoordinatorTiming
     private var showsLiveActivityResponseExcerpts: Bool
+    /// Silent mode: suppress reasoning/tool events from updating observable
+    /// state, cutting per-token UI update cost. Off by default per existing
+    /// ChatTranscriptDisplaySettings; flipped on when user enables silent mode.
+    private var suppressesReasoningAndToolUpdates: Bool
 
     private(set) var activeStreamID: String?
     private(set) var recoveryState: ActiveStreamRecoveryState = .idle
@@ -111,13 +115,15 @@ final class ChatStreamCoordinator {
         streamClient: SSEStreamingClient,
         liveActivityManager: any AgentLiveActivityManaging,
         showsLiveActivityResponseExcerpts: Bool,
-        timing: ChatStreamCoordinatorTiming = .standard
+        timing: ChatStreamCoordinatorTiming = .standard,
+        suppressesReasoningAndToolUpdates: Bool = false
     ) {
         self.client = client
         self.streamClient = streamClient
         self.liveActivityManager = liveActivityManager
         self.showsLiveActivityResponseExcerpts = showsLiveActivityResponseExcerpts
         self.timing = timing
+        self.suppressesReasoningAndToolUpdates = suppressesReasoningAndToolUpdates
     }
 
     func attach(delegate: any ChatStreamCoordinatorDelegate) {
@@ -131,6 +137,11 @@ final class ChatStreamCoordinator {
         if !shows, activeStreamID != nil {
             liveActivityManager.update(.clearResponseExcerpt)
         }
+    }
+
+    /// Silent mode setter: cuts reasoning/tool observable updates during stream.
+    func setSuppressesReasoningAndToolUpdates(_ suppresses: Bool) {
+        suppressesReasoningAndToolUpdates = suppresses
     }
 
     func prepareForNewResponse() {
@@ -493,17 +504,22 @@ final class ChatStreamCoordinator {
                 markProgress()
             }
         case .reasoning(let text):
+            // Live Activity must always see reasoning activity for status sync,
+            // even when silent mode suppresses the in-chat observable updates.
             liveActivityManager.update(.reasoning(text))
+            guard !suppressesReasoningAndToolUpdates else { break }
             if delegate?.streamCoordinatorAppendReasoning(text) == true {
                 markProgress()
             }
         case .toolStarted(let payload):
             liveActivityManager.update(.toolStarted(name: payload.name))
+            guard !suppressesReasoningAndToolUpdates else { break }
             if delegate?.streamCoordinatorAppendToolCall(payload) == true {
                 markProgress()
             }
         case .toolCompleted(let payload):
             liveActivityManager.update(.toolCompleted)
+            guard !suppressesReasoningAndToolUpdates else { break }
             if delegate?.streamCoordinatorCompleteToolCall(payload) == true {
                 markProgress()
             }

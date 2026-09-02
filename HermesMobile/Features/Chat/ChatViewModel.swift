@@ -726,6 +726,7 @@ final class ChatViewModel {
     private(set) var listenPlaybackSpeed: ListenPlaybackSpeed
     @ObservationIgnored private var listenPlaybackTicker: Timer?
     private var showsLiveActivityResponseExcerpts: Bool
+    private var suppressesReasoningAndToolUpdates: Bool
     private var hasCompletedCurrentResponse: Bool { streamCoordinator.hasCompletedCurrentResponse }
     private var isStreamConnectionSuspended: Bool { streamCoordinator.isConnectionSuspended }
     var isActiveStreamConnectionSuspended: Bool { streamCoordinator.isConnectionSuspended }
@@ -787,7 +788,10 @@ final class ChatViewModel {
             client: resolvedClient,
             streamClient: resolvedStreamClient,
             liveActivityManager: resolvedLiveActivityManager,
-            showsLiveActivityResponseExcerpts: showsLiveActivityResponseExcerpts
+            showsLiveActivityResponseExcerpts: showsLiveActivityResponseExcerpts,
+            suppressesReasoningAndToolUpdates: userDefaults.bool(
+                forKey: ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey
+            )
         )
         self.pendingActionCoordinator = ChatPendingActionCoordinator(
             client: resolvedClient,
@@ -800,6 +804,9 @@ final class ChatViewModel {
         self.btwStreamClient = btwStreamClient ?? SSEClient()
         self.liveActivityManager = resolvedLiveActivityManager
         self.showsLiveActivityResponseExcerpts = showsLiveActivityResponseExcerpts
+        self.suppressesReasoningAndToolUpdates = userDefaults.bool(
+            forKey: ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey
+        )
         self.pollingIntervals = pollingIntervals
         self.streamingScrollCoalescingDelayNanoseconds = streamingScrollCoalescingDelayNanoseconds
         self.streamingWordRevealCadenceNanoseconds = streamingWordRevealCadenceNanoseconds
@@ -830,6 +837,13 @@ final class ChatViewModel {
 
         showsLiveActivityResponseExcerpts = shows
         streamCoordinator.setShowsLiveActivityResponseExcerpts(shows)
+    }
+
+    func setSuppressesReasoningAndToolUpdates(_ suppresses: Bool) {
+        guard suppressesReasoningAndToolUpdates != suppresses else { return }
+
+        suppressesReasoningAndToolUpdates = suppresses
+        streamCoordinator.setSuppressesReasoningAndToolUpdates(suppresses)
     }
 
     var showsListenPlaybackBar: Bool {

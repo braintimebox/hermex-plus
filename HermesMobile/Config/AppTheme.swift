@@ -210,6 +210,9 @@ enum ChatTranscriptDisplaySettings {
     static let showsAssistantTurnTimestampsKey = "chatTranscript.showsAssistantTurnTimestamps"
     static let showsResponseSpeedKey = "chatTranscript.showsResponseSpeed"
     static let wrapsCodeBlockLinesKey = "chatTranscript.wrapsCodeBlockLines"
+    /// Suppresses live reasoning/tool observable updates during streaming,
+    /// cutting per-token UI invalidation from ~80 down to ~2 updates.
+    static let suppressesReasoningAndToolUpdatesKey = "chatTranscript.suppressesReasoningAndToolUpdates"
 
     /// Backs the Settings → Chat "Right-to-Left Chat Layout" toggle (issue #259).
     /// Local-only: there is no server settings object to mirror an `rtl` flag

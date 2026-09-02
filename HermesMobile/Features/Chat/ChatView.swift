@@ -279,6 +279,7 @@ struct ChatView: View {
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
     @AppStorage(AgentRunLiveActivityPrivacy.showsResponseExcerptsKey) private var showsLiveActivityResponseExcerpts = false
     @AppStorage(ChatTranscriptDisplaySettings.showsThinkingAndToolCardsKey) private var showsThinkingAndToolCards = true
+    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = false
     @AppStorage(ChatTranscriptDisplaySettings.rtlChatLayoutEnabledKey) private var rtlChatLayoutEnabled = ChatTranscriptDisplaySettings.rtlChatLayoutDefaultEnabled
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsGitControls = true
@@ -783,6 +784,9 @@ struct ChatView: View {
             }
             .onChange(of: showsLiveActivityResponseExcerpts) {
                 viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
+            }
+            .onChange(of: suppressesReasoningAndToolUpdates) {
+                viewModel.setSuppressesReasoningAndToolUpdates(suppressesReasoningAndToolUpdates)
             }
             .onDisappear {
                 activeStreamStatusRefreshTask?.cancel()
@@ -1802,6 +1806,7 @@ struct ChatView: View {
 
     private func prepareInitialAppearance() {
         viewModel.setShowsLiveActivityResponseExcerpts(showsLiveActivityResponseExcerpts)
+        viewModel.setSuppressesReasoningAndToolUpdates(suppressesReasoningAndToolUpdates)
         if loadsInitialMessages {
             viewModel.prepareInitialMessageLoad(modelContext: modelContext)
         }

@@ -78,6 +78,7 @@ struct SettingsView: View {
     @AppStorage(ChatTranscriptDisplaySettings.showsAssistantTurnTimestampsKey) private var showsAssistantTurnTimestamps = false
     @AppStorage(ChatTranscriptDisplaySettings.showsResponseSpeedKey) private var showsResponseSpeed = false
     @AppStorage(ChatTranscriptDisplaySettings.wrapsCodeBlockLinesKey) private var wrapsCodeBlockLines = false
+    @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = false
     @AppStorage(ChatTranscriptDisplaySettings.rtlChatLayoutEnabledKey) private var rtlChatLayoutEnabled = ChatTranscriptDisplaySettings.rtlChatLayoutDefaultEnabled
     @AppStorage(StreamedTextAnimationSettings.isEnabledKey) private var isStreamedTextAnimationEnabled = true
     @AppStorage(HeaderLogoColor.storageKey) private var headerLogoColorHex = HeaderLogoColor.defaultHex
@@ -237,6 +238,16 @@ struct SettingsView: View {
                     )
 
                     SettingsFootnote(String(localized: "Fades words in as a response streams. Turn off to show text instantly."))
+
+                    SettingsDivider()
+
+                    SettingsToggleRow(
+                        title: String(localized: "Silent Streaming"),
+                        systemImage: "moon.zzz",
+                        isOn: $suppressesReasoningAndToolUpdates
+                    )
+
+                    SettingsFootnote(String(localized: "Hides live thinking and tool progress during streaming. Dramatically reduces freezing on long replies. Content appears once the response finishes."))
 
                     SettingsDivider()
 
