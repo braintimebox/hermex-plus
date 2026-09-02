@@ -673,7 +673,7 @@ struct ChatView: View {
                     composerAccessoryStack
 
                     messageComposer
-                } else {
+                } else if viewModel.clarificationPrompt == nil {
                     composeFAB
                 }
             }
@@ -753,12 +753,18 @@ struct ChatView: View {
                 // message-count auto-follow racing it) lands without an animated jump (#289).
                 cacheFirstSnapUntil = Date().addingTimeInterval(0.35)
             }
-            .onChange(of: viewModel.clarificationPrompt?.id) {
+            .onChange(of: viewModel.clarificationPrompt?.id) { _, newID in
                 // When the clarification card disappears the inline view is removed and
                 // `onGeometryChange` no longer fires, so its @State would stay stale and
                 // keep the controls lifted. Reset it explicitly on dismissal.
                 if viewModel.clarificationPrompt == nil {
                     clarificationCardHeight = 0
+                }
+                // Auto-hide composer when clarification appears to prevent
+                // the FAB and clarification card from overlapping in the
+                // bottom-right corner.
+                if newID != nil, composerVisible {
+                    composerVisible = false
                 }
             }
             .onChange(of: viewModel.isUploadingAttachment) { _, isUploading in
