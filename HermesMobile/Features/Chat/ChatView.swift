@@ -349,7 +349,7 @@ struct ChatView: View {
     /// compose FAB at the bottom-trailing reveals it on demand (tap → composer
     /// slides up + keyboard). Hidden again on tap-outside, scroll, or after
     /// sending — the chat returns to reading the response full-screen.
-    @State private var composerVisible = false
+    @State private var composerVisible = true
     @State private var didCompleteInitialAppearance = false
     @State private var isInitialComposerFocusContentReady = false
     @State private var didApplyInitialComposerFocusPolicy = false
@@ -1980,9 +1980,7 @@ struct ChatView: View {
             // like the standard path; on failure the text is preserved below.
             draftMessage = ""
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
-            // Reading-first: after a successful send the composer collapses back
-            // to the FAB and the response streams on the full screen.
-            hideComposer()
+            // Composer stays visible after send (always-visible mode).
         }
 
         if let lastError = viewModel.lastError {
@@ -2002,8 +2000,7 @@ struct ChatView: View {
 
         if didSend {
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
-            // Reading-first: voice note sent — collapse back to the FAB.
-            hideComposer()
+            // Composer stays visible after voice note send (always-visible mode).
         }
 
         if let lastError = viewModel.lastError {

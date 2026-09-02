@@ -2646,7 +2646,7 @@ final class ChatViewModel {
         attachments: [JSONValue]?
     ) async throws -> ChatStartResponse {
         let maxAttempts = 3
-        let retryDelays: [Duration] = [.seconds(1.5), .seconds(3)]
+        let retryDelays: [Duration] = [.seconds(0.5), .seconds(1)]
 
         for attempt in 0..<maxAttempts {
             do {

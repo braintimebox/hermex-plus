@@ -1,18 +1,13 @@
+## 3.5.6 — UX: always-visible composer + faster response start
+
+### UX — composer always visible (except clarification)
+
+- **Problem:** composer collapsed to FAB after every send, requiring a tap to reopen. User wanted the composer to always be visible for quick follow-up messages.
+- **Fix:** `composerVisible` defaults to `true`; removed `hideComposer()` calls after text send and voice note send. Composer now stays visible throughout the session. Only auto-hides during clarification prompts (A/B/C/D).
+
+### Performance — faster response start
+
+- **Problem:** retry delays in `startChatWithRetry` were 1.5s and 3s, causing noticeable delay on connection failures.
+- **Fix:** reduced retry delays to 0.5s and 1s. First token appears sooner on retry.
+
 ## 3.5.5 — UX: instant skeleton, cache-first sessions, one-tap keyboard toggle
-
-### Performance — instant skeleton on chat open
-
-- **Problem:** opening a chat blocked the main thread with a synchronous SwiftData fetch (`CacheStore.cachedMessages`) before showing any content. Users saw a blank screen or loading spinner for 0.5-1s.
-- **Fix:** `prepareInitialMessageLoad` now wraps the cache read in `Task { @MainActor }`, showing the skeleton immediately while the cache loads in the background. Skeleton → cached content transition is seamless.
-
-### Performance — cache-first session list
-
-- **Problem:** session list loading blocked the main thread with `CacheStore.cachedSessions` (synchronous SwiftData fetch) before showing any sessions.
-- **Fix:** `SessionListViewModel.load` wraps the cache read in `await Task { @MainActor }.value`, showing the skeleton instantly while the cache loads in the background.
-
-### UX — one-tap keyboard toggle
-
-- **Problem:** tapping the transcript to dismiss the keyboard required two taps: first to dismiss keyboard, second to collapse composer. This was confusing and slow.
-- **Fix:** `handleTranscriptTap()` now toggles the keyboard in one tap: tap with keyboard up → dismiss; tap with keyboard down → show composer + open keyboard. No two-step dance.
-
-## 3.5.4 — UX: hide FAB and scroll-to-bottom during clarification prompts
