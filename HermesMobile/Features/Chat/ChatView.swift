@@ -2752,16 +2752,13 @@ struct ChatView: View {
 
         // The single ownership decision (ChatScrollPolicy.resolveOwner):
         //   - finger priority over printing: while streaming, ANY scroll touch
-        //     immediately yields the viewport to the reader — without this the
-        //     160pt streaming near-bottom band kept follow-latest on, and the
-        //     system `.sizeChanges` anchor glued the viewport back on every
-        //     token, so the reader could never escape the band;
+        //     immediately yields the viewport to the reader;
         //   - ownership must also follow the position, not the touch state: a
         //     quick flick up that ends before the next sample must still drop
         //     app ownership (synchronous KVO metrics make this reliable);
         //   - idle at the bottom returns ownership to the app;
-        //   - while streaming, ownership stays with the reader until an
-        //     explicit ↓ tap or send (Telegram-style, no auto-glue).
+        //   - ↓ is one-shot: fires scroll, does NOT set .app; ownership
+        //     determined by position after scroll settles.
         // NOTE: isReadingOlderTranscript is intentionally NOT reset on
         // near-bottom. Resetting it made the composer chrome re-expand purely
         // because the transcript re-anchored — the "composer jumps when I tap

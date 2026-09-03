@@ -46,22 +46,21 @@ enum ChatScrollPolicy {
     static let initialTranscriptAnchor = UnitPoint.bottom
 
     /// The ONLY place that decides scroll ownership. Total transitions:
-    ///   - explicit ↓ tap / send          → .app (unconditional)
-    ///   - finger touches during stream   → .user (finger priority over printing)
-    ///   - scrolled beyond the threshold  → .user
-    ///   - idle AND at the bottom         → .app
-    ///   - otherwise                      → keep current (sticky)
-    /// A transient touch pause (cooldown) remains a separate suppression —
-    /// it never changes ownership, it only delays auto-scroll during a gesture.
+    ///   - finger touches              → .user (finger priority over printing)
+    ///   - scrolled beyond threshold   → .user
+    ///   - idle AND at the bottom      → .app
+    ///   - otherwise                   → keep current (sticky)
+    /// A transient touch pause (cooldown) suppresses auto-scroll during the
+    /// gesture but does not change ownership — it only delays follow-latest.
+    /// The ↓ button is one-shot: it fires a scroll but does NOT set .app;
+    /// ownership is determined by updateScrollMetrics after the scroll settles.
     static func resolveOwner(
         current: ChatScrollOwner,
         isStreaming: Bool,
         isUserInteracting: Bool,
         isAtVeryBottom: Bool,
-        isInCooldown: Bool = false,
-        explicitFollowCommand: Bool = false
+        isInCooldown: Bool = false
     ) -> ChatScrollOwner {
-        if explicitFollowCommand { return .app }
         // ANY touch yields ownership to the reader — not only while streaming.
         if isUserInteracting { return .user }
         // Settle window after the finger leaves: keep the reader's ownership
@@ -73,31 +72,6 @@ enum ChatScrollPolicy {
         if !isAtVeryBottom { return .user }
         if !isStreaming { return .app }
         return current
-    }
-
-    /// Rich Markdown can finish measuring after the scroll view's initial
-    /// layout. Keep those size changes bottom-pinned only while the app still
-    /// owns follow-latest AND the user is not mid-scroll; return nil as soon
-    /// as the reader owns the viewport (or during the settle cooldown) so a
-    /// streaming bubble's size growth can never yank the viewport back down.
-    ///
-    /// When idle (no stream), the system `.sizeChanges` anchor must stay nil
-    /// entirely: idle follow-latest is already driven explicitly by
-    /// `onChange(of: messages.count)` → `scrollToLatestContent`. A `.bottom`
-    /// anchor here only competes with that path — and worse, outruns the async
-    /// scroll-metrics that drop app ownership. The metrics arrive deferred
-    /// (DispatchQueue.main.async), so ownership can linger `.app` for a frame
-    /// or two after the reader scrolled back up; any incidental size change in
-    /// that window (a LazyVStack row re-measuring, an image decoding, markdown
-    /// finishing layout) makes the system silently re-glue the viewport to the
-    /// bottom — the "scroll won't listen" jump. Restricting the anchor to
-    /// streaming only removes that idle race.
-    static func sizeChangeAnchor(
-        owner: ChatScrollOwner,
-        isAutoScrollPaused: Bool,
-        isStreaming: Bool
-    ) -> UnitPoint? {
-        (isStreaming && owner == .app && !isAutoScrollPaused) ? .bottom : nil
     }
 
     /// Distance (pt) from the bottom within which we treat the transcript as

@@ -183,10 +183,6 @@ struct ChatTranscriptView: View {
                         ChatScrollPolicy.initialTranscriptAnchor,
                         for: .initialOffset
                     )
-                    // sizeChangeAnchor removed: follow-latest is driven
-                    // explicitly by onChange(of: messages.count), not by
-                    // system glue. This eliminates the "scroll won't listen"
-                    // jump when content re-measures.
                     .frame(width: viewportWidth)
                     .refreshable {
                         if hasOlderMessages {
@@ -248,17 +244,14 @@ struct ChatTranscriptView: View {
                         onScrollToLatestContent(proxy, true, "newRow")
                     }
                 }
-                // streamingScrollTrigger removed: onChange(of: messages.count)
-                // handles follow-latest. The trigger was redundant and caused
-                // fight when user scrolled up during streaming.
                 .onChange(of: streamingScrollTrigger) {
                     // Streaming content grows without changing messages.count
                     // (same message, more tokens). Follow when the app owns
-                    // the viewport — identical guard to messages.count. Without
-                    // this, streaming text grows silently below the viewport
-                    // while the reader stares at stale content ("old text
-                    // problem").
-                    guard scrollOwner == .app else { return }
+                    // the viewport AND a stream is active — without the
+                    // stream guard, non-streaming events (loadMessages,
+                    // reloadMessages) that also bump the trigger would cause
+                    // a redundant scrollTo alongside onChange(of: messages.count).
+                    guard scrollOwner == .app, activeStreamID != nil else { return }
                     onScrollToLatestContent(proxy, true, "streamingToken")
                 }
                 .onChange(of: cacheFirstReconcileScrollToken) {

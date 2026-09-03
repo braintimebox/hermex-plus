@@ -1,3 +1,21 @@
+## 3.6.0 — Scroll cleanup (dead code removal + stream guard)
+
+### Scroll — removed dead `sizeChangeAnchor`
+
+- `ChatScrollPolicy.sizeChangeAnchor()` was defined (25 lines) but never called. Removed with its documentation block.
+
+### Scroll — removed dead `explicitFollowCommand` parameter
+
+- `resolveOwner(explicitFollowCommand:)` was accepted but never passed `true` by any caller. Removed. The ↓ button is now documented as one-shot in the `resolveOwner` docstring.
+
+### Scroll — streaming follow guard against double-fire
+
+- `onChange(of: streamingScrollTrigger)` now checks `activeStreamID != nil`. Without this, non-streaming events (loadMessages, reloadMessages) that also bump the trigger caused a redundant `scrollTo` alongside `onChange(of: messages.count)`.
+
+### Scroll — stale comments cleaned
+
+- Removed 4 outdated comments referencing `sizeChangeAnchor`, the old "160pt streaming band", and "Telegram-style no auto-glue" — all describe mechanisms that no longer exist in the codebase.
+
 ## 3.5.9 — Scroll conflict elimination (↓ button one-shot + streaming follow)
 
 ### Scroll — ↓ button is now one-shot (no permanent ownership lock)
