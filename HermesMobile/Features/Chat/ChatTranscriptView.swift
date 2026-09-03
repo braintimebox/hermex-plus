@@ -251,6 +251,16 @@ struct ChatTranscriptView: View {
                 // streamingScrollTrigger removed: onChange(of: messages.count)
                 // handles follow-latest. The trigger was redundant and caused
                 // fight when user scrolled up during streaming.
+                .onChange(of: streamingScrollTrigger) {
+                    // Streaming content grows without changing messages.count
+                    // (same message, more tokens). Follow when the app owns
+                    // the viewport — identical guard to messages.count. Without
+                    // this, streaming text grows silently below the viewport
+                    // while the reader stares at stale content ("old text
+                    // problem").
+                    guard scrollOwner == .app else { return }
+                    onScrollToLatestContent(proxy, true, "streamingToken")
+                }
                 .onChange(of: cacheFirstReconcileScrollToken) {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no

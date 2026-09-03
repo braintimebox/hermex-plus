@@ -2488,11 +2488,14 @@ struct ChatView: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        // The ↓ button does exactly one thing: scroll to the very bottom of the
-        // transcript. Target the 1pt `bottomAnchorID` marker that sits at the
-        // true end of the content — NOT the last message, which can stop short of
-        // the actual bottom (trailing padding, typing indicator, etc.), leaving
-        // the viewport above the newest content and making the button feel dead.
+        // The ↓ button fires a ONE-SHOT scroll to the bottom. Unlike send, it
+        // does NOT permanently lock ownership to .app — ownership is determined
+        // naturally by updateScrollMetrics after the scroll settles. This
+        // eliminates the "↓ button fights the finger" conflict: the user can
+        // scroll back up immediately after tapping ↓ without a 1-frame yank
+        // back down (the old path set .app ownership, which a deferred metrics
+        // delivery then re-evaluated, but in the interim the streaming size
+        // change anchor could re-glue the viewport).
         //
         // Cancel in-flight deceleration first: while the user's flick is still
         // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the button
@@ -2558,8 +2561,13 @@ struct ChatView: View {
         }
 
         if isUserInitiated {
-            // An explicit ↓ tap / send is an unconditional re-arm of follow-latest.
-            scrollOwnership.owner = .app
+            // One-shot follow: clear cooldown so the scroll fires, but do NOT
+            // set ownership to .app here. Ownership is determined by
+            // updateScrollMetrics after the scroll settles — if the user ends
+            // up at the bottom, ownership becomes .app naturally; if they
+            // scroll back up, it becomes .user. This prevents the "↓ fights
+            // the finger" conflict where the permanent .app lock caused a
+            // 1-frame yank when the user immediately scrolled back up.
             userScrollCooldownUntil = nil
         } else if scrollOwnership.owner == .user {
             // Auto channels (streaming size changes, new message rows) must never
