@@ -201,7 +201,7 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertEqual(url.host, "session")
         XCTAssertEqual(HermesDeepLink.sessionID(from: url), "session-abc")
         XCTAssertEqual(HermesDeepLink.sessionID(from: URL(string: "\(scheme)://session/session-xyz")!), "session-xyz")
-        XCTAssertNil(HermesDeepLink.sessionID(from: HermesShareDraft.openURL))
+        XCTAssertNil(HermesDeepLink.sessionID(from: HermesShareDraft.openURL(withDraft: nil)))
     }
 
     func testSessionDeepLinkURLPercentEncodesSessionID() throws {
