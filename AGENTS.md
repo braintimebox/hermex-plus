@@ -8,9 +8,14 @@ Read by every agent (Codex, Claude Code, …); keep it tool-agnostic.
 ## Session start & wrap-up
 - Read `CURRENT.md` first if it exists — it holds the latest resumable state. It is
   local-only (gitignored), never committed; a fresh clone won't have one.
-- **Read `docs/project-metrics.md`** — the single source of truth on project size
-  / lineage / root-cause. Regenerate it with `python3 scripts/project_metrics.py`
-  before any core refactor or when numbers look stale. Do NOT hand-edit it.
+- **Read `docs/project-snapshot.md`** — the single source of truth on where the
+  project stands (HEAD, version, upstream drift, size/lineage). Regenerate it with
+  `python3 scripts/project_snapshot.py` at the start of work or when numbers look
+  stale. Do NOT hand-edit it; it is derived from git.
+  (It replaced `docs/project-metrics.md` + `scripts/project_metrics.py`, which were
+  deleted in 3257880 while this file kept pointing at them — an agent following
+  these lines found nothing and burned context on the discrepancy. Prefer a script
+  that cannot drift over instructions that have to be remembered.)
 - Read only the `PROJECT_SPEC.md` sections named in CURRENT.md's **Spec Read** field;
   never the whole ~850-line spec unless told to.
 - Active work lives in GitHub Issues. Implement only the issue the human selects, one
