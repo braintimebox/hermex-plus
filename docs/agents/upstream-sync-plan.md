@@ -154,17 +154,45 @@ binding constraint, not the work.
 
 ## Recommended sequence
 
+Run the rehearsal first — it costs nothing and answers every question below.
+
+```bash
+cd ~/.hermes/_projects/hermex-plus
+python3 scripts/upstream-rehearse.py       # conflict set + our lines to re-apply
+# read docs/agents/upstream-sync-plan.md alongside the output
 ```
-1. git checkout -b sync/upstream-<date>          (do not work on main)
-2. merge upstream/master
-3. bookkeeping + our files        (fast, mechanical)
-4. tests                          (read both sides)
-5. app code, biggest files first  (the real work)
-6. regenerate pbxproj
-7. run scripts/pipeline-precheck.py
-8. push the branch, open a PR      (pr-ci.yml runs the suite)
-9. only after green: merge to main
+
+Then, in the working repo:
+
+```bash
+# 1. a branch, never main — build-ipa.yml releases on every push to main
+git checkout -b sync/upstream-$(date +%Y%m%d)
+
+# 2. merge (not rebase)
+git remote add upstream https://github.com/uzairansaruzi/hermex.git   # once
+git fetch upstream master
+git merge --no-commit --no-ff upstream/master
+
+# 3. bookkeeping — §Bookkeeping above, 26 lines total
+# 4. our files — confirm they are still present
+# 5. tests — read both sides
+# 6. app code, largest first (ChatView 26 → ChatViewModel 17 → ChatTranscriptView 16)
+# 7. pbxproj — 10 blocks, keep both sides' registrations
+git add -A && git commit
+
+# 8. the gate, then push and open a PR (pr-ci.yml needs the PR, not just the branch)
+python3 scripts/pipeline-precheck.py
+git push -u origin sync/upstream-$(date +%Y%m%d)
+gh pr create --draft --base main --head sync/upstream-$(date +%Y%m%d) \
+  --title "sync: merge upstream/master" --body "Plan: docs/agents/upstream-sync-plan.md"
+
+# 9. only after the suite is green: merge to main
+gh pr ready && gh pr merge --merge
 ```
+
+Verified in advance: `gh` is authenticated as `braintimebox`, push permission on the
+repo is `true`, and `sync/*` branches can be created and deleted. Nothing in this
+sequence needs access that is not already present.
 
 Working on a branch matters for cost: `build-ipa.yml` triggers on `main` only and
 publishes a release on push, and it has **no** `concurrency` block, so every push runs
