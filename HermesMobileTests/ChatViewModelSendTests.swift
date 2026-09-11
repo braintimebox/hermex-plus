@@ -3208,7 +3208,7 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     @MainActor
-    func testPrepareInitialMessageLoadPrimesCacheWithoutStartingNetwork() throws {
+    func testPrepareInitialMessageLoadPrimesCacheWithoutStartingNetwork() async throws {
         let context = try makeContext()
         let serverURL = try XCTUnwrap(URL(string: "https://example.test"))
         try CacheStore.cacheMessages(
@@ -3228,13 +3228,19 @@ final class ChatViewModelSendTests: XCTestCase {
 
         viewModel.prepareInitialMessageLoad(modelContext: context)
 
+        // prepareInitialMessageLoad paints the cached transcript from a detached
+        // Task, so the messages are not there yet on the next line. Wait for the
+        // painted state instead of asserting immediately — the assertion is about
+        // what cache-first rendering produces, not about how fast it produces it.
+        try await waitUntil { viewModel.messages.count == 2 }
+
         XCTAssertEqual(viewModel.messages.compactMap(\.content), ["Cached question", "Cached answer"])
         XCTAssertTrue(viewModel.isLoading)
         XCTAssertFalse(viewModel.isViewingCachedData)
     }
 
     @MainActor
-    func testPrepareInitialMessageLoadBoundsLargeCachedTranscriptToNewestPage() throws {
+    func testPrepareInitialMessageLoadBoundsLargeCachedTranscriptToNewestPage() async throws {
         let context = try makeContext()
         let serverURL = try XCTUnwrap(URL(string: "https://example.test"))
         let cachedMessages = (0..<75).map { index in
@@ -3258,6 +3264,10 @@ final class ChatViewModelSendTests: XCTestCase {
         }
 
         viewModel.prepareInitialMessageLoad(modelContext: context)
+
+        // Same detached-Task paint as the test above: wait for the bounded page
+        // to land before asserting on it.
+        try await waitUntil { !viewModel.messages.isEmpty }
 
         XCTAssertEqual(viewModel.messages.count, 50)
         XCTAssertEqual(viewModel.messages.first?.content, "Cached message 25")
