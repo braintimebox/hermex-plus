@@ -71,7 +71,15 @@ enum CacheStore {
         cachedAt: Date = Date()
     ) throws {
         let serverURLString = serverURL.absoluteString
-        let cacheableSessions = sessions.filter { $0.archived != true }
+        // Only sessions with a real server-minted id are cacheable. A row with
+        // no session_id has no stable identity — SessionSummary.id falls back to
+        // "session-<title>-<timestamp>", so the same session would be cached
+        // under a synthetic key, then fail to match on the next load (when the
+        // server does supply an id) and linger as a duplicate until it expires.
+        // cacheSession(_:) already guards on this; the plural path must agree.
+        let cacheableSessions = sessions.filter {
+            $0.archived != true && !($0.sessionId ?? "").isEmpty
+        }
         let freshKeys = Set(cacheableSessions.map { session -> String in
             let sessionID = session.sessionId ?? session.id
             return CachedSession.cacheKey(serverURLString: serverURLString, sessionID: sessionID)
@@ -250,14 +258,17 @@ enum CacheStore {
     private static let maintenanceLock = NSLock()
     private static var lastMaintenanceAt: Date?
 
-    /// Clears the maintenance throttle. Test-only.
+    /// Minimum gap between full-table maintenance runs.
     ///
-    /// `lastMaintenanceAt` is process-global state, so it leaks between tests in
-    /// the same process: the first test to write cache rows stamps the throttle,
-    /// and every later test whose `cachedAt` falls inside the 60s window is then
-    /// silently skipped — expiry and eviction never run, and assertions about
-    /// deleted rows fail for a reason that has nothing to do with the code under
-    /// test. Call this from `setUp` so each test observes a clean throttle.
+    /// A performance guard, not business logic: it exists so a burst of cache
+    /// writes does not re-scan the whole table each time. Tests set this to 0 so
+    /// maintenance always runs — relying on `setUp` to clear the timestamp is
+    /// not enough, because the tests execute concurrently and one test's write
+    /// can stamp the throttle between another test's setup and its assertion.
+    static var maintenanceInterval: TimeInterval = 60
+
+    /// Clears the maintenance throttle. Test-only; prefer setting
+    /// `maintenanceInterval = 0`, which is race-free.
     static func resetMaintenanceThrottleForTesting() {
         maintenanceLock.lock()
         lastMaintenanceAt = nil
@@ -269,7 +280,9 @@ enum CacheStore {
     private static func performMaintenance(in context: ModelContext, now: Date) throws {
         maintenanceLock.lock()
         let shouldRun: Bool
-        if let last = lastMaintenanceAt, now.timeIntervalSince(last) < 60 {
+        if maintenanceInterval > 0,
+           let last = lastMaintenanceAt,
+           now.timeIntervalSince(last) < maintenanceInterval {
             shouldRun = false
         } else {
             lastMaintenanceAt = now

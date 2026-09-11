@@ -7,13 +7,17 @@ final class CacheStoreTests: XCTestCase {
 
     /// CacheStore throttles full-table maintenance to once per 60 seconds, and
     /// the throttle timestamp is static — it survives between tests in the same
-    /// process. Without this reset, whichever test runs first stamps the window
-    /// and every later test whose `cachedAt` falls inside it is skipped, so
-    /// expiry and eviction silently do not run. The assertions in this file use
-    /// hand-picked `cachedAt` values only seconds apart, so each test needs a
-    /// clean throttle to observe the behaviour it is actually testing.
+    /// process. Clearing it in `setUp` is not sufficient: the tests run
+    /// concurrently, so one test's cache write can stamp the throttle in the
+    /// window between another test's setup and its assertion, and that test then
+    /// observes no expiry or eviction at all.
+    ///
+    /// Disabling the interval removes the race entirely: the throttle is a
+    /// performance guard, not behaviour under test, so every test should see
+    /// maintenance run.
     override func setUp() {
         super.setUp()
+        CacheStore.maintenanceInterval = 0
         CacheStore.resetMaintenanceThrottleForTesting()
     }
 
