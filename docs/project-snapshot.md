@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | f6147cf |
+| HEAD | 2fbdbde |
 | Версия | 3.6.1 |
 | Обновлено | 2026-09-11 |
 
 **Последние коммиты:**
 ```
+2fbdbde tests: complete CoordinatorDelegateSpy conformance, document status events
+69a769b precheck: upstream drift is advisory, not a blocker
+8b5e306 pipeline: tests gate the build, stable release link, unique build number
+824b4fd 3.6.1: release 3.6.1
 f6147cf docs: update Download link to v3.6.0
 8f8b76d v3.6.0: scroll cleanup (dead code removal + stream guard)
-039d265 docs: update Download link to v3.5.9
-a32b57c v3.5.9: scroll conflict elimination (↓ one-shot + streaming follow)
-2c47ce1 docs: update Download link to v3.5.8
-01042e9 v3.5.8: scroll unification + instant first token (16ms)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
