@@ -60,11 +60,12 @@ class APIClientTestCase: XCTestCase {
 /// composer configuration loading. `APIClientTestCase` already calls it for its
 /// subclasses; a class that extends `XCTestCase` directly must call it itself.
 ///
-/// It is a named function rather than inlined calls so that the omission is
-/// visible in review: a class that forgets it inherits nondeterministic
-/// cross-test state — one test's model catalog decides what the next test's
-/// selected-model title resolves to, which reads as a broken product feature
-/// rather than a missing reset.
+/// This is a belt-and-braces reset, not the primary defence. The composer
+/// config cache is bypassed entirely under test (see
+/// ChatComposerConfigLoader.isRunningTests), so a class that forgets this call
+/// no longer inherits another class's catalog. What remains here is the
+/// cache-store maintenance throttle, which is a genuine timestamp that would
+/// otherwise let one test suppress another's eviction.
 func resetProcessGlobalTestState() {
     CacheStore.maintenanceInterval = 0
     CacheStore.resetMaintenanceThrottleForTesting()

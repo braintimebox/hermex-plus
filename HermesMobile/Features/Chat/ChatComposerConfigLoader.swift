@@ -65,15 +65,33 @@ struct ChatComposerConfigLoader {
     private static var memoryCache: (state: ChatComposerConfigState, timestamp: Date)?
     private static let cacheTTL: TimeInterval = 86_400
 
-    /// Clears the in-memory config cache. Test-only.
+    /// True while the process is a test host.
     ///
-    /// The cache is static with a 24-hour TTL and no keying — it deliberately
-    /// survives background/foreground because the process stays alive, which is
-    /// right for the app but leaks across tests: the first test to load a
-    /// configuration populates it, and every later test then reads that state
-    /// instead of driving its own stubbed responses. That is why assertions like
-    /// 'the session model override is kept' saw a different model, or a different
-    /// effort level, than the test had set up.
+    /// Under test the cache is bypassed entirely rather than merely reset
+    /// between cases. Resetting relies on every test class remembering to call
+    /// `resetMemoryCacheForTesting()` — and a class that forgets inherits the
+    /// previous class's catalog, which surfaces as a product-looking failure
+    /// ("the session model override was dropped") rather than as a missing
+    /// reset. Bypassing removes the possibility instead of managing it.
+    ///
+    /// Two independent signals are checked, because a single one that silently
+    /// fails to fire would leave the cache live under test and reintroduce the
+    /// cross-test bleed with no visible cause. Both are set by the XCTest
+    /// harness when the unit-test bundle is hosted by the app (TEST_HOST):
+    /// `XCTestConfigurationFilePath` in the environment, and a `--testing`
+    /// launch argument, which the app forwards from its own arguments.
+    ///
+    /// The app is unaffected: both are false for every non-test launch.
+    private static let isRunningTests: Bool = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return true
+        }
+        return ProcessInfo.processInfo.arguments.contains("--testing")
+    }()
+
+    /// Clears the in-memory config cache. Test-only, and only needed if a test
+    /// deliberately wants to observe caching behaviour; the cache is otherwise
+    /// inert while `isRunningTests` is true.
     static func resetMemoryCacheForTesting() {
         memoryCache = nil
     }
@@ -84,8 +102,10 @@ struct ChatComposerConfigLoader {
 
     func loadConfiguration(from initialState: ChatComposerConfigState) async -> ChatComposerConfigLoadResult {
         // Return cached state if fresh. iOS keeps the process alive across
-        // background/foreground transitions, so this cache typically survives all day.
-        if let (cachedState, ts) = Self.memoryCache,
+        // background/foreground transitions, so this cache typically survives all
+        // day. Skipped under test — see isRunningTests.
+        if !Self.isRunningTests,
+           let (cachedState, ts) = Self.memoryCache,
            ts.timeIntervalSinceNow > -Self.cacheTTL,
            !cachedState.modelCatalogGroups.isEmpty {
             var result = cachedState
