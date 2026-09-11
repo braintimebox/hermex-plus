@@ -208,6 +208,7 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
 scripts/pipeline-precheck.py                ← 6 гейтов (вызывается хуком И CI)
 scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
+scripts/upstream-rehearse.py                ← разведка upstream-merge (рабочий репо не трогает)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
 .githooks/pre-push                          ← В РЕПОЗИТОРИИ (не в .git/hooks!)
 scripts/sync-upstream                       ← merge с upstream (--apply/--record-base)

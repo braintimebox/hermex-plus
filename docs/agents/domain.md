@@ -14,6 +14,10 @@ When present, use:
   failure modes this suite has actually produced (asserting `async let` order,
   reading a cache right after an async write, a wait helper that times out
   silently). Each entry names the commit that fixed it.
+- `docs/agents/upstream-sync-plan.md` before starting an upstream sync — the
+  conflict set, the resolution rule for each class of file, and the known traps.
+  Run `python3 scripts/upstream-rehearse.py` first; the plan is written against
+  its output.
 
 There is currently no required `CONTEXT.md` or `docs/adr/` directory. If these files do not exist, proceed silently. Do not suggest creating them upfront; producer skills such as `grill-with-docs` can create them lazily when domain terms or decisions are clarified.
 
