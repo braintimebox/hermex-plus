@@ -8,8 +8,18 @@ enum TranscriptLinkPreviewExtractor {
     /// `TranscriptLinkPreviewEligibility` callers in `MessageBubbleView`, which
     /// run in body evaluation). A lightweight regex is a deterministic O(line)
     /// match and preserves the "first plausible web URL" contract.
+    ///
+    /// The character class is `[^…]*` — the `*` is load-bearing. Without it the
+    /// class matched exactly one character, so every extracted URL was truncated
+    /// to `https://` plus a single letter (`https://e`), and every link preview
+    /// in the app resolved to a bogus host. See TranscriptLinkPreviewTests.
+    ///
+    /// Terminators are the characters that cannot appear in a URL but commonly
+    /// follow one in prose: whitespace, angle brackets, quotes, brackets, braces,
+    /// backslash, backtick, comma, semicolon and a closing paren. `?` and `&`
+    /// are deliberately NOT excluded — they carry query strings.
     private static let webURLPattern =
-        #"https?:\/\/[^\s<>"'\u{2028}\u{2029}\[\]\{\}\\]"#
+        #"https?:\/\/[^\s<>"'\u{2028}\u{2029}\[\]\{\}\\`~,;)]*"#
 
     static func firstWebURL(in text: String) -> URL? {
         for segment in searchableSegments(in: text) {
