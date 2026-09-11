@@ -1056,7 +1056,16 @@ final class SessionListMutationTests: XCTestCase {
 
         XCTAssertFalse(didRename)
         XCTAssertTrue(viewModel.isViewingCachedData)
-        XCTAssertEqual(requestedPaths, ["/api/sessions"])
+        // Not an exact request count: load() retries a connectivity failure up to
+        // 5 times with 1/2/4/8s backoff, so a cold start has time to reach a
+        // tunnel that is still coming up (v1.5.5). What matters here is that
+        // every request went to the session list and that no write was attempted
+        // — the assertion is about rename being blocked, not about retry counts.
+        XCTAssertFalse(requestedPaths.isEmpty)
+        XCTAssertTrue(
+            requestedPaths.allSatisfy { $0 == "/api/sessions" },
+            "rename must not issue a write request while offline; got \(requestedPaths)"
+        )
         XCTAssertEqual(viewModel.sessions.first?.title, "Cached Planning")
         XCTAssertEqual(viewModel.actionErrorMessage, "Reconnect to the server to rename a session.")
         XCTAssertFalse(viewModel.isRenamingSession)
@@ -2269,6 +2278,39 @@ final class SessionListMutationTests: XCTestCase {
         XCTAssertFalse(SessionSummary(sessionId: "tg4", sourceLabel: "Telegram").shouldAppearInSessionList)
         XCTAssertTrue(SessionSummary(sessionId: "web2", sessionSource: "webui").shouldAppearInSessionList)
         XCTAssertTrue(SessionSummary(sessionId: "normal2").shouldAppearInSessionList)
+    }
+
+    /// A row with no title is NOT a placeholder.
+    ///
+    /// The server omits `title` for sessions it has not named. Treating that as a
+    /// placeholder hid those sessions from the sidebar entirely, even though the
+    /// row view already renders them with an "Untitled Session" fallback — the
+    /// display code existed but no data ever reached it.
+    ///
+    /// A placeholder is specifically a row the app created for a new chat: it has
+    /// an Untitled title AND no activity of any kind. Both halves are required.
+    func testSessionsWithoutTitleAreNotPlaceholders() {
+        let untitled = SessionSummary(sessionId: "no-title")
+        XCTAssertFalse(untitled.isEmptySidebarPlaceholder, "no title is not a placeholder shape")
+        XCTAssertTrue(untitled.shouldAppearInSessionList, "a server session with no title must stay visible")
+
+        // The real placeholder shape still hides: Untitled title, no activity.
+        XCTAssertTrue(SessionSummary(sessionId: "new", title: "Untitled").isEmptySidebarPlaceholder)
+        XCTAssertFalse(SessionSummary(sessionId: "new2", title: "Untitled").shouldAppearInSessionList)
+        XCTAssertTrue(
+            SessionSummary(sessionId: "new3", title: "Untitled Session").isEmptySidebarPlaceholder,
+            "both Untitled spellings are placeholders"
+        )
+
+        // ...but any activity or an explicit title keeps it visible.
+        XCTAssertTrue(
+            SessionSummary(sessionId: "a", title: "Untitled", messageCount: 1).shouldAppearInSessionList,
+            "a contentful untitled row is a real session, not a placeholder"
+        )
+        XCTAssertTrue(
+            SessionSummary(sessionId: "b", title: "Planning").shouldAppearInSessionList,
+            "a named row is never a placeholder"
+        )
     }
 
     func testReadOnlyRowsOfferExportButNoMutationActions() {

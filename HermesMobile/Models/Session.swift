@@ -447,8 +447,19 @@ extension SessionSummary {
             .contains("cron")
     }
 
+    /// True only for the placeholder titles the app itself assigns to a brand-new
+    /// chat. A row with NO title at all is NOT a placeholder: the server omits
+    /// `title` for sessions it has not named, and hiding those would drop real
+    /// sessions out of the sidebar with no way to reach them. The row view
+    /// already renders such rows with an "Untitled Session" fallback
+    /// (SessionListViewModel:1096), so filtering them out here meant the UI code
+    /// that displays them could never run.
+    ///
+    /// Placeholder-ness is decided by the combination below (title AND no
+    /// activity), which is what `isEmptySidebarPlaceholder` documents: "hide only
+    /// the known empty Untitled shape".
     private var hasPlaceholderTitle: Bool {
-        guard let normalizedTitle = Self.nonEmpty(title)?.lowercased() else { return true }
+        guard let normalizedTitle = Self.nonEmpty(title)?.lowercased() else { return false }
         return normalizedTitle == "untitled" || normalizedTitle == "untitled session"
     }
 
