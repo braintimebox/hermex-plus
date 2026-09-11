@@ -47,7 +47,8 @@ SNAPSHOT = ROOT / "docs" / "project-snapshot.md"
 VERSION = ROOT / "VERSION"
 CHANGELOG = ROOT / "CHANGELOG.md"
 PBXPROJ = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
-HOOK = ROOT / ".git" / "hooks" / "pre-push"
+GITHOOKS_DIR = ".githooks"
+HOOK_REL = f"{GITHOOKS_DIR}/pre-push"
 WEBUI_BASE = os.environ.get("HERMES_WEBUI_BASE", "").rstrip("/")
 
 # gh resolves the default repo from the git remote; our remote points at
@@ -227,14 +228,81 @@ exec python3 "$(git rev-parse --show-toplevel)/scripts/pipeline-precheck.py"
 
 
 def cmd_install() -> int:
-    hooks_dir = ROOT / ".git" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    HOOK.write_text(HOOK_BODY)
-    HOOK.chmod(0o755)
-    print(f"installed pre-push gate → {HOOK.relative_to(ROOT)}")
+    """Point git at the versioned hook directory.
+
+    The hook lives at .githooks/pre-push inside the repository, so it travels
+    with the repo (clone, move, reinstall). Writing into .git/hooks instead keeps
+    the gate outside version control, where it silently disappears on a fresh
+    clone — the push protection is then gone and nothing says so.
+    """
+    hook = ROOT / HOOK_REL
+    if not hook.exists():
+        print(f"✗ {HOOK_REL} missing from the repository — cannot install")
+        return 1
+    hook.chmod(0o755)
+    sh(["git", "config", "core.hooksPath", GITHOOKS_DIR])
+    print(f"hook path  → core.hooksPath = {GITHOOKS_DIR}")
+    print(f"gate       → {HOOK_REL} (versioned, travels with the repo)")
     print("every `git push` now runs scripts/pipeline-precheck.py")
     print()
-    print("note: .git/hooks is not versioned. Re-run after a fresh clone.")
+    print("note: core.hooksPath is local git config — run this once per clone.")
+    return 0
+
+
+# --- ops: host services (see ops/README.md) ---------------------------------
+
+OPS_DIR = ROOT / "ops" / "hermex-logs"
+SERVICE_INSTALL_DIR = Path.home() / ".hermes" / "_projects" / "hermex-logs"
+SYSTEMD_USER_DIR = Path.home() / ".config" / "systemd" / "user"
+SERVICE_NAME = "hermex-logs.service"
+
+
+def cmd_install_server(target_dir: Path | None = None) -> int:
+    """Install or update the logs endpoint on this host.
+
+    Source of truth is ops/hermex-logs/ in this repository. The running copy
+    under ~/.hermes and the unit under ~/.config/systemd/user are install
+    targets — an earlier revision of this service existed only as those two
+    files, in one copy, untracked, and nobody noticed when it died.
+    """
+    install_dir = (target_dir or SERVICE_INSTALL_DIR).expanduser()
+    source = OPS_DIR / "server.py"
+    template = OPS_DIR / f"{SERVICE_NAME}.template"
+
+    for required in (source, template):
+        if not required.exists():
+            print(f"✗ missing {required.relative_to(ROOT)} — cannot install")
+            return 1
+
+    install_dir.mkdir(parents=True, exist_ok=True)
+    script = install_dir / "server.py"
+    script.write_bytes(source.read_bytes())
+    print(f"server     → {script}")
+
+    SYSTEMD_USER_DIR.mkdir(parents=True, exist_ok=True)
+    unit_path = SYSTEMD_USER_DIR / SERVICE_NAME
+    unit_path.write_text(
+        template.read_text(encoding="utf-8").replace("{{INSTALL_DIR}}", str(install_dir)),
+        encoding="utf-8",
+    )
+    print(f"unit       → {unit_path}")
+
+    for cmd in (
+        ["systemctl", "--user", "daemon-reload"],
+        ["systemctl", "--user", "enable", SERVICE_NAME],
+        ["systemctl", "--user", "restart", SERVICE_NAME],
+    ):
+        sh(cmd, check=False)
+
+    time.sleep(1)
+    active = sh(["systemctl", "--user", "is-active", SERVICE_NAME], check=False).strip()
+    print(f"service    → {active or 'unknown'}")
+    health = sh(["curl", "-s", "--max-time", "5", "http://127.0.0.1:8912/health"],
+                check=False).strip()
+    print(f"health     → {health or '(no response)'}")
+    if active != "active":
+        print("\nservice is not running — check: journalctl --user -u hermex-logs -n 50")
+        return 1
     return 0
 
 
@@ -252,7 +320,8 @@ def cmd_status() -> int:
     print(f"version   {current_version()}")
     print(f"branch    {git('branch', '--show-current')}")
     print(f"head      {git('log', '--oneline', '-1')}")
-    print(f"pre-push  {'installed' if HOOK.exists() else 'NOT INSTALLED  ← run: … install'}")
+    hook_ok = (ROOT / HOOK_REL).exists() and git("config", "core.hooksPath") == GITHOOKS_DIR
+    print(f"pre-push  {'installed' if hook_ok else 'NOT INSTALLED  ← run: … install'}")
 
     su = ROOT / "scripts" / "sync-upstream"
     if su.exists():
@@ -311,6 +380,9 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd")
 
     sub.add_parser("install", help="install the pre-push gate")
+    sp = sub.add_parser("install-server", help="install/update the host logs endpoint")
+    sp.add_argument("--dir", type=Path, default=None,
+                    help="install directory (default: ~/.hermes/_projects/hermex-logs)")
     sub.add_parser("check", help="run the local gates")
     sub.add_parser("status", help="pipeline + upstream status")
     sub.add_parser("sync", help="upstream drift and merge plan")
@@ -331,7 +403,7 @@ def main() -> int:
 
     if sys.argv[1] == "release":
         a = ap.parse_args()
-    elif sys.argv[1] in {"install", "check", "status", "sync"}:
+    elif sys.argv[1] in {"install", "install-server", "check", "status", "sync"}:
         a = ap.parse_args()
     elif sys.argv[1] in {"-h", "--help"}:
         a = ap.parse_args()
@@ -341,6 +413,8 @@ def main() -> int:
 
     if a.cmd == "install":
         return cmd_install()
+    if a.cmd == "install-server":
+        return cmd_install_server(a.dir)
     if a.cmd == "check":
         return cmd_check()
     if a.cmd == "status":

@@ -1,0 +1,19 @@
+[Unit]
+Description=Hermex Plus Logs Ingest Endpoint
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {{INSTALL_DIR}}/server.py
+# Restart=on-failure only restarts on a non-zero exit. An unhandled exception
+# kills the process with SIGTERM, which systemd treats as a clean stop — the
+# endpoint then sat dead for two weeks. Always restart, whatever the exit status.
+Restart=always
+RestartSec=5
+# The handler now survives client disconnects, but keep a ceiling anyway so a
+# pathological loop can't restart forever unnoticed.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=default.target
