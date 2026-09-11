@@ -2894,21 +2894,22 @@ final class ChatViewModelSendTests: XCTestCase {
         // Reading immediately returns [] — an empty cache, not a stale one — and
         // fails for a reason unrelated to the optimistic-message behaviour this
         // test exists to check.
-        try await waitUntil {
+        try await waitUntil("the optimistic message to be persisted") {
             let contents = (try? CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
                 sessionID: "session-abc",
                 in: context
             ))?.compactMap(\.content) ?? []
-            return contents == ["Keep working"]
+            return contents.contains("Keep working")
         }
         XCTAssertEqual(
             try CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
                 sessionID: "session-abc",
                 in: context
-            ).compactMap(\.content),
-            ["Keep working"]
+            ).compactMap(\.content).filter { $0 == "Keep working" }.count,
+            1,
+            "the optimistic message must be persisted exactly once"
         )
 
         let reopenedViewModel = try makeViewModel { request in
@@ -2935,6 +2936,19 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertEqual(reopenedViewModel.messages.compactMap(\.role), ["user", "assistant"])
         XCTAssertEqual(reopenedViewModel.messages.compactMap(\.content), ["Keep working", "Recovered transcript."])
+
+        // The reconciled transcript is written by loadMessages on a background
+        // queue, and this test has already triggered an earlier write for the
+        // optimistic message. Both are in flight; wait for the final contents
+        // rather than reading whichever write happened to land first.
+        try await waitUntil("the reconciled transcript to land in the cache") {
+            let contents = (try? CacheStore.cachedMessages(
+                serverURL: URL(string: "https://example.test")!,
+                sessionID: "session-abc",
+                in: context
+            ))?.compactMap(\.content) ?? []
+            return contents == ["Keep working", "Recovered transcript."]
+        }
         XCTAssertEqual(
             try CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
@@ -3162,7 +3176,7 @@ final class ChatViewModelSendTests: XCTestCase {
         // loadMessages returns. Asserting the cache immediately reads whatever
         // was there before — the stale row this test exists to check gets
         // replaced. Wait for the write to become visible instead.
-        try await waitUntil {
+        try await waitUntil("the online transcript to replace the stale cache row") {
             let contents = (try? CacheStore.cachedMessages(
                 serverURL: serverURL,
                 sessionID: "session-abc",
@@ -6131,7 +6145,7 @@ final class ChatViewModelSendTests: XCTestCase {
         // → DispatchQueue.global(qos: .utility).async, so the row is not in the
         // store when this line runs. Reading immediately sees nil turnTps and
         // fails for a reason that has nothing to do with TPS handling.
-        try await waitUntil {
+        try await waitUntil("the completed turn to reach the cache with its TPS") {
             let messages = (try? CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
                 sessionID: "session-abc",
@@ -6207,7 +6221,7 @@ final class ChatViewModelSendTests: XCTestCase {
         // each response is served, which happens before the view model clears
         // activeStreamID — so the assertions below ran mid-flight and saw
         // "stream-123" still set.
-        try await waitUntil {
+        try await waitUntil("the inactive stream to clear activeStreamID") {
             viewModel.activeStreamID == nil && didReloadMessages
         }
 
@@ -7315,14 +7329,33 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     @MainActor
-    private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
-        for _ in 0..<40 {
+    /// Waits until `condition` holds, or fails the test with a message naming the
+    /// condition that never became true.
+    ///
+    /// The timeout used to expire silently: the loop simply fell through and the
+    /// test continued to its next assertion, which then failed with whatever the
+    /// state happened to be ("[]" is not equal to "["Keep working"]"). That made
+    /// every timing-sensitive failure look like a logic bug in the code under
+    /// test. The wait is also longer than it looks — a background cache write
+    /// contends with the main context for SwiftData, and 2s of 50ms sleeps was
+    /// not reliably enough on CI.
+    private func waitUntil(
+        _ description: String = "condition",
+        timeout: TimeInterval = 10,
+        _ condition: @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
             if condition() {
                 return
             }
 
             try await Task.sleep(nanoseconds: 50_000_000)
         }
+
+        XCTFail("timed out after \(timeout)s waiting for: \(description)", file: file, line: line)
     }
 
     private func runMainActorTest(
