@@ -113,6 +113,19 @@ def pbxproj_ids_are_disjoint(target: Path, path: str) -> tuple[bool, int, int, i
     return (not shared, len(ours), len(theirs), len(shared))
 
 
+def block_shape(target: Path, path: str) -> tuple[int, int]:
+    """(blocks, blocks where one side is empty).
+
+    A block with one empty side is a pure insertion: only one of the two repos added
+    those lines, so there is nothing to reconcile — keep the non-empty side. Those
+    need no judgement, which is worth knowing before reading 26 blocks in one file.
+    """
+    text = (target / path).read_text(errors="ignore")
+    blocks = re.findall(r"<<<<<<<[^\n]*\n(.*?)=======\n(.*?)>>>>>>>[^\n]*\n", text, re.S)
+    additive = sum(1 for ours, theirs in blocks if not ours.strip() or not theirs.strip())
+    return len(blocks), additive
+
+
 def run(args: list[str], cwd: Path | None = None, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(
         args, cwd=cwd, capture_output=True, text=True, check=False
@@ -187,22 +200,26 @@ def main() -> int:
     print("REHEARSAL — conflict set")
     print("=" * 68)
 
-    blocks: list[tuple[int, str]] = []
+    blocks: list[tuple[int, int, str]] = []
     for path in files:
-        text = (target / path).read_text(errors="ignore")
-        blocks.append((text.count("<<<<<<<"), path))
+        count, additive = block_shape(target, path)
+        blocks.append((count, additive, path))
     blocks.sort(reverse=True)
 
-    total = sum(count for count, _ in blocks)
-    print(f"\n{len(files)} files, {total} conflict blocks\n")
-    for count, path in blocks:
-        print(f"  {count:3}  {path}")
+    total = sum(count for count, _, _ in blocks)
+    total_additive = sum(additive for _, additive, _ in blocks)
+    print(f"\n{len(files)} files, {total} conflict blocks")
+    print(f"{total_additive} of them are pure insertions (one side empty) — keep the")
+    print(f"non-empty side, no judgement needed. {total - total_additive} need a decision.\n")
+    for count, additive, path in blocks:
+        note = f"  ({additive} insertion-only)" if additive else ""
+        print(f"  {count:3}  {path}{note}")
 
     print("\n" + "=" * 68)
     print("BY CLASS")
     print("=" * 68)
     groups: dict[str, list[str]] = {}
-    for _, path in blocks:
+    for _, _, path in blocks:
         groups.setdefault(classify(path), []).append(path)
     for label in sorted(groups, key=lambda k: -len(groups[k])):
         print(f"\n  {label}  ({len(groups[label])})")
