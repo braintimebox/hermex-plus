@@ -1,5 +1,12 @@
 name: Build Hermes Plus
 
+# Tests gate the build. The suite runs BEFORE the IPA is packaged so a broken
+# change cannot reach a device: previously build-ipa.yml packaged and shipped
+# whatever landed on main, and the 92 XCTest files were never executed anywhere
+# (pr-ci.yml is pull_request-only and this repo pushes straight to main).
+#
+# Docs-only pushes (README.md) still skip the whole run.
+
 on:
   push:
     branches:
@@ -9,15 +16,113 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: macos-26
+  # Fast fail: release invariants before spending a macOS runner.
+  guard:
+    name: Release guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Check release invariants
+        run: python3 scripts/release-check.py --allow-untagged
+      - name: Check local gates
+        # Runs all five gates the pre-push hook runs, so a push made with
+        # `--no-verify` (which skips the hook entirely) is still caught here.
+        # Gates 4 and 5 are advisory and print warnings without failing.
+        run: |
+          python3 -c "import yaml, sys" 2>/dev/null || pip install -q pyyaml
+          python3 scripts/pipeline-precheck.py
+
+  test:
+    name: Build and Test
+    needs: guard
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      PROJECT_PATH: HermesMobile.xcodeproj
+      SCHEME: HermesMobile
+      DERIVED_DATA_PATH: DerivedData
+      RESULT_BUNDLE_PATH: TestResults.xcresult
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Select simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          name=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          phones = [
+              device["name"]
+              for runtime, devices in data["devices"].items()
+              if "iOS" in runtime
+              for device in devices
+              if device.get("isAvailable") and device["name"].startswith("iPhone")
+          ]
+          preferred = "iPhone 17"
+          print(preferred if preferred in phones else phones[0] if phones else "")
+          ')
+          if [[ -z "${name}" ]]; then
+            echo "No available iPhone simulator found:" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Using simulator: ${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild build-for-testing \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Build-for-testing: $((SECONDS - start_seconds))s"
+
+      - name: Test
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild test-without-building \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            -resultBundlePath "${RESULT_BUNDLE_PATH}" \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count 1 \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Tests: $((SECONDS - start_seconds))s"
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ env.RESULT_BUNDLE_PATH }}
+          if-no-files-found: ignore
+
+  build:
+    name: Package IPA
+    needs: test
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Read version
         id: version
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
-      - name: Release guard
-        run: python3 scripts/release-check.py --allow-untagged
+
       - name: Build for device
         run: >
           xcodebuild
@@ -28,15 +133,33 @@ jobs:
           -derivedDataPath DerivedData
           CODE_SIGNING_ALLOWED=NO
           build
+
       - name: Locate .app
         run: |
           echo "APP_PATH=$(find DerivedData/Build/Products -name '*.app' -path '*/Release-iphoneos/*' -type d | head -1)" >> $GITHUB_ENV
+
       - name: Package IPA
         run: |
           mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "HermesPlus-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: HermesPlus-${{ steps.version.outputs.VER }}-unsigned
           path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30
+
+      - name: Create Release
+        # Only on a real push. A manual workflow_dispatch run (used to verify
+        # the suite without releasing) must not publish a release.
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VER }}
+          name: Hermex Plus ${{ steps.version.outputs.VER }}
+          body_path: CHANGELOG.md
+          files: HermesPlus-${{ steps.version.outputs.VER }}.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

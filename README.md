@@ -16,11 +16,15 @@ Your server. Your iPhone. No middleman.
 
 ## 🔗 Download
 
-**Current build (direct IPA):** https://github.com/braintimebox/hermex-plus/actions/runs/33714382727/artifacts/9878081562
+**Latest release (direct IPA):** https://github.com/braintimebox/hermex-plus/releases/latest
 
-**All builds:** https://github.com/braintimebox/hermex-plus/actions — pick a green build → Artifacts → `HermexPlus-unsigned`
+**All builds:** https://github.com/braintimebox/hermex-plus/actions — pick a green build → Artifacts
 
 Then install with SideStore / AltStore → connect to your Hermes server.
+
+> The link above is stable: every release publishes its IPA as a GitHub Release, so
+> `/releases/latest` always points at the newest installable build. Per-run artifact
+> links expire after 30 days and are deliberately not used here.
 
 ## 🚀 Features (what we added on top of Hermex)
 

@@ -15,6 +15,11 @@ COMMANDS
     sync      upstream drift and merge plan
     install   install the pre-push gate (not versioned in git)
 
+SAFETY
+    Releasing is never implicit. `release` requires an explicit subcommand or
+    an explicit --next/--close/--note flag. A bare invocation (no arguments)
+    prints help and exits — it does NOT release.
+
 WHY THE GATE MATTERS
     `git push` is protected by scripts/pipeline-precheck.py once installed.
     The pipeline does not "remember" to check anything — the hook enforces it.
@@ -45,6 +50,10 @@ PBXPROJ = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
 HOOK = ROOT / ".git" / "hooks" / "pre-push"
 WEBUI_BASE = os.environ.get("HERMES_WEBUI_BASE", "").rstrip("/")
 
+# gh resolves the default repo from the git remote; our remote points at
+# upstream sometimes, and `gh run ...` then 404s. Always be explicit.
+OUR_REPO = "braintimebox/hermex-plus"
+
 
 def sh(cmd: list[str], check: bool = True) -> str:
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -67,13 +76,39 @@ def bump_patch(v: str) -> str:
 
 
 def write_version(new_v: str) -> None:
+    """Write the version to every place that has to agree, in one shot.
+
+    MARKETING_VERSION is the human-facing version (3.6.2). CURRENT_PROJECT_VERSION
+    is the build number iOS compares when installing over an existing app — it must
+    move forward on every release or the update can be rejected as "same build".
+    Upstream's own AGENTS.md says a unique YYYYMMDDHHMM value each time; this script
+    previously left it pinned at 1 forever, which is the defect this fixes.
+    """
+    import datetime as _dt
+
     old_v = current_version()
     VERSION.write_text(new_v + "\n", encoding="utf-8")
+
+    build_no = _dt.datetime.now().strftime("%Y%m%d%H%M")
     pbx = PBXPROJ.read_text(encoding="utf-8")
-    PBXPROJ.write_text(
-        pbx.replace(f"MARKETING_VERSION = {old_v};", f"MARKETING_VERSION = {new_v};"),
-        encoding="utf-8",
-    )
+
+    before_marketing = pbx.count(f"MARKETING_VERSION = {old_v};")
+    pbx = pbx.replace(f"MARKETING_VERSION = {old_v};", f"MARKETING_VERSION = {new_v};")
+
+    # Every CURRENT_PROJECT_VERSION line is rewritten to the same new build number,
+    # preserving indentation and the trailing semicolon.
+    before_build = len(re.findall(r"CURRENT_PROJECT_VERSION = \d+;", pbx))
+    pbx = re.sub(r"CURRENT_PROJECT_VERSION = \d+;",
+                 f"CURRENT_PROJECT_VERSION = {build_no};", pbx)
+
+    PBXPROJ.write_text(pbx, encoding="utf-8")
+
+    if before_marketing == 0:
+        print(f"  ⚠ MARKETING_VERSION {old_v} not found in pbxproj — nothing replaced")
+    if before_build == 0:
+        print("  ⚠ CURRENT_PROJECT_VERSION not found in pbxproj — nothing replaced")
+    print(f"  version {old_v} → {new_v} · build number → {build_no}"
+          f" ({before_build} target(s))")
 
 
 def prepend_changelog(new_v: str, note: str) -> None:
@@ -112,22 +147,44 @@ def release_gate() -> None:
 
 
 def git_commit_push(msg: str) -> None:
-    sh(["git", "add", "-A"])
+    """Stage only what a release is allowed to change, then push.
+
+    `git add -A` used to stage every untracked file in the tree — that is how an
+    unrelated file (HERMES.md) ended up inside a release commit by accident. A
+    release touches a known, fixed set of paths, so stage exactly those.
+    """
+    tracked = [
+        "VERSION",
+        "CHANGELOG.md",
+        "README.md",
+        "docs/project-snapshot.md",
+        "docs/hermesplus-status.yaml",
+        "HermesMobile.xcodeproj/project.pbxproj",
+    ]
+    existing = [p for p in tracked if (ROOT / p).exists()]
+    sh(["git", "add", "--"] + existing)
+    # New/changed files under scripts/ and .github/ are part of the tooling and
+    # must travel with the release, but only tracked-and-modified ones: -u never
+    # picks up untracked junk.
+    sh(["git", "add", "-u", "--", "scripts", ".github"])
+    print(f"  staged: {' '.join(existing)} + scripts/ + .github/")
     sh(["git", "commit", "-q", "-m", msg])
     sh(["git", "push", "origin", "main"])
 
 
 def wait_build() -> str:
-    rid = sh(["gh", "run", "list", "--workflow=build-ipa.yml", "--branch=main",
-              "--limit=1", "--json", "databaseId", "--jq", ".[0].databaseId"])
+    rid = sh(["gh", "run", "list", "--repo", OUR_REPO, "--workflow=build-ipa.yml",
+              "--branch=main", "--limit=1", "--json", "databaseId",
+              "--jq", ".[0].databaseId"])
     for _ in range(26):  # ~25s * 26 ≈ 11 min
-        st = sh(["gh", "run", "view", rid, "--json", "status,conclusion",
+        st = sh(["gh", "run", "view", rid, "--repo", OUR_REPO,
+                 "--json", "status,conclusion",
                  "--jq", r'\(.status) \(.conclusion // "")'])
         print(f"  build: {st}")
         if st.startswith("completed"):
             if not st.endswith("success"):
-                sys.exit("BUILD FAILED — see: https://github.com/braintimebox/"
-                         "hermex-plus/actions/runs/" + rid)
+                sys.exit(f"BUILD FAILED — see: https://github.com/{OUR_REPO}"
+                         f"/actions/runs/{rid}")
             return rid
         time.sleep(25)
     sys.exit("build timed out waiting")
@@ -137,7 +194,7 @@ def download_ipa(rid: str, version: str) -> tuple[Path, str]:
     tmp = Path("/tmp") / f"hlp-{rid}"
     sh(["rm", "-rf", str(tmp)])
     tmp.mkdir(parents=True, exist_ok=True)
-    sh(["gh", "run", "download", rid, "-D", str(tmp)])
+    sh(["gh", "run", "download", rid, "--repo", OUR_REPO, "-D", str(tmp)])
     ipas = list(tmp.rglob(f"HermesPlus-{version}.ipa"))
     if not ipas:
         sys.exit("no .ipa in artifact")
@@ -265,12 +322,21 @@ def main() -> int:
     p.add_argument("--note", default="")
     p.add_argument("--dry-run", action="store_true")
 
-    # No subcommand → behave like the old script (release with flags).
-    if len(sys.argv) > 1 and sys.argv[1] in {"install", "check", "status", "sync"}:
+    # No arguments → help. Releasing is never implicit.
+    if len(sys.argv) == 1:
+        ap.print_help()
+        print()
+        print("Releasing is never implicit — use: release --next X.Y.Z --note \"…\"")
+        return 0
+
+    if sys.argv[1] == "release":
         a = ap.parse_args()
-    elif len(sys.argv) > 1 and sys.argv[1] == "release":
+    elif sys.argv[1] in {"install", "check", "status", "sync"}:
+        a = ap.parse_args()
+    elif sys.argv[1] in {"-h", "--help"}:
         a = ap.parse_args()
     else:
+        # Legacy flag form: `… --next 3.7.0 --close 1 --note "x"` (no subcommand).
         a = ap.parse_args(["release"] + sys.argv[1:])
 
     if a.cmd == "install":
@@ -283,7 +349,8 @@ def main() -> int:
         return cmd_sync()
     if a.cmd == "release":
         return cmd_release(a.next, a.close, a.note, a.dry_run)
-    return 1
+    ap.print_help()
+    return 0
 
 
 if __name__ == "__main__":
