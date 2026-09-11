@@ -2888,6 +2888,20 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertTrue(didStart)
         XCTAssertEqual(sendingViewModel.messages.compactMap(\.content), ["Keep working"])
+        // The optimistic user message is persisted on a background queue
+        // (cacheMessagesInBackground → DispatchQueue.global(qos: .utility).async
+        // → its own ModelContext), so it is not in the store when this line runs.
+        // Reading immediately returns [] — an empty cache, not a stale one — and
+        // fails for a reason unrelated to the optimistic-message behaviour this
+        // test exists to check.
+        try await waitUntil {
+            let contents = (try? CacheStore.cachedMessages(
+                serverURL: URL(string: "https://example.test")!,
+                sessionID: "session-abc",
+                in: context
+            ))?.compactMap(\.content) ?? []
+            return contents == ["Keep working"]
+        }
         XCTAssertEqual(
             try CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
@@ -6188,8 +6202,13 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.activeStreamID, "stream-123")
 
         streamClient.emit(.transportError("The network connection was lost."))
+        // Wait for the state this test is about, not for the requests that precede
+        // it. `didRequestStatus && didReloadMessages` is set inside the mock as
+        // each response is served, which happens before the view model clears
+        // activeStreamID — so the assertions below ran mid-flight and saw
+        // "stream-123" still set.
         try await waitUntil {
-            didRequestStatus && didReloadMessages
+            viewModel.activeStreamID == nil && didReloadMessages
         }
 
         XCTAssertTrue(didRequestStatus)
