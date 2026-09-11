@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 2fbdbde |
+| HEAD | bf82d08 |
 | Версия | 3.6.1 |
 | Обновлено | 2026-09-11 |
 
 **Последние коммиты:**
 ```
-2fbdbde tests: complete CoordinatorDelegateSpy conformance, document status events
-69a769b precheck: upstream drift is advisory, not a blocker
-8b5e306 pipeline: tests gate the build, stable release link, unique build number
-824b4fd 3.6.1: release 3.6.1
-f6147cf docs: update Download link to v3.6.0
-8f8b76d v3.6.0: scroll cleanup (dead code removal + stream guard)
+bf82d08 docs: refresh the project snapshot
+84c545c ops: install the watchdog too; a dry-run path for the installer
+583b6af docs: register ops/ and the new commands; add installer rules
+795d743 ops: version the logs endpoint, add install-server; restore the versioned hook install
+0a62dd2 ci: write the failure parser to a file, not through python3 -c
+34fc3da docs: project conventions, each rule naming the failure it prevents
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -49,7 +49,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 193 | 199 | +6 |
-| Строк приложения | 71,094 | 74,472 | **+3,378** |
-| Строк Chat | 27,421 | 30,406 | +2,985 |
+| Строк приложения | 71,094 | 74,509 | **+3,415** |
+| Строк Chat | 27,421 | 30,429 | +3,008 |
 | ChatViewModel | 5,952 | 6,682 | +730 |
 | IPA | ~44 MB | 47 MB (HermesPlus-3.6.0.ipa) | +1–2 MB |
