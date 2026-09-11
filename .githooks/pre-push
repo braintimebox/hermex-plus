@@ -16,7 +16,13 @@
 #
 # Note this gate is a local convenience, not a security boundary: `git push
 # --no-verify` skips it, and a push made through the GitHub API never runs it.
-# build-ipa.yml runs the same checks in CI so nothing can slip through.
+# build-ipa.yml does not run these checks — it builds and runs XCTest, which
+# catches a different, wider class of problem (wrong property names, type errors,
+# behaviour changes). Neither one is a superset of the other.
+#
+# In particular this gate cannot compile Swift: there is no toolchain for it on
+# Linux, so a wrong member name in a test passes here and fails in CI. Prefer
+# adding a test over trusting this gate.
 #
 # git passes the pre-push hook two arguments (remote name, remote url). The
 # precheck script takes none, so they are deliberately not forwarded.

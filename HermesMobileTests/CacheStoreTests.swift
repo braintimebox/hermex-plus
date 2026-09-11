@@ -353,7 +353,7 @@ final class CacheStoreTests: XCTestCase {
         // covers.
         //
         // This test used to assert isEmpty, from before that fallback existed.
-        XCTAssertEqual(cachedSessions.map(\.sessionID), ["expired"], "stale row is served rather than dropped")
+        XCTAssertEqual(cachedSessions.map(\.sessionId), ["expired"], "stale row is served rather than dropped")
     }
 
     /// The eviction half of the promise above: maintenance really does delete
@@ -389,7 +389,7 @@ final class CacheStoreTests: XCTestCase {
         )
 
         let remaining = try CacheStore.cachedSessions(serverURL: serverURL, in: context, now: later)
-        XCTAssertEqual(remaining.map(\.sessionID), ["fresh"], "the swept row must be gone, not merely stale")
+        XCTAssertEqual(remaining.map(\.sessionId), ["fresh"], "the swept row must be gone, not merely stale")
     }
 
     func testCachedMessagesReturnsUnexpiredMessagesInStoredOrderForSession() throws {
