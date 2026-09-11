@@ -31,18 +31,38 @@ reads. This is the telemetry behind freeze reports.
 | Server log | `~/.hermes/hermex-logs-server.log` |
 | Unit | `~/.config/systemd/user/hermex-logs.service` |
 
-### Install / update
+## What's here
+
+| File | Role |
+|---|---|
+| `server.py` | Ingest endpoint — receives events from the app, appends to JSONL |
+| `watchdog.py` | Cron script — reads the JSONL, alerts on a new significant freeze |
+| `hermex-logs.service.template` | systemd user unit; `{{INSTALL_DIR}}` is substituted |
+
+## Instance-invariant data
+
+Intentionally **not** in git — it is machine state, not code:
+
+- `~/.hermes/hermex-logs.jsonl` — the event store
+- `~/.hermes/hermex_logs_state.json` — the watchdog's "already alerted up to" marker
+- `~/.hermes/hermex-logs-server.log` — server stdout/stderr
+
+## Install / update
 
 ```bash
 python3 scripts/pipelines/release_hermesplus.py install-server
 ```
 
-That command copies `server.py` to `~/.hermes/_projects/hermex-logs/`, renders the
-unit template with the real path into `~/.config/systemd/user/`, reloads systemd,
-restarts the service and prints the health check. Re-running it is the update path.
+Copies `server.py` to `~/.hermes/_projects/hermex-logs/`, `watchdog.py` to
+`~/.hermes/scripts/` (the cron job resolves it by name from there), renders the
+unit into `~/.config/systemd/user/`, reloads systemd, restarts the service and
+reports the health check. Re-running it is the update path.
 
-Options: `--dir <path>` to install elsewhere (then also pass the same `--dir` on
-later runs so the unit keeps pointing at it).
+The cron job itself is not touched — it already points at
+`hermex_logs_watchdog.py` by filename.
+
+Use `--dir /tmp/…` to dry-run the install without touching the live target, then
+re-run without it to leave the real path correct.
 
 ### Verify
 

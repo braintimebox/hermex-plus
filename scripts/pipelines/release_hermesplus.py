@@ -255,18 +255,23 @@ OPS_DIR = ROOT / "ops" / "hermex-logs"
 SERVICE_INSTALL_DIR = Path.home() / ".hermes" / "_projects" / "hermex-logs"
 SYSTEMD_USER_DIR = Path.home() / ".config" / "systemd" / "user"
 SERVICE_NAME = "hermex-logs.service"
+SCRIPTS_DIR = Path.home() / ".hermes" / "scripts"
 
 
 def cmd_install_server(target_dir: Path | None = None) -> int:
-    """Install or update the logs endpoint on this host.
+    """Install or update the logs endpoint and its watchdog on this host.
 
-    Source of truth is ops/hermex-logs/ in this repository. The running copy
+    Source of truth is ops/hermex-logs/ in this repository. The running copies
     under ~/.hermes and the unit under ~/.config/systemd/user are install
-    targets — an earlier revision of this service existed only as those two
-    files, in one copy, untracked, and nobody noticed when it died.
+    targets — an earlier revision of this service existed only as those files,
+    in one copy, untracked, and nobody noticed when it died.
+
+    The watchdog is installed to ~/.hermes/scripts/ because that is where the
+    cron job resolves it from by name; the cron entry itself is not touched.
     """
     install_dir = (target_dir or SERVICE_INSTALL_DIR).expanduser()
     source = OPS_DIR / "server.py"
+    watchdog = OPS_DIR / "watchdog.py"
     template = OPS_DIR / f"{SERVICE_NAME}.template"
 
     for required in (source, template):
@@ -278,6 +283,13 @@ def cmd_install_server(target_dir: Path | None = None) -> int:
     script = install_dir / "server.py"
     script.write_bytes(source.read_bytes())
     print(f"server     → {script}")
+
+    if watchdog.exists():
+        SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+        wd = SCRIPTS_DIR / "hermex_logs_watchdog.py"
+        wd.write_bytes(watchdog.read_bytes())
+        wd.chmod(0o755)
+        print(f"watchdog   → {wd}  (cron resolves it by this name)")
 
     SYSTEMD_USER_DIR.mkdir(parents=True, exist_ok=True)
     unit_path = SYSTEMD_USER_DIR / SERVICE_NAME
