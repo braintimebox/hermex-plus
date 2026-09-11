@@ -969,8 +969,16 @@ final class CacheStoreTests: XCTestCase {
             cachedAt: older
         )
 
-        let contents = try CacheStore.cachedMessages(serverURL: serverURL, sessionID: sessionID, in: context)
-            .compactMap(\.content)
+        // Read with `now` inside the TTL. cachedAt here is a fixed past date, so
+        // the default `now: Date()` is months later and the rows would be filtered
+        // as expired — returning [] and failing for a reason unrelated to write
+        // ordering.
+        let contents = try CacheStore.cachedMessages(
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            now: newer.addingTimeInterval(60)
+        ).compactMap(\.content)
         XCTAssertEqual(contents, ["Fresh question", "Fresh answer"], "the late, older write must not resurrect stale rows")
     }
 
@@ -1001,8 +1009,12 @@ final class CacheStoreTests: XCTestCase {
             cachedAt: newer
         )
 
-        let contents = try CacheStore.cachedMessages(serverURL: serverURL, sessionID: sessionID, in: context)
-            .compactMap(\.content)
+        let contents = try CacheStore.cachedMessages(
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            now: newer.addingTimeInterval(60)
+        ).compactMap(\.content)
         XCTAssertEqual(contents, ["Fresh question", "Fresh answer"])
     }
 }

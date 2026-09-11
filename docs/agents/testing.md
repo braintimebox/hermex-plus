@@ -5,6 +5,12 @@ suite is a gate (see `CONVENTIONS.md` §3), so a test that asserts the wrong thi
 is worse than a missing test: it passes, it looks like coverage, and it hides the
 behaviour it was supposed to pin.
 
+**Rules 1 and 3 below are enforced mechanically** by `scripts/lint-tests.py`, which
+runs in the pre-push gate (`[6/6] test-lint`) and in CI. This document explains
+*why* they exist; the linter refuses the commit. Where a rule cannot be checked
+mechanically, it is stated here and left to judgement — but that is the exception,
+not the default.
+
 Read this before adding a test that touches timing, caching, or a request list.
 Every entry below was green in review and wrong in fact, and none of them would
 have been caught by a coverage threshold — the tests existed.

@@ -137,7 +137,15 @@ python3 scripts/pipeline sync                # план merge с upstream
 3. pbxproj registration новый .swift без регистраций
 4. upstream-owned       предупреждение при правке чужого файла
 5. upstream drift       разрыв с upstream измерен
+6. test-lint            тесты не кодируют гонку как контракт
 ```
+
+Гейт 6 (`scripts/lint-tests.py`) — **блокирующий**. Ловит механически:
+- литеральный порядок запросов, где оба эндпоинта идут через `async let`
+- poll-цикл, который молча истекает без `XCTFail`
+
+Правило, которое можно проверить механически — проверяется, а не описывается.
+Заметка просит помнить и судить; гейт не спрашивает.
 
 Проверки 4 и 5 — **advisory**: предупреждают, но не блокируют. Раньше их вывод
 терялся — итог говорил «ALL CHECKS PASSED», хотя выше было предупреждение.
@@ -198,7 +206,8 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
     ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 5 гейтов (вызывается хуком И CI)
+scripts/pipeline-precheck.py                ← 6 гейтов (вызывается хуком И CI)
+scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
 .githooks/pre-push                          ← В РЕПОЗИТОРИИ (не в .git/hooks!)
 scripts/sync-upstream                       ← merge с upstream (--apply/--record-base)

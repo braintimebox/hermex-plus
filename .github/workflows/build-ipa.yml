@@ -26,9 +26,10 @@ jobs:
       - name: Check release invariants
         run: python3 scripts/release-check.py --allow-untagged
       - name: Check local gates
-        # Runs all five gates the pre-push hook runs, so a push made with
+        # Runs all six gates the pre-push hook runs, so a push made with
         # `--no-verify` (which skips the hook entirely) is still caught here.
-        # Gates 4 and 5 are advisory and print warnings without failing.
+        # Gates 4 and 5 are advisory and print warnings without failing; gate 6
+        # (test-lint) is blocking and rejects race-shaped test assertions.
         run: |
           python3 -c "import yaml, sys" 2>/dev/null || pip install -q pyyaml
           python3 scripts/pipeline-precheck.py

@@ -75,7 +75,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/5] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1/6] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -94,7 +94,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/5] conflict markers in tracked files")
+    print("[2/6] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -119,7 +119,7 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/5] pbxproj registration of new .swift files")
+    print("[3/6] pbxproj registration of new .swift files")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -151,7 +151,7 @@ def check_pbxproj_registration() -> int:
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/5] upstream-owned files not modified")
+    print("[4/6] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -184,7 +184,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/5] upstream drift (advisory)")
+    print("[5/6] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -204,12 +204,36 @@ def check_upstream_drift() -> int:
     return 0
 
 
+def check_test_lint() -> int:
+    """Reject test assertions that encode a race as a contract.
+
+    Mechanical, therefore checked here rather than left to a document. The rule
+    this replaces lived in docs/agents/testing.md and its author violated it two
+    hours later in the same session — a note asks the next person to remember and
+    to judge whether it applies; a gate does not.
+    """
+    print("[6/6] test-lint (race-shaped assertions)")
+    script = ROOT / "scripts" / "lint-tests.py"
+    if not script.exists():
+        print("      linter not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    for line in (r.stdout or "").strip().splitlines():
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
     3: check_pbxproj_registration,
     4: check_upstream_owned,
     5: check_upstream_drift,
+    6: check_test_lint,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not
