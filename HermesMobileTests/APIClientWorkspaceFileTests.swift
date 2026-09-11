@@ -702,11 +702,17 @@ final class APIClientWorkspaceFileTests: APIClientTestCase {
         await viewModel.load()
         let payload = try await viewModel.exportPayload()
 
-        if case .unavailable = viewModel.preview {
-            XCTAssertTrue(true)
-        } else {
-            XCTFail("Zip files should keep the unsupported-preview state.")
-        }
+        // A known-unsupported binary deliberately leaves `preview` nil rather than
+        // setting `.unavailable`: the view body has a binary branch that renders a
+        // working "Download" action for exactly this state (FilePreviewView.swift,
+        // "File Ready to Download"), and an `.unavailable` preview would replace
+        // that with a dead "No Preview" message. v2.5.6 introduced this when the
+        // fileExporter download path started working.
+        //
+        // The test asserted `.unavailable` from before that change, and the binary
+        // affordance is exactly what it should be checking for.
+        XCTAssertNil(viewModel.preview, "binary files render the Download affordance, not a preview state")
+        XCTAssertTrue(viewModel.isBinaryFile, "the view keys its Download branch on this")
         XCTAssertEqual(payload.data, rawData)
         XCTAssertEqual(payload.filename, "archive.zip")
         XCTAssertEqual(payload.contentType, UTType.zip)
