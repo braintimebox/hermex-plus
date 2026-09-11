@@ -169,16 +169,32 @@ def check_upstream_owned() -> int:
 # --- check 5: upstream drift is measured ------------------------------------
 
 def check_upstream_drift() -> int:
-    print("[5/5] upstream drift measurable")
+    """Report how far behind upstream we are — informational, never a blocker.
+
+    Drift is a planning signal (how big the next merge will be), not a code
+    defect: a large drift does not make the current commit wrong. Worse, this
+    check cannot work off the maintainer's machine — sync-upstream resolves the
+    repo through an absolute path and needs the plus/base tag plus real history,
+    neither of which a CI checkout has. Treating its failure as a blocker turned
+    every CI run red with "not a git repo", so it is now advisory: it prints what
+    it can and always returns 0. Check 4 (upstream-owned files) is the one with
+    teeth, because touching upstream files is what actually breaks a sync.
+    """
+    print("[5/5] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
         return 0
-    r = subprocess.run([sys.executable, str(script), "--status"],
-                       cwd=ROOT, capture_output=True, text=True)
+    try:
+        r = subprocess.run([sys.executable, str(script), "--status"],
+                           cwd=ROOT, capture_output=True, text=True, timeout=120)
+    except Exception as exc:  # missing git history, timeout, anything
+        print(f"      drift not measurable here ({type(exc).__name__}) — advisory, not blocking")
+        return 0
     if r.returncode != 0:
-        print((r.stdout + r.stderr).strip()[:400])
-        return blockers(["sync-upstream --status failed (drift unknown)"])
+        print("      drift not measurable here — advisory, not blocking")
+        print(f"      ({' '.join((r.stdout + r.stderr).split())[:200]})")
+        return 0
     for line in r.stdout.strip().splitlines():
         print(f"      {line}")
     return 0
