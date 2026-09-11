@@ -36,7 +36,7 @@ from pathlib import Path
 
 # --- config -----------------------------------------------------------------
 
-REPO_DEFAULT = Path.home() / "Projects" / "hermex-plus"
+REPO_DEFAULT = Path(__file__).resolve().parents[1]
 UPSTREAM_REMOTE = "upstream"
 UPSTREAM_REF = f"{UPSTREAM_REMOTE}/master"
 MIRROR_REF = "origin/master"          # our read-only mirror of upstream

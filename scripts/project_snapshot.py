@@ -12,9 +12,10 @@ state can never be stale:
 
 Not cron. Not release-triggered. Trigger = the agent starting work.
 
-Usage:
-  cd ~/Projects/hermex-plus
+Usage (from anywhere — paths resolve from this file's location):
   python3 scripts/project_snapshot.py
+  # or, from another directory:
+  python3 /path/to/hermex-plus/scripts/project_snapshot.py
 """
 
 from __future__ import annotations

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Hermex Plus pre-push gate.
+#
+# Blocks a push when a release invariant is broken (version drift between
+# VERSION / CHANGELOG / pbxproj, conflict markers left in a file, a new .swift
+# that was never registered in the pbxproj, or an upstream-owned file edited by
+# us). See scripts/pipeline-precheck.py for what each gate checks.
+#
+# This file lives IN the repository at .githooks/pre-push so it is versioned and
+# survives a clone or a move. Git does not read .githooks by default — enable it
+# once per checkout with:
+#
+#     git config core.hooksPath .githooks
+#
+# or, equivalently, `python3 scripts/pipelines/release_hermesplus.py install`.
+#
+# Note this gate is a local convenience, not a security boundary: `git push
+# --no-verify` skips it, and a push made through the GitHub API never runs it.
+# build-ipa.yml runs the same checks in CI so nothing can slip through.
+#
+# git passes the pre-push hook two arguments (remote name, remote url). The
+# precheck script takes none, so they are deliberately not forwarded.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/pipeline-precheck.py"
