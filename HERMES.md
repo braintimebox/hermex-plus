@@ -139,6 +139,31 @@ python3 scripts/pipeline sync                # план merge с upstream
 5. upstream drift       разрыв с upstream измерен
 ```
 
+Проверки 4 и 5 — **advisory**: предупреждают, но не блокируют. Раньше их вывод
+терялся — итог говорил «ALL CHECKS PASSED», хотя выше было предупреждение.
+Теперь advisory повторяются под вердиктом (см. `ADVISORIES` в скрипте).
+
+**Что делать с advisory**: не игнорировать и не «починить» правкой чужого файла.
+Правка upstream-owned стоит merge-конфликта на каждом будущем sync — факт
+переносим в `HERMES.md` / `docs/agents/`, а не в `CONTRIBUTING.md`.
+
+### Тесты и CI — кто что запускает
+
+```
+build-ipa.yml    push в main      guard → test → build (IPA только после тестов)
+pr-ci.yml        pull_request     тот же suite, только для веток
+```
+
+**Важно:** работа идёт **напрямую в `main`**, поэтому рабочий триггер — первый.
+`CONTRIBUTING.md` описывает PR-флоу и устарел (правит upstream-owned файл — нельзя).
+
+Локальной компиляции Swift **нет** (Linux без тулчейна): гейт не ловит ошибки
+типов и имён полей, их видит только CI (~11 мин). Опыт: `SessionSummary.sessionId`
+vs `CachedSession.sessionID` прошёл гейт и уронил сборку.
+
+Как писать тесты, которые не врут — `docs/agents/testing.md` (7 разобранных
+случаев из этого репо, каждый с коммитом-фиксом).
+
 Установка хука (не версионируется, нужна после свежего клона):
 ```bash
 python3 scripts/pipeline install

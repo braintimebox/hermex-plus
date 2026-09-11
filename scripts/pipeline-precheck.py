@@ -161,6 +161,10 @@ def check_upstream_owned() -> int:
         print("      these belong to upstream; editing them adds a merge conflict")
         print("      on every sync. Prefer HERMES.md / scripts/ for our own rules.")
         # advisory, not a blocker: sometimes it is intentional
+        ADVISORIES.append(
+            f"upstream-owned file(s) edited: {', '.join(touched)} — "
+            "this costs a merge conflict on every future sync"
+        )
     else:
         print("      none touched")
     return 0
@@ -208,6 +212,13 @@ CHECKS = {
     5: check_upstream_drift,
 }
 
+# Advisory notes raised by checks that return 0. A check that warns but does not
+# block used to be invisible: `check_upstream_owned` prints "modified:
+# CONTRIBUTING.md" and then the run ends with "ALL CHECKS PASSED — safe to push",
+# so the warning scrolls away and the summary contradicts it. Collected here and
+# repeated under the verdict, where the reader actually stops.
+ADVISORIES: list[str] = []
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Hermex Plus pre-push gate")
@@ -231,6 +242,14 @@ def main() -> int:
         print("PUSH BLOCKED — fix the blockers above, then re-run.")
         return 1
     print("ALL CHECKS PASSED — safe to push.")
+    if ADVISORIES:
+        print()
+        print("Advisory (not blocking):")
+        for note in ADVISORIES:
+            print(f"  • {note}")
+        print()
+        print("  Repeating them here because the summary above contradicts a")
+        print("  warning that only appeared mid-run. Read them before pushing.")
     return 0
 
 

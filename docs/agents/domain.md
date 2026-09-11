@@ -10,6 +10,10 @@ When present, use:
 
 - `CONTEXT.md` at the repo root for domain vocabulary and project concepts.
 - `docs/adr/` for architectural decision records.
+- `docs/agents/testing.md` before writing or fixing a test — it records the
+  failure modes this suite has actually produced (asserting `async let` order,
+  reading a cache right after an async write, a wait helper that times out
+  silently). Each entry names the commit that fixed it.
 
 There is currently no required `CONTEXT.md` or `docs/adr/` directory. If these files do not exist, proceed silently. Do not suggest creating them upfront; producer skills such as `grill-with-docs` can create them lazily when domain terms or decisions are clarified.
 
