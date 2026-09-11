@@ -103,6 +103,60 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
           echo "Tests: $((SECONDS - start_seconds))s"
 
+      - name: Report test failures
+        # Runs even when the suite fails. Without this, a red run shows only
+        # 'Test case ... failed' with no reason, and the actual assertion text
+        # lives inside the .xcresult bundle — which needs xcrun to read. Anyone
+        # without a Mac (or without waiting to download a 70 MB artifact) then
+        # has to guess at the cause. Printing it inline makes the log the source
+        # of truth for why a build is red.
+        if: failure()
+        run: |
+          bundle="${RESULT_BUNDLE_PATH}"
+          if [[ ! -d "${bundle}" ]]; then
+            echo "No result bundle at ${bundle} — the failure happened before tests ran."
+            exit 0
+          fi
+          echo "=============== TEST FAILURE DETAIL ==============="
+          xcrun xcresulttool get test-results tests \
+            --path "${bundle}" --format json 2>/dev/null \
+          | python3 -c '
+          import json, sys
+
+          try:
+              data = json.load(sys.stdin)
+          except Exception as exc:
+              print(f"(could not parse xcresult json: {exc})")
+              sys.exit(0)
+
+          def is_test_case(node):
+              # Suites are nodes with children; the failing leaves are the cases.
+              return not node.get("children")
+
+          def walk(node):
+              children = node.get("children") or []
+              for child in children:
+                  walk(child)
+              if node.get("result") != "Failed" or not is_test_case(node):
+                  return
+              print(f"\nFAILED: {node.get('name', '?')}")
+              for summary in node.get("failureSummaries") or []:
+                  for line in (summary.get("failureText") or "").splitlines():
+                      print(f"    {line}")
+                  locations = (summary.get("sourceCodeContext") or {}).get("location") or []
+                  for loc in locations:
+                      path = (loc.get("filePath") or "").split("/")[-1]
+                      if path:
+                          print(f"    at {path}:{loc.get('lineNumber')}")
+
+          for root in data.get("testNodes") or []:
+              walk(root)
+          print()
+          print("===================================================")
+          '
+          echo "--- summary ---"
+          xcrun xcresulttool get test-results summary --path "${bundle}" 2>/dev/null || true
+
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4
