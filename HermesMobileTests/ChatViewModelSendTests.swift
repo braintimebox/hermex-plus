@@ -5009,15 +5009,29 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertTrue(didStart)
         XCTAssertEqual(streamClient.startedURLs.count, 1)
-        XCTAssertEqual(requestPaths, [
-            "/api/profiles",
-            "/api/profile/switch",
-            "/api/models",
-            "/api/reasoning",
-            "/api/workspaces",
-            "/api/commands",
-            "/api/chat/start"
-        ])
+        // Order is not part of the contract. /api/reasoning (scoped to the model)
+        // and /api/workspaces (independent) are issued with `async let` and
+        // awaited together, so whichever reaches the client first is not
+        // deterministic — asserting the sequence made this test flaky. The
+        // meaningful facts are which endpoints were hit and that
+        // profile/switch precedes models; /api/chat/start must be last since
+        // the send is what triggers it.
+        XCTAssertEqual(requestPaths.last, "/api/chat/start")
+        XCTAssertEqual(
+            Set(requestPaths),
+            Set([
+                "/api/profiles",
+                "/api/profile/switch",
+                "/api/models",
+                "/api/reasoning",
+                "/api/workspaces",
+                "/api/commands",
+                "/api/chat/start",
+            ])
+        )
+        let switchIndex = try XCTUnwrap(requestPaths.firstIndex(of: "/api/profile/switch"))
+        let modelsIndex = try XCTUnwrap(requestPaths.firstIndex(of: "/api/models"))
+        XCTAssertLessThan(switchIndex, modelsIndex, "the profile switch must settle before the catalog is fetched")
     }
 
     @MainActor
