@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""Deterministic upstream sync for Hermex Plus.
+
+Keeps our fork on a known-distance diet from uzairansaruzi/hermex.
+
+Model (Hybrid):
+    upstream/master   read-only mirror of uzairansaruzi/hermex   (never write)
+    plus/base         tag: the upstream commit we are synced to   (bookkeeping)
+    main              our line: plus/base + our patches           (we write here)
+
+Invariants this script enforces:
+    1. upstream/master is a pure mirror (0 commits ahead of upstream) -- else abort
+    2. our patches live only in HermesMobile/Plus/ + SHIM files   (see --audit)
+    3. a sync NEVER touches HermesMobile/Plus/                     (guaranteed by layout)
+    4. we always know the exact distance to upstream               (--status)
+
+Usage:
+    sync-upstream --status              # where do we stand? (no side effects)
+    sync-upstream --audit               # classify changed files into layers
+    sync-upstream --plan                # dry-run: what would a sync do?
+    sync-upstream --apply               # perform the sync (stops on conflict)
+    sync-upstream --record-base         # after a successful sync, move plus/base
+
+Exit codes:
+    0  success / clean
+    1  blocked (invariant violated -- read the message)
+    2  conflicts (human must resolve, then re-run --record-base)
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# --- config -----------------------------------------------------------------
+
+REPO_DEFAULT = Path.home() / "Projects" / "hermex-plus"
+UPSTREAM_REMOTE = "upstream"
+UPSTREAM_REF = f"{UPSTREAM_REMOTE}/master"
+MIRROR_REF = "origin/master"          # our read-only mirror of upstream
+BASE_TAG_PREFIX = "plus/base-v"
+OUR_DIR = "HermesMobile/Plus"          # layer 2: our modules (never conflicts)
+SHIM_DIRS = ("HermesMobile/",)         # layer 3: shared files (conflict zone)
+
+# Files that are ours by design (packaging, never upstream's)
+PACKAGING = {
+    "VERSION",
+    "CHANGELOG.md",
+    "README.md",
+    ".github/workflows/build-ipa.yml",
+    "scripts/sync-upstream",
+    "scripts/readme.py",
+}
+
+
+def git(repo: Path, *args: str, check: bool = True) -> str:
+    r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    if check and r.returncode != 0:
+        sys.exit(f"git {' '.join(args)} failed:\n{r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+def git_rc(repo: Path, *args: str) -> int:
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True).returncode
+
+
+# --- invariant 1: mirror must be pure ---------------------------------------
+
+def check_mirror_purity(repo: Path) -> tuple[bool, str]:
+    """origin/master must contain zero commits that upstream lacks."""
+    ahead = git(repo, "rev-list", "--count", f"{UPSTREAM_REF}..{MIRROR_REF}")
+    if int(ahead) != 0:
+        return False, (
+            f"invariant 1 VIOLATED: {MIRROR_REF} is {ahead} commits ahead of {UPSTREAM_REF}.\n"
+            f"  The mirror must stay pure. Move those commits to main and re-mirror."
+        )
+    return True, f"ok  mirror pure ({MIRROR_REF} == {UPSTREAM_REF})"
+
+
+def latest_base_tag(repo: Path) -> str | None:
+    tags = git(repo, "tag", "--list", f"{BASE_TAG_PREFIX}*")
+    if not tags:
+        return None
+    tagged = [t for t in tags.splitlines() if t.strip()]
+    # sort by the upstream commit date, newest last
+    best = None
+    for t in tagged:
+        sha = git(repo, "rev-list", "-n", "1", t, check=False)
+        if not sha:
+            continue
+        ts = git(repo, "show", "-s", "--format=%ct", sha, check=False)
+        if ts and (best is None or int(ts) > best[0]):
+            best = (int(ts), t)
+    return best[1] if best else None
+
+
+# --- status ------------------------------------------------------------------
+
+def cmd_status(repo: Path) -> int:
+    ok, msg = check_mirror_purity(repo)
+    print("=" * 68)
+    print("HERMEX PLUS — UPSTREAM STATUS")
+    print("=" * 68)
+    print(msg)
+    if not ok:
+        return 1
+
+    base = latest_base_tag(repo)
+    print(f"base tag:        {base or '(none — never recorded a base)'}")
+
+    behind = git(repo, "rev-list", "--count", f"{MIRROR_REF}..{UPSTREAM_REF}", check=False)
+    print(f"upstream ahead:  {behind} commits")
+
+    if base:
+        base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
+        behind_base = git(repo, "rev-list", "--count", f"{base_sha}..{UPSTREAM_REF}", check=False)
+        print(f"behind base:     {behind_base} commits since {base}")
+
+    # how much of our line is our own work
+    own = git(repo, "rev-list", "--count", f"{MIRROR_REF}..main", check=False)
+    print(f"our patches:     {own} commits on top of upstream")
+
+    # conflict zone size (files both sides touched since the base)
+    if base:
+        base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
+        ours = set(changed_files(repo, base_sha, "main"))
+        theirs = set(changed_files(repo, base_sha, UPSTREAM_REF))
+        shared = sorted(f for f in ours & theirs if f.endswith(".swift"))
+        print(f"conflict zone:   {len(shared)} .swift files (both sides edited)")
+    print("=" * 68)
+    return 0
+
+
+def changed_files(repo: Path, base: str, head: str) -> list[str]:
+    out = git(repo, "diff", "--name-only", base, head, check=False)
+    return [l.strip() for l in out.splitlines() if l.strip()]
+
+
+# --- audit (layer classification) -------------------------------------------
+
+def cmd_audit(repo: Path) -> int:
+    base = latest_base_tag(repo)
+    if not base:
+        print("no base tag recorded — run --record-base first")
+        return 1
+    base_sha = git(repo, "rev-list", "-n", "1", base)
+
+    ours = set(changed_files(repo, base_sha, "main"))
+    theirs = set(changed_files(repo, base_sha, UPSTREAM_REF))
+
+    layered = {"2_plus_new": [], "2_plus_only": [], "3_shim": [], "1_upstream_only": []}
+    for f in sorted(ours | theirs):
+        if not f.endswith(".swift"):
+            continue
+        if f.startswith(OUR_DIR + "/") and f not in theirs:
+            layered["2_plus_new"].append(f)
+        elif f in ours and f not in theirs:
+            layered["2_plus_only"].append(f)
+        elif f in ours and f in theirs:
+            layered["3_shim"].append(f)
+        else:
+            layered["1_upstream_only"].append(f)
+
+    print("=" * 68)
+    print("LAYER AUDIT")
+    print("=" * 68)
+    print(f"Layer 2a  our modules in {OUR_DIR}/    : {len(layered['2_plus_new'])}   (never conflict)")
+    print(f"Layer 2b  our edits, upstream untouched : {len(layered['2_plus_only'])}   (safe)")
+    print(f"Layer 3   SHIM (both sides edited)      : {len(layered['3_shim'])}   (conflict risk)")
+    print(f"Layer 1   upstream only                 : {len(layered['1_upstream_only'])}   (free)")
+    print()
+    if layered["3_shim"]:
+        print("SHIM files — keep these free of logic:")
+        for f in layered["3_shim"]:
+            print("   ", f)
+    if layered["2_plus_only"]:
+        print()
+        print("Our-only files — move these under HermesMobile/Plus/ :")
+        for f in layered["2_plus_only"]:
+            print("   ", f)
+    return 0
+
+
+# --- plan / apply ------------------------------------------------------------
+
+def cmd_plan(repo: Path) -> int:
+    ok, msg = check_mirror_purity(repo)
+    print(msg)
+    if not ok:
+        return 1
+    base = latest_base_tag(repo)
+    print(f"base: {base or '(none)'}  ->  target: {UPSTREAM_REF}")
+    print()
+    print("A sync would:")
+    print("  1. fetch upstream")
+    print("  2. MERGE " + UPSTREAM_REF + " into main  (merge, NOT rebase — see note)")
+    print("  3. stop on conflicts; resolve, then `git commit`")
+    print(f"  4. move {BASE_TAG_PREFIX}<ver> to the new upstream head")
+    print()
+    print("WHY MERGE, NOT REBASE:")
+    print("  rebase replays each of our ~376 commits onto upstream; it dies on the")
+    print("  5th, inside CHANGELOG bookkeeping (158 of our edits vs 3 of theirs).")
+    print("  merge produces a fixed, repeatable conflict set (32 files / 140 hunks)")
+    print("  that is resolved ONCE, not 376 times.")
+    print()
+    if base:
+        base_sha = git(repo, "rev-list", "-n", "1", base)
+        n = git(repo, "rev-list", "--count", f"{base_sha}..{UPSTREAM_REF}")
+        print(f"commits to absorb: {n}")
+    return 0
+
+
+def cmd_apply(repo: Path) -> int:
+    ok, msg = check_mirror_purity(repo)
+    print(msg)
+    if not ok:
+        return 1
+
+    if git(repo, "status", "--porcelain", check=False):
+        print("BLOCKED: working tree is dirty. Commit or stash first.")
+        return 1
+
+    git(repo, "fetch", UPSTREAM_REMOTE, "--tags")
+    print(f"merging {UPSTREAM_REF} into main (merge, not rebase) ...")
+    rc = git_rc(repo, "merge", "--no-edit", UPSTREAM_REF)
+    if rc != 0:
+        conflicted = git(repo, "diff", "--name-only", "--diff-filter=U", check=False)
+        files = [f for f in conflicted.splitlines() if f.strip()]
+        print()
+        print(f"CONFLICTS — human resolution required ({len(files)} files):")
+        for f in files:
+            marker = "  [OURS]" if f.startswith(OUR_DIR) else "  [SHIM]"
+            print(f"{marker} {f}")
+        print()
+        if any(f.startswith(OUR_DIR) for f in files):
+            print("WARNING: a conflict inside HermesMobile/Plus/ means the layout")
+            print("         discipline was broken somewhere. Investigate before resolving.")
+        print("Resolve, then: git add <files> && git commit && sync-upstream --record-base")
+        return 2
+
+    print("merge clean — no conflicts.")
+    return cmd_record_base(repo)
+
+
+def cmd_record_base(repo: Path) -> int:
+    head = git(repo, "rev-parse", "HEAD")
+    # the upstream commit we are now based on
+    upstream_head = git(repo, "rev-parse", UPSTREAM_REF)
+    desc = git(repo, "describe", "--tags", UPSTREAM_REF, "--abbrev=0", check=False)
+    ver = desc.lstrip("v") if desc else "unknown"
+    tag = f"{BASE_TAG_PREFIX}{ver}"
+    if git(repo, "tag", "--list", tag, check=False):
+        git(repo, "tag", "-d", tag, check=False)
+    git(repo, "tag", tag, upstream_head)
+    print(f"recorded base: {tag} -> {upstream_head[:8]} ({desc or 'no tag'})")
+    print(f"our main is at: {head[:8]}")
+    print()
+    print("Now: git push origin main --tags && push origin " + UPSTREAM_REF + ":refs/heads/mirror")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Deterministic Hermex Plus upstream sync")
+    ap.add_argument("--repo", type=Path, default=REPO_DEFAULT)
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--status", action="store_true", help="where do we stand")
+    g.add_argument("--audit", action="store_true", help="classify files into layers")
+    g.add_argument("--plan", action="store_true", help="dry-run a sync")
+    g.add_argument("--apply", action="store_true", help="perform the sync")
+    g.add_argument("--record-base", action="store_true", dest="record_base")
+    args = ap.parse_args()
+
+    repo = args.repo
+    if not (repo / ".git").exists():
+        sys.exit(f"not a git repo: {repo}")
+
+    if args.status:
+        return cmd_status(repo)
+    if args.audit:
+        return cmd_audit(repo)
+    if args.plan:
+        return cmd_plan(repo)
+    if args.apply:
+        return cmd_apply(repo)
+    if args.record_base:
+        return cmd_record_base(repo)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

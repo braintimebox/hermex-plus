@@ -1,3 +1,5 @@
+## 3.6.1 — release 3.6.1
+
 ## 3.6.0 — Scroll cleanup (dead code removal + stream guard)
 
 ### Scroll — removed dead `sizeChangeAnchor`

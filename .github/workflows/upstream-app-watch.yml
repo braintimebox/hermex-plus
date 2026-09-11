@@ -1,0 +1,170 @@
+# Upstream drift watch for the iOS client (uzairansaruzi/hermex).
+#
+# Sibling of upstream-watch.yml, which tracks the *server* (hermes-webui).
+# This one tracks the *app* — the thing we actually fork.
+#
+# Philosophy: the sync is deterministic only if the drift is always measured.
+# This workflow measures it weekly and publishes a digest; it never applies
+# anything. Applying is a human decision (scripts/sync-upstream --apply).
+name: Upstream App Watch
+
+on:
+  schedule:
+    # Monday 14:30 UTC — right after the server watch, before the week fills up.
+    - cron: "30 14 * * 1"
+  workflow_dispatch:
+
+run-name: "Upstream app watch"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-app-watch
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Measure drift from uzairansaruzi/hermex
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      UPSTREAM_APP_REPO: "https://github.com/uzairansaruzi/hermex.git"
+      DIGEST_TITLE: "Upstream app watch digest"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # we need history to compute drift
+
+      - name: Fetch upstream app history
+        run: |
+          set -euo pipefail
+          git remote add upstream "${UPSTREAM_APP_REPO}" 2>/dev/null || true
+          git config remote.upstream.tagOpt --no-tags
+          git fetch upstream master --tags
+          # upstream tags live in their own namespace — never clobber ours
+          git fetch upstream 'refs/tags/*:refs/remotes/upstream/tags/*'
+
+      - name: Guard — upstream tags must not collide with ours
+        run: |
+          set -euo pipefail
+          echo "== our tags =="
+          git tag --list 'v*' | tail -5
+          echo "== upstream tags (namespaced) =="
+          git for-each-ref --format='%(refname:short)' refs/remotes/upstream/tags/ || true
+          # a collision would mean a name exists in BOTH namespaces
+          # A collision = a tag name that exists in OUR namespace AND in upstream's.
+          # This is the exact defect that made v1.4.0/v1.5.0/v1.6.0 ambiguous.
+          ours=$(git tag --list | sort)
+          theirs=$(git ls-remote --tags upstream 2>/dev/null \
+                   | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort)
+          clash=$(comm -12 <(echo "$ours") <(echo "$theirs") || true)
+          if [ -n "$clash" ]; then
+            echo "::warning title=Tag namespace collision::$(echo "$clash" | tr '\n' ' ')"
+            echo "These names exist in BOTH namespaces and are ambiguous by design of git."
+            echo "Rule: always reference upstream tags as upstream/tags/<name>."
+            echo "colliding names:"
+            echo "$clash" | sed 's/^/  - /'
+          else
+            echo "ok  no tag collisions"
+          fi
+
+      - name: Measure drift
+        run: |
+          set -euo pipefail
+          BASE_TAG=$(git tag --list 'plus/base-*' | sort -V | tail -1)
+          echo "base tag: ${BASE_TAG:-(none)}"
+
+          {
+            echo "<!-- upstream-app-watch-digest -->"
+            echo "# Upstream App Watch Digest"
+            echo
+            echo "Tracks \`uzairansaruzi/hermex\` — the iOS client we fork."
+            echo "Sibling workflow \`upstream-watch.yml\` tracks the server."
+            echo
+            echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Hermex commit: \`${GITHUB_SHA::8}\`"
+            echo "- Base tag: \`${BASE_TAG:-(none)}\`"
+            echo
+            echo "## Drift"
+            echo
+            echo '```'
+            if [ -n "${BASE_TAG}" ]; then
+              echo "commits upstream since our base : $(git rev-list --count "${BASE_TAG}..upstream/master")"
+            fi
+            echo "commits upstream ahead of mirror : $(git rev-list --count origin/master..upstream/master 2>/dev/null || echo n/a)"
+            echo "our patches on top of upstream   : $(git rev-list --count upstream/master..main 2>/dev/null || echo n/a)"
+            echo '```'
+            echo
+            echo "## New commits upstream"
+            echo
+            if [ -n "${BASE_TAG}" ]; then
+              git log --oneline --no-decorate "${BASE_TAG}..upstream/master" | head -40
+            else
+              git log --oneline --no-decorate -20 upstream/master
+            fi
+            echo
+            echo "## Conflict zone (files both sides edited since base)"
+            echo
+            if [ -n "${BASE_TAG}" ]; then
+              git diff --name-only "${BASE_TAG}" main -- 'HermesMobile/**' | sort > /tmp/ours.txt || true
+              git diff --name-only "${BASE_TAG}" upstream/master -- 'HermesMobile/**' | sort > /tmp/theirs.txt || true
+              comm -12 /tmp/ours.txt /tmp/theirs.txt | grep -c . || echo 0
+              echo
+              echo "<details><summary>files</summary>"
+              echo
+              comm -12 /tmp/ours.txt /tmp/theirs.txt || true
+              echo
+              echo "</details>"
+            fi
+            echo
+            echo "---"
+            echo
+            echo "**To sync:** \`python3 scripts/sync-upstream --plan\` then \`--apply\`."
+            echo "Syncing is a human decision — this digest never applies anything."
+          } > upstream-app-report.md
+
+          cat upstream-app-report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-app-watch-report
+          path: upstream-app-report.md
+          if-no-files-found: error
+
+      - name: Update digest issue
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh label list --limit 200 --json name --jq '.[].name' | grep -Fxq "needs-triage" ||
+            gh label create "needs-triage" --color "D29922" \
+              --description "Maintainer needs to evaluate this issue" || true
+
+          body="${RUNNER_TEMP}/issue-body.md"
+          {
+            echo "This standing issue is maintained by the Upstream App Watch workflow."
+            echo
+            cat upstream-app-report.md
+          } > "$body"
+
+          rec=$(gh issue list --state all --limit 100 \
+                  --search "in:title \"${DIGEST_TITLE}\"" \
+                  --json number,state,title \
+                  --jq ".[] | select(.title == \"${DIGEST_TITLE}\") | [.number,.state] | @tsv" |
+                head -n 1)
+
+          if [ -z "$rec" ]; then
+            gh issue create --title "${DIGEST_TITLE}" --body-file "$body" --label "needs-triage"
+          else
+            num="${rec%%$'\t'*}"; state="${rec#*$'\t'}"
+            [ "$state" != "OPEN" ] && gh issue reopen "$num"
+            gh issue edit "$num" --body-file "$body" --add-label "needs-triage"
+          fi

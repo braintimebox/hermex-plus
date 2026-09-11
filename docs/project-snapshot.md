@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 74d7383 |
-| Версия | 3.4.4 |
-| Обновлено | 2026-08-30 |
+| HEAD | f6147cf |
+| Версия | 3.6.1 |
+| Обновлено | 2026-09-11 |
 
 **Последние коммиты:**
 ```
-74d7383 v3.4.4: freeze stack write-through (persist main-thread stack at freeze time)
-2802860 v3.4.3: post-send scroll/trigger freeze fix (sizeChangeAnchor inactive during no-streaming)
-b59f343 fix: @ViewBuilder on streaming bubble branch (mismatching view types)
-9b69b52 v3.4.2: no-streaming freeze fix — deliver answer when ready
-eb24b42 docs: refresh HEAD in snapshot
-ff98aae chore: finalize snapshot — save diagnostics archive, gitignore pycache
+f6147cf docs: update Download link to v3.6.0
+8f8b76d v3.6.0: scroll cleanup (dead code removal + stream guard)
+039d265 docs: update Download link to v3.5.9
+a32b57c v3.5.9: scroll conflict elimination (↓ one-shot + streaming follow)
+2c47ce1 docs: update Download link to v3.5.8
+01042e9 v3.5.8: scroll unification + instant first token (16ms)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -37,7 +37,7 @@ ff98aae chore: finalize snapshot — save diagnostics archive, gitignore pycache
 
 _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется при force-quit, №7 «Верх-вниз при думании» (sizeChangeAnchor при нерастущем тексте)
 
-Закрыто: пагинация/load-older (3.4.1), Kanban SSE (3.4.1), стрим-фриз хот-пути (3.4.0), streaming markdown cap (3.3.6), scroll yank (3.3.5), стек-захват №2 (3.4.4), верх-вниз №7 (3.4.3).
+Закрыто недавно: №2 STACK-CAPTURE — стек фриза теряется при force-quit (), №7 «Верх-вниз при думании» (sizeChangeAnchor при нерастущем тексте) ()
 
 
 ## 3. Происхождение (одним абзацем)
@@ -49,7 +49,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 193 | 199 | +6 |
-| Строк приложения | 71,094 | 74,227 | **+3,133** |
-| Строк Chat | 27,421 | 30,179 | +2,758 |
-| ChatViewModel | 5,952 | 6,640 | +688 |
-| IPA | ~44 MB | 47 MB (HermesPlus-3.4.4.ipa) | +1–2 MB |
+| Строк приложения | 71,094 | 74,472 | **+3,378** |
+| Строк Chat | 27,421 | 30,406 | +2,985 |
+| ChatViewModel | 5,952 | 6,682 | +730 |
+| IPA | ~44 MB | 47 MB (HermesPlus-3.6.0.ipa) | +1–2 MB |
