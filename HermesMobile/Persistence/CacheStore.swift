@@ -173,6 +173,23 @@ enum CacheStore {
             }
         )
         let sessionCached = try context.fetch(sessionDescriptor)
+
+        // Refuse an out-of-order write.
+        //
+        // Writes arrive on a background queue (cacheMessagesInBackground), so
+        // two of them can be in flight and complete in the opposite order to the
+        // one they were issued in. The delete pass below removes every row whose
+        // key is not in this call's snapshot, so a late-arriving write with an
+        // older snapshot would delete the newer rows and reinstate stale content
+        // — the user reopens offline and sees an outdated conversation.
+        //
+        // The newest row already stored for this session dates the write that
+        // produced it. If any of them is newer than this call, this call is the
+        // late one: drop it rather than let it undo newer content.
+        if let newestStored = sessionCached.map(\.cachedAt).max(), newestStored > cachedAt {
+            return
+        }
+
         var cachedByKey: [String: CachedMessage] = [:]
         for cachedMessage in sessionCached {
             cachedByKey[cachedMessage.cacheKey] = cachedMessage

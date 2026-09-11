@@ -2884,10 +2884,24 @@ final class ChatViewModel {
         guard let modelContext else { return }
         let container = modelContext.container
         let serverURL = server
+        // Timestamped here, on the caller's thread, not inside the worker.
+        //
+        // This date orders competing writes: a snapshot issued later must win.
+        // Taking it inside the block would date each write by when its queue
+        // slot started, which is not the order the snapshots were taken in —
+        // two sends in quick succession can have their blocks start in either
+        // order, and the older snapshot would then be stamped newer and win.
+        let issuedAt = Date()
         DispatchQueue.global(qos: .utility).async {
             let bgContext = ModelContext(container)
             do {
-                try CacheStore.cacheMessages(messages, serverURL: serverURL, sessionID: sessionID, in: bgContext)
+                try CacheStore.cacheMessages(
+                    messages,
+                    serverURL: serverURL,
+                    sessionID: sessionID,
+                    in: bgContext,
+                    cachedAt: issuedAt
+                )
             } catch {
                 HermexLogger.shared.log(type: "error", message: "cache write: \(error.localizedDescription)")
             }

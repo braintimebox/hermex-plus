@@ -926,4 +926,83 @@ final class CacheStoreTests: XCTestCase {
     private func fetchCachedMessages(in context: ModelContext) throws -> [CachedMessage] {
         try context.fetch(FetchDescriptor<CachedMessage>())
     }
+
+    /// A write carrying an older snapshot must not undo a newer one.
+    ///
+    /// Cache writes run on a background queue, so two of them can be in flight
+    /// and finish in the opposite order to the one they were issued in. The
+    /// delete pass in cacheMessages removes every stored row whose key is not in
+    /// the incoming snapshot — so a late-arriving write built from older state
+    /// would delete the newer messages and put the stale ones back. The user
+    /// reopens offline and sees an outdated conversation, having been shown the
+    /// current one before.
+    ///
+    /// This mirrors the real sequence: a reload fetches the current transcript
+    /// (newer snapshot), while an earlier optimistic-message write is still in
+    /// flight (older snapshot) and lands second.
+    func testCacheMessagesRefusesAWriteThatArrivedAfterANewerOne() throws {
+        let context = try makeContext()
+        let serverURL = URL(string: "https://example.test")!
+        let sessionID = "session-abc"
+        let older = Date(timeIntervalSince1970: 1_770_000_000)
+        let newer = older.addingTimeInterval(5)
+
+        // The reload lands first with the full, current transcript.
+        try CacheStore.cacheMessages(
+            [
+                ChatMessage(role: "user", content: "Fresh question", timestamp: 1_770_000_100, messageId: "fresh-user"),
+                ChatMessage(role: "assistant", content: "Fresh answer", timestamp: 1_770_000_101, messageId: "fresh-assistant")
+            ],
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            cachedAt: newer
+        )
+
+        // The optimistic write, issued earlier, arrives now with its older
+        // snapshot. It must not be applied.
+        try CacheStore.cacheMessages(
+            [ChatMessage(role: "assistant", content: "Stale cached answer", timestamp: 1_770_000_001, messageId: "stale")],
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            cachedAt: older
+        )
+
+        let contents = try CacheStore.cachedMessages(serverURL: serverURL, sessionID: sessionID, in: context)
+            .compactMap(\.content)
+        XCTAssertEqual(contents, ["Fresh question", "Fresh answer"], "the late, older write must not resurrect stale rows")
+    }
+
+    /// The same protection must not block legitimate writes: a newer write is
+    /// always applied, including one that arrives after an older one settled.
+    func testCacheMessagesAppliesANewerWriteOverAnOlderOne() throws {
+        let context = try makeContext()
+        let serverURL = URL(string: "https://example.test")!
+        let sessionID = "session-abc"
+        let older = Date(timeIntervalSince1970: 1_770_000_000)
+        let newer = older.addingTimeInterval(5)
+
+        try CacheStore.cacheMessages(
+            [ChatMessage(role: "assistant", content: "Stale cached answer", timestamp: 1_770_000_001, messageId: "stale")],
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            cachedAt: older
+        )
+        try CacheStore.cacheMessages(
+            [
+                ChatMessage(role: "user", content: "Fresh question", timestamp: 1_770_000_100, messageId: "fresh-user"),
+                ChatMessage(role: "assistant", content: "Fresh answer", timestamp: 1_770_000_101, messageId: "fresh-assistant")
+            ],
+            serverURL: serverURL,
+            sessionID: sessionID,
+            in: context,
+            cachedAt: newer
+        )
+
+        let contents = try CacheStore.cachedMessages(serverURL: serverURL, sessionID: sessionID, in: context)
+            .compactMap(\.content)
+        XCTAssertEqual(contents, ["Fresh question", "Fresh answer"])
+    }
 }
