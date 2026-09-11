@@ -305,12 +305,48 @@ actor APIClient {
     }
 }
 
+/// Session-level timeouts for the default sessions `APIClient` creates.
+///
+/// Neither was set before, so both were whatever `URLSessionConfiguration.default`
+/// implies: `timeoutIntervalForRequest = 60s` and, more importantly,
+/// `timeoutIntervalForResource = 7 days`. The resource timeout is the one that
+/// bites — it is the ceiling for a whole transfer, and a connection that dies
+/// without a FIN (server gone, tunnel dropped) leaves the request waiting against
+/// a seven-day budget. A request that passes an explicit `timeout:` overrides only
+/// the *request* interval, so nothing bounded the total.
+///
+/// These are ceilings, not per-call values: a caller that passes `timeout:` still
+/// wins for that request. Chosen so a stalled connection surfaces as an error the
+/// UI can show, within a wait a person will tolerate.
+enum SessionTimeouts {
+    /// Time allowed between bytes of a response. The host is reachable and
+    /// answering, so a gap this long means it stopped.
+    static let request: TimeInterval = 30
+    /// Ceiling for a whole transfer. Slow server-side work is already handled
+    /// per-request (git commit messages, raw file downloads pass 180s explicitly),
+    /// so this stays well below the 7-day default without cutting those short.
+    static let resource: TimeInterval = 300
+
+    /// Applied to both default session configurations, so the two cannot drift.
+    static func apply(to configuration: URLSessionConfiguration) {
+        configuration.timeoutIntervalForRequest = request
+        configuration.timeoutIntervalForResource = resource
+    }
+}
+
 private extension APIClient {
+    /// Applies the shared session timeouts. Kept as a thin hop so both factories
+    /// read identically and a future third factory cannot silently omit them.
+    static func applySessionTimeouts(to configuration: URLSessionConfiguration) {
+        SessionTimeouts.apply(to: configuration)
+    }
+
     static func makeDefaultSession(delegate: URLSessionDelegate?) -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = .shared
         configuration.httpCookieAcceptPolicy = .always
         configuration.httpShouldSetCookies = true
+        applySessionTimeouts(to: configuration)
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 
@@ -319,6 +355,7 @@ private extension APIClient {
         configuration.httpCookieStorage = nil
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
+        applySessionTimeouts(to: configuration)
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 }

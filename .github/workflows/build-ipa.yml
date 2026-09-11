@@ -180,6 +180,14 @@ jobs:
     needs: test
     runs-on: macos-26
     timeout-minutes: 60
+    # Scoped to this job, not the workflow: only Create Release needs to write.
+    # Without it the GITHUB_TOKEN has read-only contents and the step fails with
+    # 403 "Resource not accessible by integration" — after the tests and the IPA
+    # build have both passed, so the failure lands on the last step and reads as a
+    # release-configuration problem rather than a missing permission. Unnoticed
+    # until now because the run never got that far while the suite was red.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 

@@ -52,6 +52,44 @@ class APIClientTestCase: XCTestCase {
             """.utf8)
         )
     }
+
+    /// The session timeouts must actually reach the configuration.
+    ///
+    /// They were unset, so `URLSessionConfiguration.default` supplied both:
+    /// 60s per request and a 7-day resource ceiling. The resource value is the
+    /// dangerous one — it is the cap for a whole transfer, so a connection that
+    /// dies without a FIN left the request waiting against a seven-day budget
+    /// while the UI showed a spinner. A per-request `timeout:` never bounded it,
+    /// because that argument sets `timeoutIntervalForRequest` only.
+    func testSessionTimeoutsAreAppliedToTheConfiguration() {
+        // The platform default this guards against — 7 days — is the value the
+        // configuration silently carried before.
+        XCTAssertEqual(
+            URLSessionConfiguration.default.timeoutIntervalForResource,
+            604_800,
+            "the platform default this guards against is 7 days"
+        )
+
+        let configuration = URLSessionConfiguration.default
+        SessionTimeouts.apply(to: configuration)
+
+        XCTAssertEqual(configuration.timeoutIntervalForRequest, SessionTimeouts.request)
+        XCTAssertEqual(configuration.timeoutIntervalForResource, SessionTimeouts.resource)
+        XCTAssertLessThan(
+            configuration.timeoutIntervalForResource,
+            URLSessionConfiguration.default.timeoutIntervalForResource,
+            "the point of setting it is that it is far below the platform default"
+        )
+    }
+
+    /// A per-request timeout must still be able to exceed the session default.
+    /// `sendData` sets `timeoutInterval` on the request, which overrides
+    /// `timeoutIntervalForRequest` — so raising the session value must not have
+    /// been achieved by lowering what callers can ask for.
+    func testSessionTimeoutsLeaveRoomForPerRequestOverrides() {
+        XCTAssertLessThan(SessionTimeouts.request, SessionTimeouts.resource)
+        XCTAssertGreaterThanOrEqual(SessionTimeouts.resource, 180, "raw file downloads pass 180s explicitly")
+    }
 }
 
 /// Clears every process-global cache the app keeps across background/foreground.
