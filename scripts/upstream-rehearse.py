@@ -65,6 +65,54 @@ def our_lines_in_conflict(target: Path, path: str) -> list[str]:
     return lines
 
 
+def union_conflicts(target: Path, path: str) -> str:
+    """Keep BOTH sides of every conflict block.
+
+    Correct for `project.pbxproj`, and only for files built from independent list
+    entries. Verified on this repo's 10 pbxproj blocks: the 24-hex object ids on our
+    side and upstream's side do not intersect at all (16 vs 56 ids, 0 shared), so the
+    two sets are disjoint registrations and concatenating them is well-defined.
+    Braces and parens balance afterwards, no markers remain, and both sides' files
+    are present in the Sources lists.
+
+    Do NOT reach for this on Swift sources: two edits to the same function from the
+    two sides are not independent entries, and keeping both produces code that
+    compiles only by accident.
+    """
+    text = (target / path).read_text(errors="ignore")
+    out: list[str] = []
+    for line in text.splitlines():
+        if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
+            continue
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def pbxproj_ids_are_disjoint(target: Path, path: str) -> tuple[bool, int, int, int]:
+    """Confirm the union trick is safe: no object id appears on both sides."""
+    text = (target / path).read_text(errors="ignore")
+    ident = re.compile(r"\b([A-F0-9]{24})\b")
+    ours: set[str] = set()
+    theirs: set[str] = set()
+    side = None
+    for line in text.splitlines():
+        if line.startswith("<<<<<<<"):
+            side = "ours"
+            continue
+        if line.startswith("======="):
+            side = "theirs"
+            continue
+        if line.startswith(">>>>>>>"):
+            side = None
+            continue
+        if side == "ours":
+            ours |= set(ident.findall(line))
+        elif side == "theirs":
+            theirs |= set(ident.findall(line))
+    shared = ours & theirs
+    return (not shared, len(ours), len(theirs), len(shared))
+
+
 def run(args: list[str], cwd: Path | None = None, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(
         args, cwd=cwd, capture_output=True, text=True, check=False
@@ -87,6 +135,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Rehearse an upstream sync")
     ap.add_argument("--dir", default=str(DEFAULT_DIR), help="rehearsal clone location")
     ap.add_argument("--clean", action="store_true", help="remove the rehearsal clone")
+    ap.add_argument(
+        "--resolve-pbxproj",
+        action="store_true",
+        help="apply the union resolution to project.pbxproj in the rehearsal clone",
+    )
     args = ap.parse_args()
 
     target = Path(args.dir).expanduser()
@@ -170,6 +223,34 @@ def main() -> int:
         print(f"\n  {path}  ({len(ours)} line(s) of ours):")
         for line in ours:
             print(f"    + {line}")
+
+    print("\n" + "=" * 68)
+    print("PBXPROJ — union is safe here")
+    print("=" * 68)
+    pbx = "HermesMobile.xcodeproj/project.pbxproj"
+    if (target / pbx).exists() and "<<<<<<<" in (target / pbx).read_text(errors="ignore"):
+        disjoint, n_ours, n_theirs, n_shared = pbxproj_ids_are_disjoint(target, pbx)
+        print(f"  our object ids {n_ours}, upstream's {n_theirs}, shared {n_shared}")
+        if disjoint:
+            print("  no id is on both sides — the two sets are independent registrations,")
+            print("  so keeping both sides is well-defined.")
+            if args.resolve_pbxproj:
+                (target / pbx).write_text(union_conflicts(target, pbx))
+                resolved = (target / pbx).read_text(errors="ignore")
+                markers = sum(
+                    resolved.count(m) for m in ("<<<<<<<", "=======", ">>>>>>>")
+                )
+                balanced = resolved.count("{") == resolved.count("}")
+                print(f"\n  resolved in the rehearsal clone: {markers} markers left, braces balanced: {balanced}")
+                print("  NOT applied to the working repo — copy it over deliberately.")
+                print("  Confirm no '.swift in Sources' entry was lost:")
+                print("    git -C /tmp/upstream-rehearsal diff --stat -- " + pbx)
+            else:
+                print("  Re-run with --resolve-pbxproj to apply the union in the clone.")
+        else:
+            print("  SHARED IDS — union would duplicate registrations. Resolve by hand.")
+    else:
+        print("  no pbxproj conflict")
 
     print("\n" + "=" * 68)
     print("OUR FILES — confirm these survive the merge")

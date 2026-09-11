@@ -110,21 +110,37 @@ block, decide whether our change and upstream's are about the same behaviour:
   top if it is still missing.
 - Different behaviour → keep both, in upstream's structure.
 
-**`project.pbxproj` — do not hand-resolve 10 blocks.** There is no XcodeGen or other
-project generator in this repo: the pbxproj is committed and edited directly (see the
-`ios-project-workflow` skill for the CLI approach). Resolving 10 conflict blocks by hand
-in a 2000+ line plist is where mistakes get made.
+**`project.pbxproj` — mechanically resolvable, and verified so.** There is no XcodeGen or
+other project generator in this repo: the pbxproj is committed and edited directly.
 
-Practical approach: for each block, keep the side that preserves **both** sides' file
-registrations — the file is a list of four parallel structures (PBXBuildFile,
-PBXFileReference, group children, build phase), so a block that drops either side's
-entries produces a target that builds locally and fails in CI. Upstream added 298 files,
-many under `Features/Bots/`; every one needs all four entries.
+The rehearsal establishes that the union is safe here: the 24-hex object ids on our side
+(16) and upstream's (56) **do not intersect at all** — 0 shared. Both sides are adding
+independent `PBXBuildFile` / `PBXFileReference` / group / build-phase entries, so keeping
+both is well-defined rather than a guess.
 
-Verify with `scripts/pipeline-precheck.py` gate 3 afterwards — it reports any staged
-`.swift` whose name does not appear at least twice in the file, which catches a dropped
-registration but not a duplicated one. Also confirm the build phase lists are not
-duplicated.
+```bash
+python3 scripts/upstream-rehearse.py --resolve-pbxproj
+# resolves it in the rehearsal clone only; copy the file over deliberately
+```
+
+After copying, the result has 0 markers and balanced braces, and both sides' files are
+present in the Sources lists (verified: `SavedMessage.swift`, `HermexLogger.swift`,
+`BotChatView.swift`, `BotConnection.swift`, `ResponseTextSelection.swift`,
+`MainThreadWatchdog.swift` all present).
+
+Then confirm nothing was dropped:
+
+```bash
+git diff --stat -- HermesMobile.xcodeproj/project.pbxproj   # expect added lines on both sides
+python3 scripts/pipeline-precheck.py                        # gate 3: new .swift must be registered
+```
+
+Gate 3 reports a staged `.swift` whose name appears fewer than twice — it catches a
+dropped registration, not a duplicated one.
+
+**Union is correct for this file and for nothing else.** Two edits to the same Swift
+function from the two sides are not independent entries, and keeping both produces code
+that compiles only by accident.
 
 ---
 
