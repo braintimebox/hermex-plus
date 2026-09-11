@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | bf82d08 |
+| HEAD | 31a98ba |
 | Версия | 3.6.1 |
 | Обновлено | 2026-09-11 |
 
 **Последние коммиты:**
 ```
-bf82d08 docs: refresh the project snapshot
-84c545c ops: install the watchdog too; a dry-run path for the installer
-583b6af docs: register ops/ and the new commands; add installer rules
-795d743 ops: version the logs endpoint, add install-server; restore the versioned hook install
-0a62dd2 ci: write the failure parser to a file, not through python3 -c
-34fc3da docs: project conventions, each rule naming the failure it prevents
+31a98ba fix(tests): SessionSummary exposes sessionId, not sessionID — my own build break
+27991a7 tests(isolation): reset process-global caches in every class that needs it
+67451b5 tests(cache): expired rows are served, not dropped — and swept by maintenance
+84374b1 tests(send): wait for the background cache write instead of reading it immediately
+03922f3 tests(files): a binary file has no preview state — assert the Download affordance
+0876090 fix(sessions): a row with no title is not a placeholder — stop hiding it
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -49,7 +49,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 193 | 199 | +6 |
-| Строк приложения | 71,094 | 74,509 | **+3,415** |
+| Строк приложения | 71,094 | 74,533 | **+3,439** |
 | Строк Chat | 27,421 | 30,429 | +3,008 |
 | ChatViewModel | 5,952 | 6,682 | +730 |
 | IPA | ~44 MB | 47 MB (HermesPlus-3.6.0.ipa) | +1–2 MB |

@@ -219,7 +219,17 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
         XCTAssertEqual(result.state.currentModel, "gpt-5.4")
         XCTAssertNil(result.state.currentModelProvider)
         XCTAssertEqual(result.state.agentCommands.map(\.name), ["status"])
-        XCTAssertEqual(requestPaths, ["/api/profiles", "/api/models", "/api/commands"])
+        // Order is not part of the contract, and neither is /api/reasoning here:
+        // that call is scoped to the model, and /api/models failed, so reasoning
+        // is never issued. Assert the endpoints that ARE hit, plus the two
+        // orderings that are meaningful (profiles first, commands last).
+        XCTAssertEqual(
+            Set(requestPaths),
+            Set(["/api/profiles", "/api/models", "/api/workspaces", "/api/commands"])
+        )
+        XCTAssertFalse(requestPaths.contains("/api/reasoning"), "reasoning needs a model, and models failed")
+        XCTAssertEqual(requestPaths.first, "/api/profiles")
+        XCTAssertEqual(requestPaths.last, "/api/commands")
     }
 
     func testLoadStoresSingleProfileModeFromProfilesResponse() async throws {

@@ -5199,8 +5199,23 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedWorkspacePath, selectedWorkspace)
         XCTAssertEqual(viewModel.selectedModelID, "gpt-5.4")
         XCTAssertEqual(viewModel.selectedModelProviderID, "openai")
-        XCTAssertEqual(profileRequests.count, 2)
         XCTAssertNil(viewModel.composerConfigurationErrorMessage)
+
+        // This test is named for the workspace selection surviving the reload, and
+        // that is what it asserts above. It used to also assert
+        // `profileRequests.count == 2`, i.e. that the reload issued a *second*
+        // network round trip. That contradicts the loader's design: the second
+        // pass after a state change is served from ChatComposerConfigLoader's
+        // process-wide memory cache (24h TTL, discarded whenever the catalog is
+        // empty), which is the whole point of having it — the cache exists so a
+        // reload does not re-fetch every endpoint.
+        //
+        // At least one profiles request must have happened: the first pass always
+        // goes to the network, and that is the request the semaphore holds open to
+        // create the race this test exercises. Zero would mean the loader skipped
+        // the network entirely, which is the real failure this guard is for.
+        XCTAssertGreaterThanOrEqual(profileRequests.count, 1)
+        XCTAssertEqual(viewModel.selectedWorkspacePath, selectedWorkspace, "the reload must not clobber the newer selection")
     }
 
     @MainActor
@@ -6083,6 +6098,19 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertFalse(viewModel.responseCompletionNeedsTranscriptRefresh)
         viewModel.cacheCompletedResponse(modelContext: modelContext)
+
+        // cacheCompletedResponse → cacheCurrentMessages → cacheMessagesInBackground
+        // → DispatchQueue.global(qos: .utility).async, so the row is not in the
+        // store when this line runs. Reading immediately sees nil turnTps and
+        // fails for a reason that has nothing to do with TPS handling.
+        try await waitUntil {
+            let messages = (try? CacheStore.cachedMessages(
+                serverURL: URL(string: "https://example.test")!,
+                sessionID: "session-abc",
+                in: modelContext
+            )) ?? []
+            return messages.first(where: { $0.messageId == "assistant-server" })?.turnTps != nil
+        }
 
         let cachedMessages = try CacheStore.cachedMessages(
             serverURL: URL(string: "https://example.test")!,
