@@ -110,6 +110,11 @@ jobs:
         # without a Mac (or without waiting to download a 70 MB artifact) then
         # has to guess at the cause. Printing it inline makes the log the source
         # of truth for why a build is red.
+        #
+        # The parser is written to a file rather than passed via `python3 -c`.
+        # Shell single-quoting around -c cannot contain the single quotes Python
+        # needs for dict keys: they are stripped, and the script dies with
+        # "f-string: expecting '='".
         if: failure()
         run: |
           bundle="${RESULT_BUNDLE_PATH}"
@@ -117,10 +122,8 @@ jobs:
             echo "No result bundle at ${bundle} — the failure happened before tests ran."
             exit 0
           fi
-          echo "=============== TEST FAILURE DETAIL ==============="
-          xcrun xcresulttool get test-results tests \
-            --path "${bundle}" --format json 2>/dev/null \
-          | python3 -c '
+
+          cat > /tmp/report_failures.py <<'PYEOF'
           import json, sys
 
           try:
@@ -129,13 +132,14 @@ jobs:
               print(f"(could not parse xcresult json: {exc})")
               sys.exit(0)
 
+
           def is_test_case(node):
               # Suites are nodes with children; the failing leaves are the cases.
               return not node.get("children")
 
+
           def walk(node):
-              children = node.get("children") or []
-              for child in children:
+              for child in node.get("children") or []:
                   walk(child)
               if node.get("result") != "Failed" or not is_test_case(node):
                   return
@@ -149,11 +153,16 @@ jobs:
                       if path:
                           print(f"    at {path}:{loc.get('lineNumber')}")
 
+
           for root in data.get("testNodes") or []:
               walk(root)
-          print()
-          print("===================================================")
-          '
+          PYEOF
+
+          echo "=============== TEST FAILURE DETAIL ==============="
+          xcrun xcresulttool get test-results tests \
+            --path "${bundle}" --format json 2>/dev/null \
+          | python3 /tmp/report_failures.py || echo "(could not read the result bundle)"
+          echo "==================================================="
           echo "--- summary ---"
           xcrun xcresulttool get test-results summary --path "${bundle}" 2>/dev/null || true
 
