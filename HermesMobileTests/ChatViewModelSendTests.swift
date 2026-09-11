@@ -3131,6 +3131,22 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.compactMap(\.content), ["Fresh question", "Fresh answer"])
         XCTAssertFalse(viewModel.isViewingCachedData)
         XCTAssertNil(viewModel.errorMessage)
+
+        // The transcript is written to the cache on a background queue
+        // (cacheMessagesInBackground → DispatchQueue.global(qos: .utility).async
+        // → its own ModelContext), so the write has not necessarily landed when
+        // loadMessages returns. Asserting the cache immediately reads whatever
+        // was there before — the stale row this test exists to check gets
+        // replaced. Wait for the write to become visible instead.
+        try await waitUntil {
+            let contents = (try? CacheStore.cachedMessages(
+                serverURL: serverURL,
+                sessionID: "session-abc",
+                in: context
+            ))?.compactMap(\.content) ?? []
+            return contents == ["Fresh question", "Fresh answer"]
+        }
+
         XCTAssertEqual(
             try CacheStore.cachedMessages(
                 serverURL: serverURL,
