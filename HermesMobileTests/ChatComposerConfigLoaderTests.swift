@@ -76,14 +76,19 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
         XCTAssertNil(result.state.supportsReasoningEffort)
         XCTAssertEqual(result.state.workspaceSuggestions, ["/tmp/workspace"])
         XCTAssertEqual(result.state.agentCommands.map(\.name), ["status"])
-        XCTAssertEqual(requestPaths, [
-            "/api/profiles",
-            "/api/profile/switch",
-            "/api/models",
-            "/api/reasoning",
-            "/api/workspaces",
-            "/api/commands"
-        ])
+        // Order is not part of the contract. The reasoning and workspaces calls
+        // are issued with `async let` and awaited together ("Fetch reasoning
+        // (depends on model) + workspaces result in parallel"), so which one
+        // reaches the client first is not deterministic — asserting a sequence
+        // here makes the test flaky by construction. The meaningful contract is
+        // which endpoints are hit, and that commands comes last.
+        XCTAssertEqual(
+            Set(requestPaths),
+            Set(["/api/profiles", "/api/profile/switch", "/api/models",
+                 "/api/reasoning", "/api/workspaces", "/api/commands"])
+        )
+        XCTAssertEqual(requestPaths.first, "/api/profiles")
+        XCTAssertEqual(requestPaths.last, "/api/commands")
     }
 
     func testLoadKeepsSessionModelOverrideWhenProfileHasDifferentDefault() async throws {
@@ -189,6 +194,13 @@ final class ChatComposerConfigLoaderTests: APIClientTestCase {
                     headerFields: ["Content-Type": "application/json"]
                 )
                 return (try XCTUnwrap(response), Data(#"{"error":"models unavailable"}"#.utf8))
+            case "/api/workspaces":
+                // /api/workspaces is requested with `async let` alongside the
+                // reasoning call, so it fires even though /api/models fails.
+                // Without a case here the mock hits `default` and fails the test
+                // with "Unexpected request path" instead of exercising the
+                // partial-state path it is named for.
+                return apiTestJSONResponse(#"{"workspaces": [], "last": null}"#, for: request)
             case "/api/commands":
                 return apiTestJSONResponse(#"{"commands": [{"name": "status"}]}"#, for: request)
             default:
