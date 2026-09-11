@@ -160,24 +160,40 @@ python3 scripts/pipelines/release_hermesplus.py --next 3.7.0 --close 1 3 --note 
 ### Релиз и версия
 
 ```
-scripts/pipelines/release_hermesplus.py    ← ГЛАВНЫЙ релизный инструмент
-    полный цикл: bump → close items в status.yaml → snapshot → gate
-                 → push → wait CI → download IPA → links
-    python3 scripts/pipelines/release_hermesplus.py --next 3.7.0 --close 1 3 \
-        --note "…" [--dry-run]
+scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ релизный вход
+    статус   кто мы: версия/ветка/head/pre-push/upstream drift
+    check    5 гейтов локально (без push)
+    sync     план merge с upstream (сколько коммитов и конфликтов)
+    install  включить pre-push гейт (core.hooksPath → .githooks)
+    install-server  поставить/обновить сервер логов на этой машине (см. ops/)
+    release  полный цикл: bump → CHANGELOG → close items → snapshot → gate
+             → push → wait CI → download IPA
+             python3 scripts/pipelines/release_hermesplus.py release \
+                 --next 3.7.0 --close 1 3 --note "…" [--dry-run]
 
-scripts/pipeline                            ← быстрые операции
-    status   кто мы: версия/ветка/upstream/gate
-    check    5 гейтов локально
-    sync     план merge с upstream
-    install  поставить pre-push хук
+    ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 5 гейтов (вызывается хуком)
+scripts/pipeline-precheck.py                ← 5 гейтов (вызывается хуком И CI)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
+.githooks/pre-push                          ← В РЕПОЗИТОРИИ (не в .git/hooks!)
+scripts/sync-upstream                       ← merge с upstream (--apply/--record-base)
 
+❌ scripts/pipeline — УДАЛЁН 2026-09-11. Слит в release_hermesplus.py (был дубль
+   логики: bump/CHANGELOG/gate в двух файлах → расхождение поведения).
 ❌ scripts/bump-version.py — УДАЛЁН 2026-09-11. Был дубль: бампал VERSION+pbxproj,
-   CHANGELOG оставлял человеку → версия уходила без записи. Замена: pipeline release.
+   CHANGELOG оставлял человеку → версия уходила без записи. Замена: release.
 ```
+
+### Хост-сервисы (ops/)
+
+```
+ops/hermex-logs/server.py                   ← ИСТОЧНИК сервера логов (порт 8912)
+ops/hermex-logs/hermex-logs.service.template ← шаблон systemd-юнита ({{INSTALL_DIR}})
+ops/README.md                               ← что это, как ставить, что уже ломалось
+python3 scripts/pipelines/release_hermesplus.py install-server [--dir PATH]
+
+    ⚠ Копии в ~/.hermes/_projects/hermex-logs/ и ~/.config/systemd/user/ — это
+      УСТАНОВОЧНЫЕ ЦЕЛИ, не источник. Править в ops/, ставить командой.
 
 ### Статус
 

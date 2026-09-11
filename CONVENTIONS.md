@@ -175,6 +175,34 @@ produced it cannot be verified later.
 
 ---
 
+## 13. An install command must be the only writer
+
+**Rule:** when something is installed onto the host (a hook, a service unit), the
+repository holds the source and the install command is the only thing that writes
+the installed copy. Never edit the installed copy directly.
+
+**Why:** `cmd_install` had regressed to writing `.git/hooks/pre-push` while the
+hook itself is versioned at `.githooks/pre-push` and `core.hooksPath` pointed
+there. Two locations, two truths — running `install` would have created a second
+hook that git never read, and the next person would have debugged the wrong file.
+`status` now reports the gate as installed only when the file *and* the config
+agree, so the disagreement cannot be silent.
+
+---
+
+## 14. Verify an installer on a throwaway path, then verify the real one
+
+**Rule:** test an install command with `--dir /tmp/…` so a mistake cannot touch
+the live host. Then re-run it with no argument to leave the real target correct,
+and check the result (not just the exit code).
+
+**Why:** the first `install-server` verification wrote a unit file pointing at
+`/tmp`. The command worked — that was the problem: it made the live service
+reference a temporary directory. Passing `--dir` first would have avoided the
+round trip, and the follow-up check is what caught it.
+
+---
+
 ## Where things live
 
 | Thing | Path |
@@ -182,6 +210,7 @@ produced it cannot be verified later.
 | Release pipeline | `scripts/pipelines/release_hermesplus.py` |
 | Gates (5) | `scripts/pipeline-precheck.py` |
 | Git hook | `.githooks/pre-push` (enable: `… release_hermesplus.py install`) |
+| Host services | `ops/` (install: `… release_hermesplus.py install-server`) |
 | Status snapshot | `docs/project-snapshot.md` (generated from git) |
 | Open tracks | `docs/hermesplus-status.yaml` |
 | Agent rules | `HERMES.md` (overrides `AGENTS.md`) |
