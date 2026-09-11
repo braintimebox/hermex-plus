@@ -47,6 +47,24 @@ OURS = (
 BOOKKEEPING = ("CHANGELOG.md", "README.md", "AGENTS.md", ".gitignore")
 
 
+def our_lines_in_conflict(target: Path, path: str) -> list[str]:
+    """Lines on our side of each conflict block — what must be re-applied."""
+    text = (target / path).read_text(errors="ignore")
+    lines, ours, in_ours = [], [], False
+    for line in text.splitlines():
+        if line.startswith("<<<<<<<"):
+            in_ours = True
+            continue
+        if line.startswith("======="):
+            in_ours = False
+            continue
+        if line.startswith(">>>>>>>"):
+            continue
+        if in_ours:
+            lines.append(line)
+    return lines
+
+
 def run(args: list[str], cwd: Path | None = None, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(
         args, cwd=cwd, capture_output=True, text=True, check=False
@@ -137,6 +155,21 @@ def main() -> int:
         print(f"\n  {label}  ({len(groups[label])})")
         for path in groups[label]:
             print(f"    {path}")
+
+    print("\n" + "=" * 68)
+    print("BOOKKEEPING — keep upstream's body, re-apply these lines")
+    print("=" * 68)
+    for path in BOOKKEEPING:
+        if not (target / path).exists():
+            continue
+        ours = our_lines_in_conflict(target, path)
+        ours = [line for line in ours if line.strip()]
+        if not ours:
+            print(f"  {path}: nothing of ours in the conflict — take upstream")
+            continue
+        print(f"\n  {path}  ({len(ours)} line(s) of ours):")
+        for line in ours:
+            print(f"    + {line}")
 
     print("\n" + "=" * 68)
     print("OUR FILES — confirm these survive the merge")

@@ -61,12 +61,38 @@ Two files carry no blocks but still need a decision:
 
 ## Resolution rules per class
 
-**Bookkeeping — take ours.** `CHANGELOG.md`, `README.md`, `AGENTS.md`, `.gitignore`.
-Two-way divergence with no shared meaning; upstream's version has no knowledge of our
-release history, and our `CHANGELOG` is the source `release-check.py` reads.
+### Bookkeeping — the conflict is small; upstream's body wins
 
-**Our files — take ours, never drop.** Upstream does not know these exist, so a merge
-that "cleans them up" silently deletes the release pipeline:
+Measured in the rehearsal: the merge already takes upstream's file wholesale, and only
+our inserted block conflicts. So the resolution is "keep upstream, re-apply our lines",
+not "take ours" — which would discard upstream's rewrite.
+
+| File | Upstream | Ours | Our lines inside the conflict |
+|---|---|---|---|
+| `README.md` | 146 lines | 63 | 3 — the License section |
+| `AGENTS.md` | 169 lines | 86 | 18 — the Session start & wrap-up section |
+| `CHANGELOG.md` | 91 lines | 55 | 1 — the `sizeChangeAnchor` entry |
+| `.gitignore` | 59 lines | 65 | 7 — `/CURRENT.md` and the Python block |
+
+Take upstream's side, then re-insert exactly these:
+
+- **README.md** — keep our `## 📄 License` / `MIT — same as upstream.` section.
+  Upstream's is a store-facing landing page; ours says the fork is MIT.
+- **AGENTS.md** — keep our `## Session start & wrap-up` section (18 lines):
+  `CURRENT.md` first, `docs/project-snapshot.md` as the state source,
+  `PROJECT_SPEC.md` sections only as named, and the wrap-up step. Upstream's AGENTS.md
+  has no equivalent, and dropping it loses the session-handoff convention.
+- **CHANGELOG.md** — keep the single `sizeChangeAnchor` line under the 3.6.0 heading,
+  then append upstream's `[1.6.0]` section **below** our release history. Our
+  CHANGELOG is read by `release-check.py` (top heading must equal VERSION), so our
+  entries must stay on top.
+- **.gitignore** — keep `/CURRENT.md`, `__pycache__/`, `*.pyc`. Upstream has no
+  Python or session-handoff rules.
+
+### Our files — take ours, never drop
+
+Upstream does not know these exist, so a merge that "cleans them up" silently deletes
+the release pipeline:
 `HERMES.md`, `CONVENTIONS.md`, `.githooks/pre-push`, `.github/workflows/build-ipa.yml`,
 `docs/agents/testing.md`, `scripts/lint-tests.py`, `scripts/pipeline-precheck.py`,
 `scripts/pipelines/release_hermesplus.py`, `scripts/sync-upstream`, `ops/`.
