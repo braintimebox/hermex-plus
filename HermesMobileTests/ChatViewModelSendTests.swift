@@ -7,6 +7,16 @@ import UniformTypeIdentifiers
 @testable import HermesMobile
 
 final class ChatViewModelSendTests: XCTestCase {
+    /// ChatViewModel reads two process-global caches: the composer config memory
+    /// cache (24h TTL, no keying) and the cache-store maintenance throttle. Both
+    /// survive between tests in the same process, so without this reset one
+    /// test's model catalog decides what the next test's selected-model title
+    /// resolves to, and one test's timestamp suppresses another's eviction.
+    override func setUp() {
+        super.setUp()
+        resetProcessGlobalTestState()
+    }
+
     override func tearDown() {
         ChatViewModel.resetActiveStreamSnapshotsForTesting()
         MockURLProtocol.requestHandler = nil

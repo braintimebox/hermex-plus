@@ -20,11 +20,10 @@ class APIClientTestCase: XCTestCase {
     /// configuration or writes cache rows would otherwise hand its state to the
     /// next test, which then asserts against data it never set up — the failure
     /// looks like a logic bug but is missing isolation. Subclasses that override
-    /// this must call `super.tearDown()`.
+    /// this must call `super.setUp()`.
     override func setUp() {
         super.setUp()
-        CacheStore.resetMaintenanceThrottleForTesting()
-        ChatComposerConfigLoader.resetMemoryCacheForTesting()
+        resetProcessGlobalTestState()
     }
 
     func makeClient(
@@ -53,6 +52,23 @@ class APIClientTestCase: XCTestCase {
             """.utf8)
         )
     }
+}
+
+/// Clears every process-global cache the app keeps across background/foreground.
+///
+/// Call this from `setUp` in any test class that exercises `ChatViewModel` or
+/// composer configuration loading. `APIClientTestCase` already calls it for its
+/// subclasses; a class that extends `XCTestCase` directly must call it itself.
+///
+/// It is a named function rather than inlined calls so that the omission is
+/// visible in review: a class that forgets it inherits nondeterministic
+/// cross-test state — one test's model catalog decides what the next test's
+/// selected-model title resolves to, which reads as a broken product feature
+/// rather than a missing reset.
+func resetProcessGlobalTestState() {
+    CacheStore.maintenanceInterval = 0
+    CacheStore.resetMaintenanceThrottleForTesting()
+    ChatComposerConfigLoader.resetMemoryCacheForTesting()
 }
 
 final class MockURLProtocol: URLProtocol {
