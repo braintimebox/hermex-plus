@@ -250,6 +250,20 @@ enum CacheStore {
     private static let maintenanceLock = NSLock()
     private static var lastMaintenanceAt: Date?
 
+    /// Clears the maintenance throttle. Test-only.
+    ///
+    /// `lastMaintenanceAt` is process-global state, so it leaks between tests in
+    /// the same process: the first test to write cache rows stamps the throttle,
+    /// and every later test whose `cachedAt` falls inside the 60s window is then
+    /// silently skipped — expiry and eviction never run, and assertions about
+    /// deleted rows fail for a reason that has nothing to do with the code under
+    /// test. Call this from `setUp` so each test observes a clean throttle.
+    static func resetMaintenanceThrottleForTesting() {
+        maintenanceLock.lock()
+        lastMaintenanceAt = nil
+        maintenanceLock.unlock()
+    }
+
     /// NOT MainActor-isolated (runs on background contexts from the chat-send
     /// cache write). Throttled and lock-protected.
     private static func performMaintenance(in context: ModelContext, now: Date) throws {
