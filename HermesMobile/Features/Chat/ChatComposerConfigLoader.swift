@@ -65,6 +65,19 @@ struct ChatComposerConfigLoader {
     private static var memoryCache: (state: ChatComposerConfigState, timestamp: Date)?
     private static let cacheTTL: TimeInterval = 86_400
 
+    /// Clears the in-memory config cache. Test-only.
+    ///
+    /// The cache is static with a 24-hour TTL and no keying — it deliberately
+    /// survives background/foreground because the process stays alive, which is
+    /// right for the app but leaks across tests: the first test to load a
+    /// configuration populates it, and every later test then reads that state
+    /// instead of driving its own stubbed responses. That is why assertions like
+    /// 'the session model override is kept' saw a different model, or a different
+    /// effort level, than the test had set up.
+    static func resetMemoryCacheForTesting() {
+        memoryCache = nil
+    }
+
     init(client: APIClient) {
         self.client = client
     }

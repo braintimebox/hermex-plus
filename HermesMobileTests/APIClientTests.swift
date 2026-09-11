@@ -12,6 +12,21 @@ class APIClientTestCase: XCTestCase {
         super.tearDown()
     }
 
+    /// Process-global caches that outlive a single test must be cleared here.
+    ///
+    /// These caches are deliberately long-lived in the app (they survive
+    /// background/foreground because iOS keeps the process alive), which means
+    /// they also survive between tests in the same process. A test that loads a
+    /// configuration or writes cache rows would otherwise hand its state to the
+    /// next test, which then asserts against data it never set up — the failure
+    /// looks like a logic bug but is missing isolation. Subclasses that override
+    /// this must call `super.tearDown()`.
+    override func setUp() {
+        super.setUp()
+        CacheStore.resetMaintenanceThrottleForTesting()
+        ChatComposerConfigLoader.resetMemoryCacheForTesting()
+    }
+
     func makeClient(
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
     ) -> APIClient {
