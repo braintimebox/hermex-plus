@@ -345,7 +345,51 @@ final class CacheStoreTests: XCTestCase {
 
         let cachedSessions = try CacheStore.cachedSessions(serverURL: serverURL, in: context, now: expiredNow)
 
-        XCTAssertTrue(cachedSessions.isEmpty)
+        // An expired-only cache is NOT returned as empty: cachedSessions prefers
+        // fresh rows but falls back to expired ones rather than yielding nothing,
+        // because "a stale cache beats a blank error" (see the comment in
+        // CacheStore.cachedSessions). Expiry still governs eviction through
+        // maintenance — that is what testCacheMaintenanceDeletesExpiredSessions…
+        // covers.
+        //
+        // This test used to assert isEmpty, from before that fallback existed.
+        XCTAssertEqual(cachedSessions.map(\.sessionID), ["expired"], "stale row is served rather than dropped")
+    }
+
+    /// The eviction half of the promise above: maintenance really does delete
+    /// expired rows, so the fallback only ever serves rows that have not been
+    /// swept yet.
+    func testMaintenanceDeletesExpiredSessionsSoTheFallbackCannotServeThemForever() throws {
+        let context = try makeContext()
+        let serverURL = URL(string: "https://example.test")!
+        let cachedAt = Date(timeIntervalSince1970: 1_770_000_000)
+        let later = cachedAt.addingTimeInterval(CachePolicy.ttl + 1)
+        let response = try decodeSessions("""
+        {
+          "sessions": [
+            {"session_id": "expired", "title": "Expired thread", "last_message_at": 1770000000, "archived": false},
+            {"session_id": "fresh", "title": "Fresh thread", "last_message_at": 1770000000, "archived": false}
+          ]
+        }
+        """)
+
+        try CacheStore.cacheSessions(
+            try XCTUnwrap(response.sessions),
+            serverURL: serverURL,
+            in: context,
+            cachedAt: cachedAt
+        )
+        // A later write triggers maintenance with `now = later`, sweeping the row
+        // whose TTL elapsed and keeping the one re-written at `later`.
+        try CacheStore.cacheSessions(
+            [try XCTUnwrap(response.sessions?.first { $0.sessionId == "fresh" })],
+            serverURL: serverURL,
+            in: context,
+            cachedAt: later
+        )
+
+        let remaining = try CacheStore.cachedSessions(serverURL: serverURL, in: context, now: later)
+        XCTAssertEqual(remaining.map(\.sessionID), ["fresh"], "the swept row must be gone, not merely stale")
     }
 
     func testCachedMessagesReturnsUnexpiredMessagesInStoredOrderForSession() throws {
