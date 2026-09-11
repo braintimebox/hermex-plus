@@ -82,9 +82,17 @@ final class TranscriptMessageTests: XCTestCase {
         let streamingTranscriptMessages = ChatViewModel.transcriptMessages(from: streamingMessages)
         let completedTranscriptMessages = ChatViewModel.transcriptMessages(from: completedMessages)
 
-        XCTAssertEqual(streamingTranscriptMessages.map(\.id), completedTranscriptMessages.map(\.id))
+        // The server swaps the transient streaming id ("stream-1") for the real
+        // assistant id ("assistant-1") when the turn completes. renderID is the
+        // position-derived scroll target, so it must be unchanged by that swap -
+        // that is what this test is named for. The stable .id legitimately does
+        // change here (different messageId => different base identity); the
+        // original assertion compared .id and so contradicted its own name.
+        XCTAssertEqual(streamingTranscriptMessages.map(\.renderID), completedTranscriptMessages.map(\.renderID))
         XCTAssertEqual(streamingTranscriptMessages.map(\.anchorID), ["u1", "stream-1"])
         XCTAssertEqual(completedTranscriptMessages.map(\.anchorID), ["u1", "assistant-1"])
+        XCTAssertEqual(streamingTranscriptMessages.map(\.id), ["mid-u1", "mid-stream-1"])
+        XCTAssertEqual(completedTranscriptMessages.map(\.id), ["mid-u1", "mid-assistant-1"])
     }
 
     func testTranscriptMessagesUseRawAnchorForNilMessageIDsIndependentOfContent() {
@@ -108,7 +116,21 @@ final class TranscriptMessageTests: XCTestCase {
 
         XCTAssertEqual(initialTranscriptMessages.map(\.anchorID), ["raw:10", "raw:11"])
         XCTAssertEqual(updatedTranscriptMessages.map(\.anchorID), ["raw:10", "raw:11"])
-        XCTAssertEqual(initialTranscriptMessages.map(\.id), updatedTranscriptMessages.map(\.id))
+
+        // Identity, not renderID: these rows carry no messageId and no serverID,
+        // so their base identity is the content digest fallback ("fx-<hash>").
+        // Streaming mutates content, so the identity of an id-less row is NOT
+        // stable across a content change - by design, because two different
+        // id-less rows must not collapse into one SwiftUI identity. The old
+        // assertion here (ids must be equal) encoded the pre-EXPERIMENT-B
+        // contract, which used position instead.
+        XCTAssertNotEqual(
+            initialTranscriptMessages.map(\.id),
+            updatedTranscriptMessages.map(\.id),
+            "id-less rows are keyed by content digest, so a content change changes identity"
+        )
+        XCTAssertTrue(initialTranscriptMessages.allSatisfy { $0.id.hasPrefix("fx-") })
+        XCTAssertTrue(updatedTranscriptMessages.allSatisfy { $0.id.hasPrefix("fx-") })
     }
 
     func testTranscriptMessagesKeepRenderIDsStableWhenOlderMessagesPrepend() {
@@ -133,8 +155,12 @@ final class TranscriptMessageTests: XCTestCase {
             messageOffset: 0
         )
 
-        XCTAssertEqual(initialTranscriptMessages.map(\.id), ["transcript:1", "transcript:2", "transcript:3"])
-        XCTAssertEqual(expandedTranscriptMessages.map(\.id), ["transcript:0", "transcript:1", "transcript:2", "transcript:3"])
+        // renderID is the position-derived scroll/compression target; .id is the
+        // stable SwiftUI identity and must never contain "transcript:" (asserted
+        // below in testF1...). These lines used to assert on .id, which the
+        // stable-identity change (EXPERIMENT B) turned into "mid-a1" etc.
+        XCTAssertEqual(initialTranscriptMessages.map(\.renderID), ["transcript:1", "transcript:2", "transcript:3"])
+        XCTAssertEqual(expandedTranscriptMessages.map(\.renderID), ["transcript:0", "transcript:1", "transcript:2", "transcript:3"])
 
         let initialRenderIDsByMessageID = Dictionary(
             uniqueKeysWithValues: initialTranscriptMessages.compactMap { transcriptMessage in
