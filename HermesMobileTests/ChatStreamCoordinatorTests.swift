@@ -996,6 +996,46 @@ private final class CoordinatorDelegateSpy: ChatStreamCoordinatorDelegate {
         resetRecoveryCount += 1
     }
 
+    // MARK: - Context-status / compression / warning (status-only events)
+    //
+    // These three are the "status" half of the stream vocabulary: they carry no
+    // transcript content, only a change in what the assistant is busy doing.
+    // The coordinator calls them from its SSE event switch (see the
+    // `.compressing` / `.contextStatus` / `.warning` cases in
+    // ChatStreamCoordinator) purely so the UI can react — show "Compressing
+    // context…" instead of a bare typing indicator, move the context-usage
+    // ring, or surface a server warning.
+    //
+    // The spy records each call so a test can assert *that* the coordinator
+    // forwarded the event, without duplicating the ViewModel's rendering logic.
+    // If a future event of this kind is added to the protocol, add a counter
+    // and an append here in the same style — a compile error is the intended
+    // signal that the spy has fallen behind the delegate contract again.
+
+    /// Server began compacting the conversation history. The user sees
+    /// "Compressing context…" while this is in flight; the stream stays open.
+    private(set) var compressingStartCount = 0
+
+    /// Latest context-window usage reported by the server (tokens used,
+    /// limit, percentage). Drives the context-usage indicator in the toolbar.
+    private(set) var contextStatusPayloads: [ContextStatusStreamEvent] = []
+
+    /// Non-fatal warning emitted mid-stream (e.g. provider hiccup, degraded
+    /// transport). Shown to the user, but the stream keeps running.
+    private(set) var warningPayloads: [StreamWarningEvent] = []
+
+    func streamCoordinatorDidReceiveCompressingStart() {
+        compressingStartCount += 1
+    }
+
+    func streamCoordinatorDidReceiveContextStatus(_ payload: ContextStatusStreamEvent) {
+        contextStatusPayloads.append(payload)
+    }
+
+    func streamCoordinatorDidReceiveWarning(_ payload: StreamWarningEvent) {
+        warningPayloads.append(payload)
+    }
+
     func streamCoordinatorAppendToken(_ text: String) -> Bool {
         tokens.append(text)
         return appendTokenResult
