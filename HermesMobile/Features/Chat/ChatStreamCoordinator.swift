@@ -696,7 +696,11 @@ final class ChatStreamCoordinator {
                 finishStream()
                 return
             case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted,
-                 .approvalPending, .clarificationPending, .pendingSteerLeftover:
+                 .approvalPending, .clarificationPending, .pendingSteerLeftover,
+                 .compressing, .contextStatus, .warning:
+                // Progress-only events: they drive chrome, never transcript
+                // content, so a settled completion absorbs them without
+                // reopening the fence.
                 return
             }
         }
@@ -750,6 +754,12 @@ final class ChatStreamCoordinator {
                 break
             }
             setLiveTokensPerSecondIfChanged(payload.displayableTokensPerSecond)
+        case .compressing:
+            delegate?.streamCoordinatorDidReceiveCompressingStart()
+        case .contextStatus(let payload):
+            delegate?.streamCoordinatorDidReceiveContextStatus(payload)
+        case .warning(let payload):
+            delegate?.streamCoordinatorDidReceiveWarning(payload)
         case .done(let payload):
             let hasCompletedTranscript = delegate?.streamCoordinatorApplyDone(payload) == true
             completeCurrentResponse(needsTranscriptRefresh: !hasCompletedTranscript)

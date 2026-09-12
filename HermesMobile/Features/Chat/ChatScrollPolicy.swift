@@ -95,6 +95,11 @@ enum ChatScrollPolicy {
     /// pinned to the latest content. Unified threshold for all purposes:
     /// ownership, UI chrome, and streaming detection.
     static let bottomThreshold: CGFloat = 80
+    /// Hysteresis (pt) above `bottomThreshold` before the transcript is treated
+    /// as intentionally scrolled away from the latest content. The gap between
+    /// the two thresholds stops a row that lands exactly on the boundary from
+    /// flipping ownership back and forth on every layout pass.
+    static let readingOlderHysteresis: CGFloat = 64
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while follow is
     /// latched on and no disclosure toggle is settling; otherwise return nil so

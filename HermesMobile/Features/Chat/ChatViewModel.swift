@@ -573,6 +573,7 @@ final class ChatViewModel {
     var attachmentUploadGeneration: Int { attachmentCoordinator.uploadStartGeneration }
     var uploadAttachmentErrorMessage: String? { attachmentCoordinator.uploadAttachmentErrorMessage }
     var localAttachmentPreviews: [String: [String: Data]] { attachmentCoordinator.localAttachmentPreviews }
+    private(set) var steeringConfirmationNotice: String?
 
     private let sessionID: String?
     /// The workspace this chat's session is pointed at. `/workspace` and the
