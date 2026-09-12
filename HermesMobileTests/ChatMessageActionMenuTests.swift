@@ -93,7 +93,13 @@ final class ChatMessageActionMenuTests: XCTestCase {
             onRegenerate: { _ in },
             onEdit: { _ in },
             onFork: { _ in },
-            onCopy: onCopy
+            onCopy: onCopy,
+            onSelectText: nil,
+            onReply: { _ in },
+            onForward: { _ in },
+            onSave: { _ in },
+            onPin: nil,
+            isPinned: false
         )
     }
 }
