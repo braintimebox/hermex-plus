@@ -1276,7 +1276,6 @@
 				1A2B3C4D5E6F70000000211 /* Skills.swift */,
 				C14900000000000000000002 /* Kanban.swift */,
 				FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */,
-				7F9398CB8BAED7FCED582672 /* QuoteReplyBanner.swift */,
 				2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */,
 
 			);
@@ -1467,6 +1466,7 @@
 				0D1CE5F12B9E4D4D9E5A01C1 /* SlashCommandExecutor.swift */,
 				FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */,
 				C1A0F0F1A11B4E0D9C7A3E12 /* ClarificationRequestOverlay.swift */,
+				7F9398CB8BAED7FCED582672 /* QuoteReplyBanner.swift */,
 				B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */,
 				2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */,
 				661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */,

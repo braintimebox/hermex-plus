@@ -173,10 +173,77 @@ def check_pbxproj_registration() -> int:
         else:
             seen[ident] = label
 
+    # (c) each fileRef sits in a group whose path actually leads to the file.
+    # Registering a file in the wrong group is not a build error Xcode reports
+    # clearly — it reports "did you forget to declare this file as an output of
+    # a script phase", for a file that exists. `QuoteReplyBanner.swift` landed in
+    # the Models group while living in Features/Chat.
+    problems.extend(_group_path_mismatches(text, tracked.splitlines()))
+
     if problems:
         return blockers(["project.pbxproj is inconsistent:"] + [f"  {p}" for p in problems[:15]])
-    print(f"      {len(seen)} ids, all unique; every tracked .swift registered")
+    print(f"      {len(seen)} ids, all unique; every tracked .swift registered "
+          f"and in a group that resolves to its directory")
     return 0
+
+
+def _group_path_mismatches(text: str, tracked: list[str]) -> list[str]:
+    """fileRefs whose PBXGroup chain does not resolve to the file's own folder."""
+    groups: dict[str, tuple[list[str], str]] = {}
+    for m in re.finditer(
+        r"([0-9A-F]{24})\s*/\*[^*]*\*/\s*=\s*\{\s*isa = PBXGroup;"
+        r"(.*?)\};",
+        text, re.S,
+    ):
+        body = m.group(2)
+        children: list[str] = []
+        cm = re.search(r"children = \((.*?)\);", body, re.S)
+        if cm:
+            children = re.findall(r"([0-9A-F]{24})", cm.group(1))
+        pm = re.search(r"\bpath = \"?([^;\"]+)\"?;", body)
+        groups[m.group(1)] = (children, pm.group(1) if pm else "")
+
+    ref_path: dict[str, str] = {}
+    for m in re.finditer(
+        r"([0-9A-F]{24})\s*/\*\s*(\S+?\.swift)\s*\*/\s*=\s*\{\s*isa = PBXFileReference;"
+        r'.*?path = "?([^;"]+)"?;',
+        text,
+    ):
+        ref_path[m.group(1)] = m.group(3)
+
+    # walk from each group down, accumulating the path prefix
+    by_name: dict[str, list[str]] = {}
+    for f in tracked:
+        if f.endswith(".swift"):
+            by_name.setdefault(Path(f).name, []).append(f)
+
+    problems: list[str] = []
+
+    def walk(gid: str, prefix: str, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        children, own = groups.get(gid, ([], ""))
+        here = f"{prefix}/{own}".strip("/") if own else prefix
+        for child in children:
+            if child in groups:
+                walk(child, here, depth + 1)
+            elif child in ref_path:
+                name = ref_path[child]
+                real = by_name.get(name)
+                if not real:
+                    continue
+                expected_dir = str(Path(real[0]).parent)
+                resolved = f"{here}/{name}".strip("/")
+                if resolved != real[0] and expected_dir.split("/")[-1] not in here.split("/")[-1:]:
+                    problems.append(
+                        f"{name} is registered under '{here or '<root>'}' "
+                        f"but lives in '{expected_dir}'"
+                    )
+
+    root_ids = [g for g in groups if not any(g in c for c, _ in groups.values())]
+    for gid in root_ids:
+        walk(gid, "")
+    return sorted(set(problems))
 
 
 # --- check 4: upstream-owned files untouched --------------------------------

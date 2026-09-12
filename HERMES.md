@@ -414,11 +414,37 @@ python3 scripts/sync-upstream --plan     # что будет при merge
 
 База отслеживания: тег `plus/base-vX.Y.Z`. После merge — передвинуть.
 
+### Что нельзя потерять при синке
+
+Слияние молча берёт чужую сторону блока. Так уже пропали
+`ToolCallCardView.swift`, `InsightsRows.swift` и 32 наших объявления внутри
+выживших файлов.
+
+```bash
+python3 scripts/check-fork-preserved.py --list     # что наше — ДО синка
+python3 scripts/check-fork-preserved.py            # после: блок, если наше исчезло
+python3 scripts/check-fork-preserved.py --record   # новая фича попала в манифест
+```
+
+Манифест — `docs/agents/fork-manifest.json`. Список наших фич —
+`docs/agents/fork-inventory.md`. Гейт 12 в `pipeline-precheck.py` проверяет это
+на каждом push.
+
+**Правило:** новая наша фича без `--record` живёт до ближайшего синка и может
+пропасть незаметно. Убираем осознанно — вписываем имя в `removed` с причиной.
+
+⚠ **pbxproj — три вещи, которые Xcode не сообщает внятно:** файл может быть вообще
+не зарегистрирован; два файла могут делить один ID (один выпадает из сборки);
+файл может стоять в группе, чей путь ведёт не к его папке. Все три проверяет
+гейт 3.
+
 ---
 
 ## ЧЕГО ЗДЕСЬ НЕТ (не ищи)
 
-- GitHub Issues / PR-процесса — мы работаем пушем в main
+- GitHub Issues / PR-процесса для обычной работы — push в `main`.
+  Исключение: синк upstream идёт в ветке (`sync/upstream-<ver>`) + PR, чтобы
+  `main` оставался точкой отката, пока CI красный
 - Xcode, симулятора, XcodeBuildMCP — только CI
 - TestFlight, App Store Connect — нет доступа
 - Ветки `master` у upstream — только `origin/master` как зеркало для чтения
