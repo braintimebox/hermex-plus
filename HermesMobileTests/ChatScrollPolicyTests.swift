@@ -168,6 +168,8 @@ final class ChatScrollPolicyTests: XCTestCase {
                 cooldownUntil: nil
             )
         )
+    }
+
     // MARK: Follow latch
 
     private typealias Latch = ChatScrollPolicy.FollowLatch
@@ -202,6 +204,14 @@ final class ChatScrollPolicyTests: XCTestCase {
     func testCooldownDeadlineIsUserScrollCooldownInFuture() {
         let base = Date(timeIntervalSinceReferenceDate: 1_000)
         let deadline = ChatScrollPolicy.cooldownDeadline(after: base)
+
+        XCTAssertEqual(
+            deadline.timeIntervalSince(base),
+            ChatScrollPolicy.userScrollCooldown,
+            accuracy: 0.0001
+        )
+    }
+
     func testExplicitResetSurvivesCoastingMomentum() {
         // Send or scroll-to-bottom while the transcript is still decelerating: the
         // remaining momentum ticks belong to the gesture that predates the reset.

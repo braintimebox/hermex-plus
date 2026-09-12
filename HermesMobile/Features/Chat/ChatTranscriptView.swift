@@ -561,6 +561,7 @@ struct ChatTranscriptView: View {
             }
             .accessibilityHidden(true)
         }
+        }
     }
 
     /// Only rows created moments ago animate in. Cached history, reloads, and
@@ -696,6 +697,9 @@ struct ChatTranscriptView: View {
             .transition(.opacity)
         } else if showsAssistantTypingIndicator {
             AssistantTypingIndicatorView()
+        }
+    }
+
     private var workingRow: some View {
         if let workingRowStartedAt {
             ChatWorkingRowView(startedAt: workingRowStartedAt)

@@ -152,8 +152,6 @@ final class FilePreviewViewModel {
         isKnownUnsupportedBinaryPath
     }
 
-    private var pathExtension: String {
-
     private static let rasterImageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp"]
 
     private static let unsupportedBinaryExtensions: Set<String> = [

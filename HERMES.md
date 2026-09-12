@@ -202,6 +202,11 @@ vs `CachedSession.sessionID` прошёл гейт и уронил сборку.
 правило разрешения для каждого класса файлов, известные ловушки. Сначала прогнать
 `python3 scripts/upstream-rehearse.py`; план написан против его вывода.
 
+**Три слоя работы — `docs/agents/sync-layers.md`.** Читать, когда что-то упало:
+последовательность (git, структура), сборка (Swift, только CI), pipeline
+(публикация). Провал в одном слое не чинится инструментом другого — это и была
+ошибка, из-за которой один потерянный `}` искали через `gh run list` пять прогонов.
+
 ⚠ УДАЛЁН: `docs/agents/domain.md` — upstream его удалил, мы приняли удаление
 (решение зафиксировано в плане синка). Указатели, которые в нём жили, теперь здесь.
 
@@ -239,10 +244,15 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
     ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 7 гейтов (вызывается хуком И CI)
+scripts/pipeline-precheck.py                ← 8 гейтов (вызывается хуком И CI)
 scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
 scripts/check-doc-references.py             ← гейт 7: ссылки на несуществующее
+scripts/check-swift-structural-balance.py   ← гейт 8: баланс скобок против ОБОИХ родителей
+                                              (union двух сторон конфликта теряет `}` в конце
+                                               стороны; Swift показывает это лавиной
+                                               несвязанных ошибок — стоило 5 прогонов CI)
 scripts/tests/test_doc_references.py        ← юнит-тесты гейта 7 (10 кейсов, запускать после правки)
+docs/agents/sync-layers.md                  ← три слоя: последовательность / сборка / pipeline
 scripts/upstream-rehearse.py                ← разведка upstream-merge (рабочий репо не трогает)
     --keep  оставить клон для ручного разбора (по умолчанию клон удаляется)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
@@ -358,10 +368,11 @@ macOS-джобу до конца.
 
 ```
 Слой 1 — инструкции и процесс      [готов]
-  ✓ release_hermesplus.py + pipeline-precheck (6 гейтов)
+  ✓ release_hermesplus.py + pipeline-precheck (8 гейтов)
   ✓ sync-upstream (merge, не rebase)
   ✓ upstream-rehearse.py (разведка конфликтов, 0 CI-минут)
   ✓ project_snapshot (статус из git)
+  ✓ docs/agents/sync-layers.md (три слоя: последовательность / сборка / pipeline)
   ✓ HERMES.md (этот файл)
 
 Слой 2 — защита                    [готов]

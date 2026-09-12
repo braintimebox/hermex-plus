@@ -1435,6 +1435,8 @@ struct LightStreamingRenderer: View {
             .font(.body)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
 /// Matches MarkdownUI's GitHub heading metrics, registering only the text label.
 private struct SelectableMarkdownHeading: View {

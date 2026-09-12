@@ -18,6 +18,12 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
     5. upstream drift is known       sync-upstream --status must not error
     6. test-lint                     no assertion encodes a race as a contract
     7. doc references resolve        no document points at a deleted file
+    8. swift structural balance      a changed .swift keeps its parents' brace
+                                     balance (a merge that concatenates two
+                                     conflict sides drops the closing brace
+                                     that sat at the end of a side; Swift then
+                                     reports it as a cascade of unrelated
+                                     errors, which cost five CI runs)
 
     Checks are fail-fast: the first BLOCKER stops the push.
 
@@ -77,7 +83,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/7] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1/8] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -96,7 +102,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/7] conflict markers in tracked files")
+    print("[2/8] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -121,7 +127,7 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/7] pbxproj registration of new .swift files")
+    print("[3/8] pbxproj registration of new .swift files")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -153,7 +159,7 @@ def check_pbxproj_registration() -> int:
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/7] upstream-owned files not modified")
+    print("[4/8] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -186,7 +192,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/7] upstream drift (advisory)")
+    print("[5/8] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -214,7 +220,7 @@ def check_test_lint() -> int:
     hours later in the same session — a note asks the next person to remember and
     to judge whether it applies; a gate does not.
     """
-    print("[6/7] test-lint (race-shaped assertions)")
+    print("[6/8] test-lint (race-shaped assertions)")
     script = ROOT / "scripts" / "lint-tests.py"
     if not script.exists():
         print("      linter not found — skipped")
@@ -243,7 +249,7 @@ def check_doc_references() -> int:
     it is gone — is recognised by the absence wording on the same line, which is
     how the tools register already writes those entries.
     """
-    print("[7/7] doc references resolve")
+    print("[7/8] doc references resolve")
     script = ROOT / "scripts" / "check-doc-references.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -258,6 +264,44 @@ def check_doc_references() -> int:
     return r.returncode
 
 
+
+def check_swift_structural_balance() -> int:
+    """Reject a change that leaves a .swift file less balanced than its parents.
+
+    A merge resolved by concatenating the two conflict sides drops the closing
+    brace that sat at the end of a side. Swift then reports it as a cascade: one
+    missing `}` in ChatView surfaced as twenty-odd `attribute 'private' can only
+    be used in a non-local scope` errors at unrelated lines, and five CI runs
+    were spent chasing the cascade one brace at a time because nothing local
+    could tell "I broke the structure" from "the file always looked like this".
+
+    Line-by-line brace counting does not work here and was tried three times
+    during that merge, wrong every time: `{` occurs inside string literals,
+    multi-line strings and comments, and `(` in a function signature opens a
+    scope that carries no brace at all. The checker this calls tracks
+    string/comment state and compares against BOTH parents, so an inherited
+    imbalance is not mistaken for one this branch introduced.
+
+    Blocking, not advisory: a dropped brace is never a judgment call.
+    """
+    print("[8/8] swift structural balance vs both parents")
+    script = ROOT / "scripts" / "check-swift-structural-balance.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    # the script prints its own banner; drop it so the gate header is not doubled
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[8/8]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -266,6 +310,7 @@ CHECKS = {
     5: check_upstream_drift,
     6: check_test_lint,
     7: check_doc_references,
+    8: check_swift_structural_balance,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

@@ -318,16 +318,6 @@ final class ChatViewModel {
     private(set) var latestRunOutcome: TranscriptTurnRunOutcome?
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
-    private(set) var displayTitle: String
-    private(set) var listeningMessageID: String?
-    private(set) var completedToolCallGroups: [ToolCallGroup] = []
-    private var completedToolCallGroupLookup = ToolCallGroupAnchorLookup()
-    private(set) var completedReasoningGroups: [ReasoningGroup] = [] {
-        didSet { recomputeDisplayedReasoningGroups() }
-    }
-    private(set) var displayedReasoningGroups: [ReasoningGroup] = []
-    private func recomputeDisplayedReasoningGroups() {
-        displayedReasoningGroups = Self.reasoningDisplayGroups(
     private(set) var errorMessage: String?
     private(set) var sendErrorMessage: String? {
         didSet { sendErrorIsFromStreamRecovery = false }
@@ -5741,21 +5731,6 @@ final class ChatViewModel {
         // `deduplicatedReplayToken` already returns the token unchanged then.
         let remainder: String
         if isActiveStreamReplayConnection {
-            let flushedContent: String
-            if messages.last?.messageId == messageID {
-                flushedContent = messages.last?.content ?? ""
-            } else {
-                flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
-            }
-            let effectiveContent = flushedContent + pendingAssistantTokenText
-            remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
-        } else {
-        // Normal streams cannot contain replayed content, so constructing the
-        // full flushed + pending transcript before appending every token is
-        // unnecessary. Keep the expensive effective-content comparison only on
-        // reconnect replay paths, where it protects against duplicated events.
-        let remainder: String
-        if isActiveStreamReplayConnection {
             let messageID = ensureStreamingAssistantMessage()
             let flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
             let effectiveContent = flushedContent + pendingAssistantTokenChunks.joined()
@@ -7043,6 +7018,8 @@ extension ChatViewModel {
         ].joined(separator: "\u{0}")
         let digest = SHA256.hash(data: Data(input.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     nonisolated private static func transcriptActivityAnchorIDs(
         reasoningGroups: [ReasoningGroup],
         toolCallGroups: [ToolCallGroup]

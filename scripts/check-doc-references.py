@@ -55,6 +55,7 @@ SCANNED = [
     "CLAUDE.md",
     "docs/agents/testing.md",
     "docs/agents/upstream-sync-plan.md",
+    "docs/agents/sync-layers.md",
     "ops/README.md",
 ]
 
