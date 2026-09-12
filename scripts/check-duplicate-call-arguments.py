@@ -182,6 +182,131 @@ def scan(path: Path) -> list[str]:
     return problems
 
 
+# --- second shape: two string literals where one argument was expected --------
+#
+# A union that keeps both sides of an edited string argument produces
+#
+#     "first wording"
+#     "second wording"
+#
+# with no operator between them. Swift allows adjacent literals only in a
+# concatenation context; inside an argument list it reports
+# `expected ',' separator` at the SECOND literal, which is why three of these
+# were reported as errors at column ~90 of a line the diff never touched.
+def strip_comments(text: str) -> str:
+    """Remove comments only, keeping string literals intact.
+
+    `strip_noise` blanks literals too (correct for the label scan, wrong for a
+    check whose subject is the literal text). This variant keeps them and only
+    blanks comment bodies, preserving line structure.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_line = False
+    in_block = 0
+    in_str = False
+    raw_delim: str | None = None
+    while i < n:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if in_line:
+            out.append("\n" if ch == "\n" else " ")
+            if ch == "\n":
+                in_line = False
+            i += 1
+            continue
+        if in_block:
+            if ch == "*" and nxt == "/":
+                in_block -= 1
+                out.extend("  ")
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                in_block += 1
+                out.extend("  ")
+                i += 2
+                continue
+            out.append("\n" if ch == "\n" else " ")
+            i += 1
+            continue
+        if in_str:
+            out.append(ch)
+            if raw_delim:
+                if text.startswith(raw_delim, i):
+                    out.extend(raw_delim[1:])
+                    i += len(raw_delim)
+                    in_str = False
+                    raw_delim = None
+                    continue
+            elif ch == "\\":
+                if i + 1 < n:
+                    out.append(text[i + 1])
+                i += 2
+                continue
+            elif ch == '"':
+                in_str = False
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            in_line = True
+            out.extend("  ")
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            in_block += 1
+            out.extend("  ")
+            i += 2
+            continue
+        if ch == '"':
+            hm = re.match(r'(#+)"""', text[i:])
+            if hm:
+                raw_delim = '"""' + hm.group(1)
+                in_str = True
+                out.extend(hm.group(0))
+                i += len(hm.group(0))
+                continue
+            in_str = True
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+STR_CONT_RISK = re.compile(r'^\s*"')
+ARG_HEAD = re.compile(r'^\s*(?:[a-zA-Z_]\w*\s*:\s*)?".*",?\s*$')
+
+
+def scan_adjacent_strings(path: Path) -> list[str]:
+    # RAW text, not the stripped one: this check is about string CONTENT, and
+    # strip_noise blanks literals by design. Using the stripped text here made
+    # the check silently report nothing.
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    lines = strip_comments(raw).splitlines()
+    problems: list[str] = []
+    depth = 0
+    for idx in range(len(lines) - 1):
+        cur, nxt = lines[idx], lines[idx + 1]
+        depth += cur.count("(") - cur.count(")")
+        if not ARG_HEAD.match(cur):
+            continue
+        if not STR_CONT_RISK.match(nxt):
+            continue
+        # a following line that is only a literal, and the current line has no
+        # trailing comma or operator, and we are inside an argument list
+        if cur.rstrip().endswith((",", "+", "&&", "||", ")", "]")):
+            continue
+        if nxt.strip().startswith('"""') or '"""' in nxt:
+            continue
+        if depth <= 0:
+            continue
+        # `case "a":` / `return "a"` / `let x = "a"` are not argument lists
+        if re.match(r'^\s*(case|return|let|var|if|guard|else|for|while|switch|default)\b', cur):
+            continue
+        problems.append(
+            f"{path.name}:{idx + 2} string literal directly after the literal on "
+            f":{idx + 1} — a union kept both wordings"
+        )
+    return problems
+
+
 def changed_swift() -> list[str]:
     try:
         base = subprocess.run(
@@ -218,6 +343,7 @@ def main() -> int:
         p = ROOT / rel
         if p.exists() and p.suffix == ".swift":
             total.extend(scan(p))
+            total.extend(scan_adjacent_strings(p))
 
     print("[11/11] duplicate call arguments (same label twice in one call)")
     if total:

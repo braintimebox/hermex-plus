@@ -173,7 +173,6 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
             let message = APIError.http(statusCode: statusCode, body: body).localizedDescription
             XCTAssertEqual(
                 message,
-                "The server is temporarily unavailable. Check that it's running, then try again."
                 "Could not connect to the server. Check that hermes-webui is running and the tunnel is connected."
             )
             XCTAssertFalse(message.contains("<html>"))
@@ -309,7 +308,6 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
 
         XCTAssertEqual(
             error.localizedDescription,
-            "The server did not respond in time. Check that it's running and reachable."
             "The server did not respond in time. Check that the server is running and the connection is available."
         )
     }
