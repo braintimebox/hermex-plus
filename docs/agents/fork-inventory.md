@@ -21,6 +21,15 @@
 | Ссылки-превью | `TranscriptLinkPreview.swift` | — |
 | Медиа в транскрипте | `TranscriptMediaView.swift` | — |
 | Модели | `Models/SavedMessage.swift`, `Models/PendingScheduledMessage.swift` | — |
+| Skills: Personal / Built-in бакеты | `Features/Skills/SkillsView.swift` (+499), `SkillsViewModel.swift` (+49) | ≥5 |
+| Skills: Plugins / Hooks с живыми данными | там же (`originGroupedPlugins`) | ≥5 |
+| Skills: breadcrumb в навбаре | там же (`originTitleHeader`) | ≥2 |
+| Skills: поиск/фильтр, вкл/выкл | там же (`setSkill`, `togglingSkillNames`) | ≥5 |
+| `origin` в модели Skills | `Models/Skills.swift` (+61) | сервер отдаёт поле, клиент делит | 
+| Tasks: создание / запуск / расписание / удаление | `Features/Tasks/TasksView.swift` (+102) | ≥10 |
+
+**Важно:** в `Features/Tasks/`, `Features/Skills/` upstream после 1.6.0 **не менял ничего**
+(0 файлов). Наши правки там не конфликтуют — переносятся как есть.
 
 ## Где мы и upstream меняли одно и то же
 
