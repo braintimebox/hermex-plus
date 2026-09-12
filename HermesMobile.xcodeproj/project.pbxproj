@@ -423,6 +423,7 @@
 		2EDE1ED3AEBD4FA5B69A3ED3 /* SavedMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */; };
 		87779DD870B04E3B8AFD3E98 /* PendingScheduledMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */; };
 		CAB4854F6BFA4E2DACEE98DE /* QuoteReplyBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B924B28F2C45ADA9ED488E /* QuoteReplyBanner.swift */; };
+		CA5E1EC7A11B4F0D9C7A3E01 /* SelectableResponseText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */; };
 		650107E30716447F9D8CE941 /* SavedMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */; };
 		FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */; };
 		D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */; };
@@ -914,6 +915,7 @@
 		FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessage.swift"; sourceTree = "<group>"; };
 		2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PendingScheduledMessage.swift"; sourceTree = "<group>"; };
 		B3B924B28F2C45ADA9ED488E /* QuoteReplyBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QuoteReplyBanner.swift"; sourceTree = "<group>"; };
+		B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectableResponseText.swift"; sourceTree = "<group>"; };
 		2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessagesView.swift"; sourceTree = "<group>"; };
 		661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledMessagesView.swift"; sourceTree = "<group>"; };
 		FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionPickerForForward.swift"; sourceTree = "<group>"; };
@@ -1462,6 +1464,7 @@
 				0D1CE5F12B9E4D4D9E5A01C1 /* SlashCommandExecutor.swift */,
 				FC2A37872AC842629FBDDFA4 /* SlashCommandAutocompleteView.swift */,
 				B3B924B28F2C45ADA9ED488E /* QuoteReplyBanner.swift */,
+				B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */,
 				2EE8FF5D966640109D98DBF8 /* SavedMessagesView.swift */,
 				661A2C9D3A2D4130BFF401F1 /* ScheduledMessagesView.swift */,
 				FE38F469653C4B4AB1E348DB /* SessionPickerForForward.swift */,
@@ -2163,6 +2166,7 @@
 				2EDE1ED3AEBD4FA5B69A3ED3 /* SavedMessage.swift in Sources */,
 				87779DD870B04E3B8AFD3E98 /* PendingScheduledMessage.swift in Sources */,
 				CAB4854F6BFA4E2DACEE98DE /* QuoteReplyBanner.swift in Sources */,
+				CA5E1EC7A11B4F0D9C7A3E01 /* SelectableResponseText.swift in Sources */,
 				650107E30716447F9D8CE941 /* SavedMessagesView.swift in Sources */,
 				FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */,
 				D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */,

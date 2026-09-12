@@ -343,7 +343,9 @@ struct ChatView: View {
     @State private var pendingProfileSelection: ProfileSummary?
     @State private var forwardMessageContent: (text: String, author: String, sessionTitle: String)?
     @State private var showingForwardPicker = false
-    @State private var showingSchedulePicker = false
+    @State private var showingSchedulePicker = false    /// Full-screen reader for a response chosen via "Select Text".
+    @State private var selectableResponseText: SelectableResponseText?
+
     @State private var showingScheduledList = false
     @State private var showingChatSearch = false
     @State private var showShareSheet = false

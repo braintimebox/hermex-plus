@@ -36,6 +36,12 @@ enum ChatMotion {
         reduceMotion ? nil : .easeOut(duration: 0.22)
     }
 
+    /// Breathing the pre-response dot. Slow enough to read as idle, and
+    /// disabled outright under Reduce Motion.
+    static func typingIndicator(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
+    }
+
     static func bottomOverlayTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
     }

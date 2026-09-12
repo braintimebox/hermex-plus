@@ -872,6 +872,7 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
                     onEdit: onEdit,
                     onFork: onFork,
                     onCopy: onCopy,
+                    onSelectText: onSelectText,
                     onReply: onReply,
                     onForward: onForward,
                     onSave: onSave,
