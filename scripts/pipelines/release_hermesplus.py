@@ -174,10 +174,63 @@ def git_commit_push(msg: str) -> None:
     sh(["git", "push", "origin", "main"])
 
 
+def tag_release(version: str) -> None:
+    """Tag the commit we just pushed, locally and on origin.
+
+    The tag used to be an implicit side effect of `action-gh-release` in CI,
+    which meant it pointed at whichever run happened to publish first rather
+    than at the commit this version was finalised in — the hole that let four
+    later commits also claim 3.6.1 and overwrite its released artifact.
+
+    Creating it here, from the same code path that bumped VERSION, removes the
+    race: the number and its contents are bound at the moment the version is
+    written. CI does the same only when nothing exists yet, so the two paths
+    cannot disagree.
+    """
+    exists = sh(["git", "ls-remote", "--exit-code", "--tags", "origin", f"v{version}"],
+                check=False)
+    if exists:
+        print(f"  tag v{version} already on origin — leaving it alone")
+        return
+    head = git("rev-parse", "HEAD")
+    sh(["git", "tag", "-a", f"v{version}", "-m", f"Hermex Plus {version}"])
+    sh(["git", "push", "origin", f"v{version}"])
+    print(f"  tagged {head[:8]} as v{version}")
+
+
+def verify_release(version: str, rid: str) -> bool:
+    """Confirm the version actually landed in Releases with its artifact.
+
+    The pipeline's job is to hand over an installable build. It used to finish
+    by printing `releases/latest` — a link to whatever was published last, which
+    is not the same as "this version is published". A run could therefore report
+    success while the version was absent from Releases.
+    """
+    rel_url, has_asset = release_url(version)
+    if has_asset:
+        print(f"  verified: v{version} is published with an artifact")
+        return True
+    print(f"  NOT PUBLISHED: v{version} has no Release with an artifact.")
+    print(f"    the IPA exists in this run: "
+          f"https://github.com/{OUR_REPO}/actions/runs/{rid}")
+    return False
+
+
 def wait_build() -> str:
+    """Wait for the CI run of the commit we just pushed, and return its id.
+
+    `--limit=1` used to be the whole story, which raced: a concurrent push, or a
+    run queued from an earlier commit, could be picked up instead of ours, and
+    the IPA downloaded afterwards would belong to a different commit. The commit
+    sha is now the filter's subject — we wait for OUR build, or fail loudly.
+    """
+    head = git("rev-parse", "HEAD")
+    print(f"  waiting for CI on {head[:8]}")
     rid = sh(["gh", "run", "list", "--repo", OUR_REPO, "--workflow=build-ipa.yml",
-              "--branch=main", "--limit=1", "--json", "databaseId",
-              "--jq", ".[0].databaseId"])
+              "--branch=main", "--limit=10", "--json", "databaseId,headSha",
+              "--jq", f'[.[] | select(.headSha | startswith("{head}"))][0].databaseId'])
+    if not rid or rid == "null":
+        sys.exit(f"no CI run found for {head[:8]} — did the push land?")
     for _ in range(26):  # ~25s * 26 ≈ 11 min
         st = sh(["gh", "run", "view", rid, "--repo", OUR_REPO,
                  "--json", "status,conclusion",
@@ -207,15 +260,57 @@ def download_ipa(rid: str, version: str) -> tuple[Path, str]:
     return dst, digest
 
 
+def release_url(version: str) -> tuple[str, bool]:
+    """URL of THIS version's release, and whether it actually has an artifact.
+
+    `emit()` used to print `releases/latest`, which is whatever was published
+    most recently — not the build that was just produced. Measured: the version
+    the pipeline had just built could be absent from Releases entirely, while the
+    printed link pointed at an older number, so "the IPA didn't land in a
+    release" looked like a publishing failure when it was a reporting one.
+
+    The release is verified rather than assumed: a URL that 404s is worse than an
+    honest "not published".
+
+    The repository is `OUR_REPO`, not whatever `gh` resolves by default. In this
+    clone `gh repo view` answers about the FORK PARENT (uzairansaruzi/hermex),
+    because that is what the remote layout resolves to — measured, and it made
+    this function report every version as unpublished while printing a URL in
+    the wrong organisation. Hard-coding the release target is the only form that
+    cannot drift.
+    """
+    url = f"https://github.com/{OUR_REPO}/releases/tag/v{version}"
+    r = subprocess.run(
+        ["gh", "release", "view", f"v{version}", "--repo", OUR_REPO,
+         "--json", "assets", "--jq", ".assets | length"],
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    if r.returncode != 0:
+        return url, False
+    try:
+        return url, int(r.stdout.strip()) > 0
+    except ValueError:
+        return url, False
+
+
 def emit(dst: Path, digest: str, rid: str, version: str) -> None:
     name = dst.name
     url = f"{WEBUI_BASE}/api/file/raw?path={name}" if WEBUI_BASE else "(set HERMES_WEBUI_BASE)"
+    rel_url, has_asset = release_url(version)
     print("\n=== DELIVER ===")
     print(f"  ipa : {dst}")
     print(f"  sha256 : {digest}")
     print(f"  in-app : {url}")
-    print(f"  release: https://github.com/braintimebox/hermex-plus/releases/latest")
-    print(f"  artifact: https://github.com/braintimebox/hermex-plus/actions/runs/{rid}")
+    if has_asset:
+        print(f"  release: {rel_url}")
+    else:
+        # Say it plainly. The build output exists, but it is NOT in a Release,
+        # and pointing at releases/latest here would hide that.
+        print(f"  release: NOT PUBLISHED — v{version} has no GitHub Release with an artifact")
+        print(f"           the IPA is in this run's artifacts: "
+              f"https://github.com/{OUR_REPO}/actions/runs/{rid}")
+        print(f"           expected URL once published: {rel_url}")
+    print(f"  artifact: https://github.com/{OUR_REPO}/actions/runs/{rid}")
     print(f"  version: {version}")
 
 
@@ -380,10 +475,16 @@ def cmd_release(next_v: str | None, close_ids: list[int], note: str,
     release_gate()
     where = ",".join(map(str, close_ids))
     git_commit_push(f"{nxt}: {note}" + (f" (fixed #{where})" if where else ""))
+    # Tag from here, not from CI: the number and the commit it names must be
+    # bound by the same step that decided the number.
+    tag_release(nxt)
 
     rid = wait_build()
     dst, digest = download_ipa(rid, nxt)
+    ok = verify_release(nxt, rid)
     emit(dst, digest, rid, nxt)
+    if not ok:
+        sys.exit("release finished without a published Release — see NOT PUBLISHED above")
     return 0
 
 
