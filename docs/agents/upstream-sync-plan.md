@@ -32,16 +32,23 @@ git merge --no-commit --no-ff upstream/master
 
 | | |
 |---|---|
-| Commits to absorb | **104** (upstream drift from the merge-base, not from the stale mirror) |
+| Commits to absorb | **105** (upstream drift from the merge-base, not from the fork point) |
 | Upstream files added | **298** (mostly `Features/Bots/*`) |
 | Conflicting files | **34** |
 | Conflict blocks | **141** — of which **18 require no judgement at all** |
 
 **Measure the drift from `git merge-base main upstream/master`, never from
-`origin/master`.** `origin/master` is a read-only snapshot of upstream and it can
-lag arbitrarily; here it lagged 104 commits behind while still being a valid
-ancestor. `sync-upstream --status` now prints both numbers separately
-(`upstream drift` vs `mirror lag`) for exactly this reason.
+`origin/master`.** In this repository `origin/master` is not a lagging mirror —
+it IS the fork point: it equals `git merge-base main upstream/master` exactly
+(`fb698b0`) and must stay an ancestor of `main`. Advancing it to upstream's tip
+would break that (verified: `git merge-base --is-ancestor upstream/master main`
+then returns false). The earlier version of this plan described it as "a
+read-only snapshot that lagged 104 commits", which invited someone to refresh a
+marker that is frozen on purpose.
+
+`sync-upstream --status` prints both numbers separately and names them:
+`upstream drift` (the sync size) and `fork point lag` (informational, with an
+explicit `do NOT advance it`).
 
 ### 18 of the 141 blocks are auto-resolved
 
@@ -153,7 +160,7 @@ generator in this repo: the pbxproj is committed and edited directly, so both si
 append entries to the same lists.
 
 The rehearsal **proves** the union is safe: the 24-hex object ids on our side (16) and
-upstream's (56) **do not intersect at all** — 0 shared out of 72. Both sides are adding
+upstream's (58) **do not intersect at all** — 0 shared out of 74. Both sides are adding
 independent `PBXBuildFile` / `PBXFileReference` / group / build-phase entries, so keeping
 both is well-defined by construction. The checker is `pbxproj_ids_are_disjoint()` in
 `scripts/upstream-rehearse.py`; the numbers above are its output on the live run, not an
@@ -212,14 +219,22 @@ Actions minutes for standard runners on public repositories — macOS included. 
 2000 free minutes. Do not plan the sync around a budget that does not apply here.
 
 What each push **does** cost is wall-clock: `guard → test → build` is roughly 9–11 minutes
-on a macOS runner, and `build-ipa.yml` has no `concurrency` block, so every push to `main`
-runs the full job to completion. `pr-ci.yml` has `cancel-in-progress: true`.
+on a macOS runner. `build-ipa.yml` now has a `concurrency` block (`cancel-in-progress:
+false` — a run that is mid-release must finish, not die half-published), so pushes to
+`main` serialise instead of piling up. `pr-ci.yml` has `cancel-in-progress: true`.
 
 **Batch the work on a branch anyway** — not for minutes, but because a half-resolved
-conflict must not land on `main`, and because `build-ipa.yml` publishes a Release on every
-push to `main` (verified: `Create Release` step is `if: github.event_name == 'push'`).
-Merging the sync through a branch makes the sequence restartable and keeps the release
-channel clean. Expect several CI iterations to find the type errors Linux cannot see.
+conflict must not land on `main`. `build-ipa.yml` publishes a Release on a push to `main`
+only when that version is not yet delivered (the guard added on 2026-09-12), so merging
+the sync through a branch keeps the sequence restartable and keeps the release channel
+clean either way. Expect several CI iterations to find the type errors Linux cannot see.
+
+**Do not bump `VERSION` for the merge itself.** The sync is tooling and history, not a
+new product behaviour a user installs — but it *does* touch 49 `.swift` files, so it is
+product by the pipeline's own definition and CI will ask for a version. Decide
+deliberately: either land the merge as part of the 3.7.0 release (recommended — the merge
+result is what 3.7.0 should be), or accept that `main` carries an unreleased merge until
+the next bump.
 
 ---
 
