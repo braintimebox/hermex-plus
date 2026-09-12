@@ -27,7 +27,7 @@ python3 scripts/project_snapshot.py     # статус из git — не мож�
 | Наш репозиторий | `braintimebox/hermex-plus` |
 | Ветка | `main` — **push напрямую**, без ветвей и PR |
 | Сборка | GitHub Actions (`build-ipa.yml`) — **Xcode локально НЕТ** |
-| Тесты | 92 файла. **Сейчас не запускаются** (известно, см. «План») |
+| Тесты | 92 файла / 1579 `func test`. **Запускаются и являются гейтом** — `build-ipa.yml` идёт `guard → test → build`, IPA пакуется только после зелёного прогона |
 | Доставка | GitHub Release → `/releases/latest` (не TestFlight, нет доступа) |
 | API источник | `PROJECT_SPEC.md` + свой сервер. **Не выдумывать эндпоинты** |
 | Версия | `VERSION` (semver) · `CHANGELOG.md` · `project.pbxproj` |
@@ -45,11 +45,20 @@ python3 scripts/project_snapshot.py     # статус из git — не мож�
 
 ```
 HERMES.md              ← этот файл
-STATUS.md              ← план и состояние
-scripts/pipeline*      ← релизный механизм
+CONVENTIONS.md         ← правила репо (почему каждая норма существует)
+scripts/pipelines/release_hermesplus.py  ← релизный механизм
+scripts/pipeline-precheck.py
+scripts/lint-tests.py
+scripts/check-doc-references.py          ← гейт 7
+scripts/upstream-rehearse.py
 scripts/sync-upstream  ← обновление
 scripts/project_snapshot.py
 docs/project-snapshot.md
+docs/hermesplus-status.yaml
+docs/agents/testing.md
+docs/agents/upstream-sync-plan.md
+ops/                   ← хост-сервисы (логи)
+.githooks/pre-push
 HermesMobile/MainThreadWatchdog.swift
 HermesMobile/HermexLogger.swift
 HermesMobile/Features/Chat/QuoteReplyBanner.swift
@@ -124,11 +133,12 @@ scripts/project_metrics.py    ← не существует
 ## МЕХАНИЗМ РЕЛИЗА
 
 ```bash
-python3 scripts/pipeline status              # где мы
-python3 scripts/pipeline check               # 5 гейтов (локально)
-python3 scripts/pipeline release --note "…"  # bump + CHANGELOG + гейты
-python3 scripts/pipeline sync                # план merge с upstream
+python3 scripts/pipelines/release_hermesplus.py status    # где мы
+python3 scripts/pipelines/release_hermesplus.py check     # 6 гейтов (локально)
+python3 scripts/pipelines/release_hermesplus.py sync      # план merge с upstream
+python3 scripts/pipelines/release_hermesplus.py release --next 3.7.0 --note "…"
 ```
+⚠ Без аргументов скрипт печатает help, а **не** релиз.
 
 `git push` защищён pre-push хуком → `scripts/pipeline-precheck.py`:
 ```
@@ -138,14 +148,27 @@ python3 scripts/pipeline sync                # план merge с upstream
 4. upstream-owned       предупреждение при правке чужого файла
 5. upstream drift       разрыв с upstream измерен
 6. test-lint            тесты не кодируют гонку как контракт
+7. doc references       документ не ссылается на несуществующий файл
 ```
 
-Гейт 6 (`scripts/lint-tests.py`) — **блокирующий**. Ловит механически:
+Гейты 6 и 7 (`scripts/lint-tests.py`, `scripts/check-doc-references.py`) —
+**блокирующие**. Гейт 6 ловит механически:
 - литеральный порядок запросов, где оба эндпоинта идут через `async let`
 - poll-цикл, который молча истекает без `XCTFail`
 
+Гейт 7 сканирует каждую ссылку вида `scripts/...`, `docs/...`, `.githooks/...`
+в `HERMES.md`, `CONVENTIONS.md`, `AGENTS.md` и `docs/agents/*.md` и падает, если
+цели нет. Он существует потому, что антипаттерн №4 из этого файла случился дважды:
+`CURRENT.md`/`project-metrics.md`, затем `scripts/pipeline`/`STATUS.md`.
+
 Правило, которое можно проверить механически — проверяется, а не описывается.
 Заметка просит помнить и судить; гейт не спрашивает.
+
+Гейт 7 покрыт юнит-тестами: `python3 scripts/tests/test_doc_references.py`
+(10 кейсов — что обязан ловить и что обязан пропускать). Правишь гейт — прогони их.
+Причина, по которой тесты написаны файлом, а не однострочником в shell: `printf`
+в bash калечит кириллицу и эмодзи, из-за чего проверка показывала «сломано» там,
+где всё работало. Сравнение строк с не-ASCII — только из файла.
 
 Проверки 4 и 5 — **advisory**: предупреждают, но не блокируют. Раньше их вывод
 терялся — итог говорил «ALL CHECKS PASSED», хотя выше было предупреждение.
@@ -170,11 +193,21 @@ pr-ci.yml        pull_request     тот же suite, только для вет�
 vs `CachedSession.sessionID` прошёл гейт и уронил сборку.
 
 Как писать тесты, которые не врут — `docs/agents/testing.md` (7 разобранных
-случаев из этого репо, каждый с коммитом-фиксом).
+случаев из этого репо, каждый с коммитом-фиксом). Читать ПЕРЕД правкой теста:
+там записаны провалы, которые эта сюита реально производила — ассерт на порядок
+`async let`, чтение кэша сразу после async-записи, wait-хелпер, тихо истекающий
+без `XCTFail`.
+
+Перед upstream-синком — `docs/agents/upstream-sync-plan.md`: набор конфликтов,
+правило разрешения для каждого класса файлов, известные ловушки. Сначала прогнать
+`python3 scripts/upstream-rehearse.py`; план написан против его вывода.
+
+⚠ УДАЛЁН: `docs/agents/domain.md` — upstream его удалил, мы приняли удаление
+(решение зафиксировано в плане синка). Указатели, которые в нём жили, теперь здесь.
 
 Установка хука (не версионируется, нужна после свежего клона):
 ```bash
-python3 scripts/pipeline install
+python3 scripts/pipelines/release_hermesplus.py install
 ```
 
 Ручной релиз (полный цикл с ожиданием сборки и скачиванием IPA):
@@ -194,8 +227,8 @@ python3 scripts/pipelines/release_hermesplus.py --next 3.7.0 --close 1 3 --note 
 
 ```
 scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ релизный вход
-    статус   кто мы: версия/ветка/head/pre-push/upstream drift
-    check    5 гейтов локально (без push)
+    status   кто мы: версия/ветка/head/pre-push/upstream drift
+    check    6 гейтов локально (без push)
     sync     план merge с upstream (сколько коммитов и конфликтов)
     install  включить pre-push гейт (core.hooksPath → .githooks)
     install-server  поставить/обновить сервер логов на этой машине (см. ops/)
@@ -206,9 +239,12 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
     ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 6 гейтов (вызывается хуком И CI)
+scripts/pipeline-precheck.py                ← 7 гейтов (вызывается хуком И CI)
 scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
+scripts/check-doc-references.py             ← гейт 7: ссылки на несуществующее
+scripts/tests/test_doc_references.py        ← юнит-тесты гейта 7 (10 кейсов, запускать после правки)
 scripts/upstream-rehearse.py                ← разведка upstream-merge (рабочий репо не трогает)
+    --keep  оставить клон для ручного разбора (по умолчанию клон удаляется)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
 .githooks/pre-push                          ← В РЕПОЗИТОРИИ (не в .git/hooks!)
 scripts/sync-upstream                       ← merge с upstream (--apply/--record-base)
@@ -223,12 +259,24 @@ scripts/sync-upstream                       ← merge с upstream (--apply/--rec
 
 ```
 ops/hermex-logs/server.py                   ← ИСТОЧНИК сервера логов (порт 8912)
+ops/hermex-logs/watchdog.py                 ← cron-скрипт: читает JSONL, алертит на фризы
 ops/hermex-logs/hermex-logs.service.template ← шаблон systemd-юнита ({{INSTALL_DIR}})
 ops/README.md                               ← что это, как ставить, что уже ломалось
 python3 scripts/pipelines/release_hermesplus.py install-server [--dir PATH]
 
     ⚠ Копии в ~/.hermes/_projects/hermex-logs/ и ~/.config/systemd/user/ — это
       УСТАНОВОЧНЫЕ ЦЕЛИ, не источник. Править в ops/, ставить командой.
+
+    Владелец каждого артефакта после установки:
+      server.py       → ~/.hermes/_projects/hermex-logs/  (install-server)
+      systemd unit    → ~/.config/systemd/user/           (install-server)
+      watchdog.py     → ~/.hermes/scripts/                (install-server)
+      cron-джоба      → зарегистрирована в Hermes cron по ИМЕНИ файла
+                        (hermex_logs_watchdog.py) — install-server её НЕ трогает.
+
+    ⚠ Правка ops/hermex-logs/watchdog.py обновляет сторож только после
+      `install-server`: cron резолвит скрипт по имени, то есть всегда берёт
+      установленную копию. Забыл переустановить = сторожит старой логикой.
 
 ### Статус
 
@@ -266,11 +314,17 @@ scripts/verify_kanban_reference_server.py
 ### GitHub Actions
 
 ```
-.github/workflows/build-ipa.yml          ← сборка IPA на push
-.github/workflows/pr-ci.yml              ← тесты (триггер: pull_request → не срабатывает!)
-.github/workflows/upstream-watch.yml     ← слежка hermes-webui
-.github/workflows/upstream-app-watch.yml ← слежка iOS-клиента (не в git)
+.github/workflows/build-ipa.yml          ← сборка IPA на push в main (guard → test → build)
+.github/workflows/pr-ci.yml              ← тот же suite для веток; триггер pull_request
+.github/workflows/upstream-watch.yml     ← слежка hermes-webui (сервер)
+.github/workflows/upstream-app-watch.yml ← слежка iOS-клиента (наш форк)
+.github/workflows/internal-testflight.yml / external-testflight.yml ← TestFlight (не наш путь, нет доступа)
 ```
+
+**Про ветки:** `pr-ci.yml` срабатывает только на `pull_request`. Пуш ветки без PR
+не запускает **ничего** — сначала PR, потом CI. У `pr-ci.yml` есть
+`cancel-in-progress: true`, у `build-ipa.yml` — нет: каждый push в `main` доводит
+macOS-джобу до конца.
 
 ---
 
@@ -279,36 +333,44 @@ scripts/verify_kanban_reference_server.py
 Не воспроизводи эти ошибки — они уже стоили нам техдолга:
 
 1. **Два инструмента для одной задачи.** Был `bump-version.py` + релизный
-   скрипт; CHANGELOG писал человек → забывалось. Один путь: `scripts/pipeline`.
+   скрипт; CHANGELOG писал человек → забывалось. Один путь:
+   `scripts/pipelines/release_hermesplus.py`.
 2. **Инструмент без упоминания в инструкциях = мёртвый.** `release_hermesplus.py`
    существовал и работал, но 0 упоминаний → агент о нём не знал.
 3. **Правка ядра вместо нового файла.** 3420 строк разлиты по 6 чужим файлам
    → 111 конфликтов при каждом merge.
 4. **Инструкции, ссылающиеся на несуществующее.** `CURRENT.md`,
-   `project-metrics.md` — агент искал и не находил.
+   `project-metrics.md`, затем `scripts/pipeline`, `scripts/bump-version.py`,
+   `STATUS.md` — агент искал и не находил. Лечится не вниманием, а гейтом 7
+   (`scripts/check-doc-references.py`): ссылка на несуществующее роняет push.
 5. **Три источника статуса.** Должен быть один: `docs/project-snapshot.md`.
+6. **Удалил скрипт — не убрал упоминания.** `scripts/pipeline`, `bump-version.py`
+   и `STATUS.md` удалены 2026-09-11, но их продолжали подавать как рабочие пути
+   README-инструкции и докстринг самого гейта. Удаление = отдельная задача с
+   поиском ссылок, а не `rm`.
 
 ---
 
 ## ТЕКУЩАЯ РАБОТА — план в три слоя
 
-Полный план и детали: **`STATUS.md`** (наш файл, upstream его не знает).
+Полный план — `docs/hermesplus-status.yaml` (список треков) + `docs/project-snapshot.md`
+(состояние из git). `STATUS.md` упразднён 2026-09-11 — не искать.
 
 ```
-Слой 1 — инструкции и процесс      [почти готов]
-  ✓ pipeline + precheck (5 гейтов)
+Слой 1 — инструкции и процесс      [готов]
+  ✓ release_hermesplus.py + pipeline-precheck (6 гейтов)
   ✓ sync-upstream (merge, не rebase)
+  ✓ upstream-rehearse.py (разведка конфликтов, 0 CI-минут)
   ✓ project_snapshot (статус из git)
   ✓ HERMES.md (этот файл)
-  → README.md — витрина, /releases/latest
-  → build-ipa.yml — создание Release
 
-Слой 2 — защита                    [НЕ НАЧАТ · обязателен ДО слоя 3]
-  → тесты в CI (92 файла, сейчас 0 прогонов)
-  → check-swift-file-sizes в gate
+Слой 2 — защита                    [готов]
+  ✓ тесты в CI как гейт (92 файла / 1579 тестов; guard → test → build)
+  ✓ xcresult читается и печатает текст ассерта в лог при падении
+  → check-swift-file-sizes в gate — НЕ сделан (лимит 500 LOC, есть файл 1254)
 
 Слой 3 — структура кода            [НЕ НАЧАТ · только после слоя 2]
-  → вынести 3420 строк из ядра в HermesMobile/Plus/
+  → вынести ~3420 строк из ядра в HermesMobile/Plus/
   → маркеры // MARK: - Plus в неизбежных правках ядра
 ```
 

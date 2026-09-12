@@ -8,7 +8,7 @@ WHY THIS EXISTS
     techdebt accumulated.
 
     Hooks in .git/hooks/ are not versioned, so they rot. This script IS
-    versioned and is installed by `scripts/pipeline install`.
+    versioned and is installed by `scripts/pipelines/release_hermesplus.py install`.
 
 WHAT IT CHECKS (fast, local, no Xcode needed)
     1. release-check invariants      VERSION == CHANGELOG == pbxproj; no dup tag
@@ -16,6 +16,8 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
     3. pbxproj registration          every new .swift has its 4 entries
     4. bookkeeping not clobbered     upstream files we must not touch
     5. upstream drift is known       sync-upstream --status must not error
+    6. test-lint                     no assertion encodes a race as a contract
+    7. doc references resolve        no document points at a deleted file
 
     Checks are fail-fast: the first BLOCKER stops the push.
 
@@ -25,7 +27,7 @@ USAGE
     exit 0 = safe to push, exit 1 = BLOCKER
 
 INSTALL (as a pre-push hook)
-    python3 scripts/pipeline install
+    python3 scripts/pipelines/release_hermesplus.py install
 """
 from __future__ import annotations
 
@@ -75,7 +77,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/6] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1/7] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -94,7 +96,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/6] conflict markers in tracked files")
+    print("[2/7] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -119,7 +121,7 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/6] pbxproj registration of new .swift files")
+    print("[3/7] pbxproj registration of new .swift files")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -151,7 +153,7 @@ def check_pbxproj_registration() -> int:
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/6] upstream-owned files not modified")
+    print("[4/7] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -184,7 +186,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/6] upstream drift (advisory)")
+    print("[5/7] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -212,10 +214,39 @@ def check_test_lint() -> int:
     hours later in the same session — a note asks the next person to remember and
     to judge whether it applies; a gate does not.
     """
-    print("[6/6] test-lint (race-shaped assertions)")
+    print("[6/7] test-lint (race-shaped assertions)")
     script = ROOT / "scripts" / "lint-tests.py"
     if not script.exists():
         print("      linter not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    for line in (r.stdout or "").strip().splitlines():
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_doc_references() -> int:
+    """Reject documentation that points at a file this repository does not have.
+
+    Same reasoning as check 6: the rule was written down twice and broken twice.
+    `CURRENT.md`/`project-metrics.md`, then `scripts/pipeline`, `bump-version.py`
+    and `STATUS.md` — deleted while four documents kept naming them as the
+    working path, including this file's own docstring. An agent that follows the
+    document spends context discovering the file is gone.
+
+    Blocking, not advisory: a dangling reference is never a judgment call. The
+    one legitimate case — a document that names a removed file in order to say
+    it is gone — is recognised by the absence wording on the same line, which is
+    how the tools register already writes those entries.
+    """
+    print("[7/7] doc references resolve")
+    script = ROOT / "scripts" / "check-doc-references.py"
+    if not script.exists():
+        print("      checker not found — skipped")
         return 0
     r = subprocess.run(
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
@@ -234,6 +265,7 @@ CHECKS = {
     4: check_upstream_owned,
     5: check_upstream_drift,
     6: check_test_lint,
+    7: check_doc_references,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

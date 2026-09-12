@@ -129,19 +129,25 @@ def critical_tracks() -> str:
     open_items = [it for it in data["items"] if str(it.get("status", "")).lower() == "open"]
     closed_items = [it for it in data["items"] if str(it.get("status", "")).lower() == "closed"]
 
+    # Numbering is positional and must match the item ids in the YAML, so a
+    # closed item (e.g. id 2) leaves a visible gap rather than silently
+    # renumbering open tracks 3..6 into 2..5. A reader comparing the snapshot
+    # against docs/hermesplus-status.yaml has to see the same ids.
     lines = ["## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)", ""]
+    if not open_items:
+        lines.append("_Открытых пунктов нет._")
     for it in sorted(open_items, key=lambda x: x.get("id", 0)):
         lines.append(f"{it.get('id','?')}. {it.get('priority','🟡')} **{it.get('title','')}** — **OPEN**.")
         if it.get("note"):
-            lines.append(f"   {it['note']}")
+            for para in str(it["note"]).splitlines():
+                lines.append(f"   {para}")
     if closed_items:
         lines.append("")
         lines.append("_Закрыто:_ " + ", ".join(
-            f"№{it.get('id','?')} {it.get('title','')}" for it in sorted(closed_items, key=lambda x: x.get('id', 0))
+            f"№{it.get('id','?')} {it.get('title','')}"
+            + (f" — в {it['closed_in']}" if it.get("closed_in") else "")
+            for it in sorted(closed_items, key=lambda x: x.get("id", 0))
         ))
-    if data.get("closed_note"):
-        lines.append("")
-        lines.append(str(data["closed_note"]))
     return "\n".join(lines) + "\n"
 
 

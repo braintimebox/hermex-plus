@@ -5,7 +5,16 @@ on 2026-09-11, **without touching the working repository**. The point is that th
 conflict set is now known in advance: it is fixed and repeatable, so it is resolved
 once, deliberately, rather than discovered while panicking.
 
-Regenerate the rehearsal at any time:
+**Regenerate with the script, not by hand.** `scripts/upstream-rehearse.py` does
+everything below, classifies every block, and never touches the working repo:
+
+```bash
+python3 scripts/upstream-rehearse.py                    # full report
+python3 scripts/upstream-rehearse.py --resolve-pbxproj  # + mechanical union
+python3 scripts/upstream-rehearse.py --clean            # remove the clone
+```
+
+The manual equivalent, if the script itself is the thing being debugged:
 
 ```bash
 rm -rf /tmp/upstream-rehearsal
@@ -23,10 +32,35 @@ git merge --no-commit --no-ff upstream/master
 
 | | |
 |---|---|
-| Commits to absorb | **107** |
+| Commits to absorb | **104** (upstream drift from the merge-base, not from the stale mirror) |
 | Upstream files added | **298** (mostly `Features/Bots/*`) |
 | Conflicting files | **34** |
-| Conflict blocks | **141** |
+| Conflict blocks | **141** — of which **18 require no judgement at all** |
+
+**Measure the drift from `git merge-base main upstream/master`, never from
+`origin/master`.** `origin/master` is a read-only snapshot of upstream and it can
+lag arbitrarily; here it lagged 104 commits behind while still being a valid
+ancestor. `sync-upstream --status` now prints both numbers separately
+(`upstream drift` vs `mirror lag`) for exactly this reason.
+
+### 18 of the 141 blocks are auto-resolved
+
+The rehearsal separates *"one side is empty"* (pure insertion) from *"both sides
+edited the same region"*. An insertion-only block has no decision in it: keep the
+non-empty side. Per-file counts from the live run:
+
+```
+ChatView.swift                     26 blocks   4 insertion-only
+ChatTranscriptSupportingViews.swift 21 blocks   2 insertion-only
+ChatViewModel.swift                 17 blocks   5 insertion-only
+ChatTranscriptView.swift            16 blocks   2 insertion-only
+MarkdownRenderer.swift               5 blocks   2 insertion-only
+SessionListView.swift                5 blocks   1 insertion-only
+Skills.swift, .gitignore             1 block each
+```
+
+So the real decision load is **123 blocks, not 141**. Work the auto ones first:
+they shrink the file before you have to reason about it.
 
 Merge, not rebase. Rebasing replays ~413 of our commits onto upstream and dies in
 `CHANGELOG.md` bookkeeping (158 of our edits vs 3 of theirs); merge yields one fixed
@@ -51,9 +85,12 @@ conflict set instead of hundreds.
 
 Two files carry no blocks but still need a decision:
 
-- `docs/agents/domain.md` — **deleted upstream, modified by us** (`UD`). Upstream dropped
-  the directory; we added the testing.md pointer to it. Decide: keep the file, or move the
-  pointer into a file upstream still owns.
+- УДАЛЁН: `docs/agents/domain.md` — **deleted by upstream, and we accept the deletion.**
+  Upstream removed it but kept the `docs/agents/` directory and added `bots.md`, `i18n.md`,
+  `kanban.md` there (verified: `git ls-tree upstream/master docs/agents/`). Our only edit
+  was a pointer to `testing.md`, and that pointer now lives in `HERMES.md` — our own file,
+  which upstream never touches. Taking upstream's deletion costs nothing and removes a
+  permanent `UD` conflict. Do not resurrect it.
 - `HermesMobile/Features/Chat/ClarificationRequestOverlay.swift` — **added by us, deleted
   upstream** (upstream restructured overlays). Keep ours unless our feature moved.
 
@@ -110,13 +147,17 @@ block, decide whether our change and upstream's are about the same behaviour:
   top if it is still missing.
 - Different behaviour → keep both, in upstream's structure.
 
-**`project.pbxproj` — mechanically resolvable, and verified so.** There is no XcodeGen or
-other project generator in this repo: the pbxproj is committed and edited directly.
+**`project.pbxproj` — mechanically resolvable, and verified so.** This is not a
+judgement call and should not be treated as one. There is no XcodeGen or other project
+generator in this repo: the pbxproj is committed and edited directly, so both sides
+append entries to the same lists.
 
-The rehearsal establishes that the union is safe here: the 24-hex object ids on our side
-(16) and upstream's (56) **do not intersect at all** — 0 shared. Both sides are adding
+The rehearsal **proves** the union is safe: the 24-hex object ids on our side (16) and
+upstream's (56) **do not intersect at all** — 0 shared out of 72. Both sides are adding
 independent `PBXBuildFile` / `PBXFileReference` / group / build-phase entries, so keeping
-both is well-defined rather than a guess.
+both is well-defined by construction. The checker is `pbxproj_ids_are_disjoint()` in
+`scripts/upstream-rehearse.py`; the numbers above are its output on the live run, not an
+estimate.
 
 ```bash
 python3 scripts/upstream-rehearse.py --resolve-pbxproj
@@ -151,8 +192,11 @@ that compiles only by accident.
    Already fixed in our tree. Confirm it survives the merge, since that file conflicts.
 2. **`SessionTimeouts`** in `APIClient.swift` and the guard in `CacheStore.cacheMessages`
    are recent fixes. Upstream may have touched the same regions.
-3. **`docs/agents/domain.md`** — our only edit is a pointer to `testing.md`. Cheapest
-   resolution if upstream deleted the file: drop the file, move the pointer.
+3. **УДАЛЁН: `docs/agents/domain.md`** — deleted by upstream, accepted by us.
+   Its only unique content was a pointer to `testing.md`, and that pointer now lives in
+   `HERMES.md` (our file — upstream never conflicts with it). Upstream kept the
+   `docs/agents/` directory and added `bots.md`, `i18n.md`, `kanban.md`, so nothing in the
+   directory is lost by accepting the deletion of this one file.
 4. **CI is the only compiler.** There is no Swift toolchain on Linux. Resolve everything,
    then let CI tell you what does not typecheck — budget several runs.
 
@@ -160,11 +204,22 @@ that compiles only by accident.
 
 ## Cost
 
-Each push runs `guard → test → build` on a macOS runner: ~9 min wall-clock, **≈90 billed
-minutes**. Resolving 141 blocks will need several runs. The GitHub Actions quota is the
-binding constraint, not the work.
+**The Actions quota is NOT a constraint on this repository.** `braintimebox/hermex-plus`
+is **public** (verified: `gh repo view` → `visibility: PUBLIC`), and GitHub does not bill
+Actions minutes for standard runners on public repositories — macOS included. The earlier
+"≈90 billed minutes per push, quota is the binding constraint" line was carried over from
+`telegram-plus`, which is private and where the 10× macOS multiplier really did exhaust
+2000 free minutes. Do not plan the sync around a budget that does not apply here.
 
-**Batch the work on a branch and push sparingly.** Do not resolve one file per push.
+What each push **does** cost is wall-clock: `guard → test → build` is roughly 9–11 minutes
+on a macOS runner, and `build-ipa.yml` has no `concurrency` block, so every push to `main`
+runs the full job to completion. `pr-ci.yml` has `cancel-in-progress: true`.
+
+**Batch the work on a branch anyway** — not for minutes, but because a half-resolved
+conflict must not land on `main`, and because `build-ipa.yml` publishes a Release on every
+push to `main` (verified: `Create Release` step is `if: github.event_name == 'push'`).
+Merging the sync through a branch makes the sequence restartable and keeps the release
+channel clean. Expect several CI iterations to find the type errors Linux cannot see.
 
 ---
 

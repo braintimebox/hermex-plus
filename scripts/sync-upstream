@@ -69,12 +69,34 @@ def git_rc(repo: Path, *args: str) -> int:
 # --- invariant 1: mirror must be pure ---------------------------------------
 
 def check_mirror_purity(repo: Path) -> tuple[bool, str]:
-    """origin/master must contain zero commits that upstream lacks."""
-    ahead = git(repo, "rev-list", "--count", f"{UPSTREAM_REF}..{MIRROR_REF}")
-    if int(ahead) != 0:
+    """The mirror must be a pure ANCESTOR of upstream — stale is fine, dirty is not.
+
+    Two different failure modes get confused here, so they are reported apart:
+
+      - `origin/master` ahead of upstream  → CONTAMINATED (has our commits).
+        This is the real invariant violation: measurement built on it is wrong.
+      - `origin/master` behind upstream    → STALE. Not a violation. A mirror
+        that lags is still a valid ancestor and still a valid base for
+        `merge-base`; it just needs a refresh before it can be used as "how far
+        behind are we".
+
+    The old message printed `{MIRROR_REF} == {UPSTREAM_REF}` whenever `ahead == 0`,
+    which was false every time the mirror was behind — it read as "we are
+    perfectly in sync with upstream" while the next line said "upstream ahead:
+    104 commits". Both numbers were right; the label was lying about what was
+    measured. Report the direction and the lag instead.
+    """
+    ahead = int(git(repo, "rev-list", "--count", f"{UPSTREAM_REF}..{MIRROR_REF}"))
+    behind = int(git(repo, "rev-list", "--count", f"{MIRROR_REF}..{UPSTREAM_REF}"))
+    if ahead != 0:
         return False, (
             f"invariant 1 VIOLATED: {MIRROR_REF} is {ahead} commits ahead of {UPSTREAM_REF}.\n"
             f"  The mirror must stay pure. Move those commits to main and re-mirror."
+        )
+    if behind != 0:
+        return True, (
+            f"ok  mirror pure ({MIRROR_REF} is a pure ancestor of {UPSTREAM_REF}, "
+            f"{behind} commits behind)"
         )
     return True, f"ok  mirror pure ({MIRROR_REF} == {UPSTREAM_REF})"
 
@@ -108,10 +130,34 @@ def cmd_status(repo: Path) -> int:
         return 1
 
     base = latest_base_tag(repo)
-    print(f"base tag:        {base or '(none — never recorded a base)'}")
+    if base:
+        base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
+        print(f"base tag:        {base} -> {base_sha[:7]}")
+    else:
+        print("base tag:        (none — never recorded a base)")
 
-    behind = git(repo, "rev-list", "--count", f"{MIRROR_REF}..{UPSTREAM_REF}", check=False)
-    print(f"upstream ahead:  {behind} commits")
+    # Measure from the MERGE-BASE, not from the mirror.
+    #
+    # The mirror is a snapshot of upstream, so `origin/master..upstream/master`
+    # answers "how stale is my mirror", not "how much is missing from main".
+    # Those two numbers differ by however many upstream commits we already
+    # absorbed but never mixed into the mirror — exactly the case this repo was
+    # in: the mirror's tip WAS the merge-base, so the mirror-based count
+    # over-reported the drift by four commits and kept doing so as long as
+    # nobody refreshed the mirror.
+    #
+    # `git merge-base main upstream/master` is the true fork point: every commit
+    # after it is genuinely absent from our line. That is the number a sync plan
+    # depends on, so that is the number printed as drift.
+    merge_base = git(repo, "merge-base", "main", UPSTREAM_REF, check=False)
+    if merge_base:
+        mb_subject = git(repo, "log", "--oneline", "-1", merge_base, check=False)
+        drift = git(repo, "rev-list", "--count", f"{merge_base}..{UPSTREAM_REF}", check=False)
+        print(f"merge-base:      {merge_base[:7]} {mb_subject.split(' ', 1)[-1][:52]}")
+        print(f"upstream drift:  {drift} commits (absent from main — this is the sync size)")
+    mirror_lag = git(repo, "rev-list", "--count", f"{MIRROR_REF}..{UPSTREAM_REF}", check=False)
+    print(f"mirror lag:      {mirror_lag} commits (staleness of {MIRROR_REF}; refresh with "
+          f"git push origin {UPSTREAM_REF}:master)")
 
     if base:
         base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
@@ -119,14 +165,13 @@ def cmd_status(repo: Path) -> int:
         print(f"behind base:     {behind_base} commits since {base}")
 
     # how much of our line is our own work
-    own = git(repo, "rev-list", "--count", f"{MIRROR_REF}..main", check=False)
+    own = git(repo, "rev-list", "--count", f"{merge_base}..main", check=False) if merge_base else "?"
     print(f"our patches:     {own} commits on top of upstream")
 
-    # conflict zone size (files both sides touched since the base)
-    if base:
-        base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
-        ours = set(changed_files(repo, base_sha, "main"))
-        theirs = set(changed_files(repo, base_sha, UPSTREAM_REF))
+    # conflict zone size (files both sides touched since the merge-base)
+    if merge_base:
+        ours = set(changed_files(repo, merge_base, "main"))
+        theirs = set(changed_files(repo, merge_base, UPSTREAM_REF))
         shared = sorted(f for f in ours & theirs if f.endswith(".swift"))
         print(f"conflict zone:   {len(shared)} .swift files (both sides edited)")
     print("=" * 68)

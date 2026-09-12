@@ -128,13 +128,14 @@ def update_status(version: str, close_ids: list[int], note: str) -> None:
             it["status"] = "closed"
             it["closed_in"] = version
             it["note"] = f"Закрыто в {version}: {note}"
-    extra = [
-        f"№{it['id']} {it['title']} ({it.get('closed_in','')})"
-        for it in items
-        if it.get("status") == "closed"
-    ]
     data["version"] = version
-    data["closed_note"] = "Закрыто недавно: " + ", ".join(extra)
+    # No `closed_note` is written here. It used to be, and it duplicated the
+    # snapshot's own closed line with an empty parenthetical:
+    #   _Закрыто:_ №2 STACK-CAPTURE · №7 «Верх-вниз при думании»
+    #   Закрыто недавно: №2 STACK-CAPTURE (), №7 «Верх-вниз при думании» ()
+    # Every closed item carries `closed_in`, so the note was pure duplication in
+    # a second shape. The snapshot renders one closed line from the items.
+    data.pop("closed_note", None)
     STATUS.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
                       encoding="utf-8")
 

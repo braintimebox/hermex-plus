@@ -149,6 +149,11 @@ def main() -> int:
     ap.add_argument("--dir", default=str(DEFAULT_DIR), help="rehearsal clone location")
     ap.add_argument("--clean", action="store_true", help="remove the rehearsal clone")
     ap.add_argument(
+        "--keep",
+        action="store_true",
+        help="leave the rehearsal clone on disk (default: it is removed at the end)",
+    )
+    ap.add_argument(
         "--resolve-pbxproj",
         action="store_true",
         help="apply the union resolution to project.pbxproj in the rehearsal clone",
@@ -286,7 +291,6 @@ def main() -> int:
     print(f"""
   Rehearsal:  {target}   (working repo untouched)
   Plan:       docs/agents/upstream-sync-plan.md
-  Clean up:   python3 scripts/upstream-rehearse.py --clean
 
   Resolve on a branch, not on main, and open a PR — pr-ci.yml triggers on
   pull_request, so a pushed branch alone runs no CI.
@@ -295,8 +299,30 @@ def main() -> int:
         print("  WARNING — these files did not survive, do not commit the merge as-is:")
         for path in missing:
             print(f"    {path}")
-        return 2
-    return 0
+
+    # The clone is a full copy of the repository (~250 MB with history). Nothing
+    # outside this script ever reads it, and each run replaces it wholesale — so
+    # leaving it behind has no value and a real cost: run the rehearsal a few
+    # times while resolving 141 blocks and the copies accumulate in /tmp until
+    # the disk fills, which surfaces as "the script broke" rather than "you ran
+    # out of space".
+    #
+    # It is removed by default. --keep exists for the case where the clone is
+    # about to be inspected (resolving pbxproj by hand, diffing a file), and it
+    # says so on stdout so the leftover is never a surprise.
+    if args.keep:
+        print(f"  Kept:  {target} — remove it with: {Path(__file__).name} --clean")
+    else:
+        removed = False
+        try:
+            shutil.rmtree(target)
+            removed = True
+        except OSError as exc:
+            print(f"  Could not remove {target} ({exc.__class__.__name__}) — remove by hand.")
+        if removed:
+            print(f"  Removed the rehearsal clone ({target}). Use --keep to inspect it.")
+
+    return 2 if missing else 0
 
 
 if __name__ == "__main__":
