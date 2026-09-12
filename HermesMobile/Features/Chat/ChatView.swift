@@ -624,14 +624,6 @@ struct ChatView: View {
             onSelectProfile: { profile in
                 handleProfileSelection(profile)
             },
-            onSelectReasoningEffort: { effort in
-                Task {
-                    let didSelect = await viewModel.selectReasoningEffort(effort)
-                    if didSelect {
-                        let _: Void = ChatHaptics.configurationSelected(isEnabled: isHapticsEnabled)
-                    }
-                }
-            },
             onHeightChange: { height in
                 // Clamp: banner + field + action bar + voice bar fit well under
                 // 260pt. A runaway height (the focus feedback loop) must never
@@ -1726,7 +1718,6 @@ struct ChatView: View {
                 return didAdd
             },
             onUpdateScrollMetrics: updateScrollMetrics,
-            onDismissKeyboard: handleTranscriptTap,
             onFollowEvent: handleFollowEvent,
             onDisclosureToggle: handleDisclosureToggle,
             turnFolds: turnFolds(reasoningGroups: reasoningGroups),

@@ -288,7 +288,7 @@ def check_swift_structural_balance() -> int:
 
     Blocking, not advisory: a dropped brace is never a judgment call.
     """
-    print("[8/10] swift structural balance vs both parents")
+    print("[8/11] swift structural balance vs both parents")
     script = ROOT / "scripts" / "check-swift-structural-balance.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -322,7 +322,7 @@ def check_duplicate_declarations() -> int:
     matters: an earlier version grouped by indentation alone and produced 2505
     false hits, which is a gate someone switches off.
     """
-    print("[9/10] duplicate declarations in the same type scope")
+    print("[9/11] duplicate declarations in the same type scope")
     script = ROOT / "scripts" / "check-duplicate-declarations.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -352,7 +352,7 @@ def check_initializer_completeness() -> int:
     property and its decoder, while `init(sessionId:title:)` (which upstream
     does not have) still listed 32 of 34 fields. One line, one full CI round.
     """
-    print("[10/10] initializer completeness (all stored properties set)")
+    print("[10/11] initializer completeness (all stored properties set)")
     script = ROOT / "scripts" / "check-initializer-completeness.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -361,7 +361,38 @@ def check_initializer_completeness() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[10/10]")]
+            if not ln.startswith("[10/11]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_duplicate_call_arguments() -> int:
+    """Gate 11 — one argument label passed twice into the same call.
+
+    The union keeps both sides of an edited call site, which parses and then
+    fails in the type checker at the OUTERMOST expression:
+
+        error: the compiler is unable to type-check this expression in
+               reasonable time; try breaking up the expression
+
+    reported at the enclosing view, hundreds of lines from the duplicate.
+    `SettingsView`'s second `title:`, `ChatView`'s second
+    `onSelectReasoningEffort:` and second `onDismissKeyboard:` all came in
+    that way in the 1.6.0 merge.
+    """
+    print("[11/11] duplicate call arguments (same label twice in one call)")
+    script = ROOT / "scripts" / "check-duplicate-call-arguments.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[11/11]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -380,6 +411,7 @@ CHECKS = {
     8: check_swift_structural_balance,
     9: check_duplicate_declarations,
     10: check_initializer_completeness,
+    11: check_duplicate_call_arguments,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not
