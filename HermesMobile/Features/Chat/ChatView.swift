@@ -1658,6 +1658,7 @@ struct ChatView: View {
             liveTokensPerSecond: viewModel.liveTokensPerSecond,
             activeStreamRecoveryState: viewModel.activeStreamRecoveryState,
             clarificationPromptID: viewModel.clarificationPrompt?.id,
+            cacheFirstReconcileScrollToken: viewModel.cacheFirstReconcileScrollToken,
             hidesRunStatusAccessibility: activeRunStatusPresentation != nil,
             showsThinkingAndToolCards: showsThinkingAndToolCards,
             showsAssistantTypingIndicator: showsAssistantTypingIndicator,

@@ -68,6 +68,9 @@ struct ChatTranscriptView: View {
     /// The pending clarification's id. The card itself is pinned above the
     /// composer by `ChatView`; the transcript only follows its arrival.
     let clarificationPromptID: String?
+    /// Bumped when the cache-first reconcile replaces the lighter cached render
+    /// (#289), so the transcript can snap to the bottom without animation.
+    let cacheFirstReconcileScrollToken: Int
     let hidesRunStatusAccessibility: Bool
     let showsThinkingAndToolCards: Bool
     let showsAssistantTypingIndicator: Bool
@@ -275,8 +278,8 @@ struct ChatTranscriptView: View {
                     guard scrollOwner == .app else { return }
                     onScrollToLatestContent(proxy, false, "cacheReconcile")
                 }
-                .onChange(of: clarificationPrompt?.id) {
-                    guard clarificationPrompt != nil, scrollOwner == .app else { return }
+                .onChange(of: clarificationPromptID) {
+                    guard clarificationPromptID != nil, scrollOwner == .app else { return }
                     onScrollToBottom(proxy)
                         releasingHold { onScrollToLatestContent(proxy, true) }
                     }
@@ -665,7 +668,7 @@ struct ChatTranscriptView: View {
 
     @ViewBuilder
     private var inlineClarificationCard: some View {
-        if let clarificationPrompt {
+        if let clarificationPromptID {
             ClarificationRequestCard(
                 prompt: clarificationPrompt,
                 isResponding: isRespondingToClarification,
@@ -1028,6 +1031,7 @@ private struct ChatTranscriptMessageRow: View {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onSelectText: ((MessageActionContext) -> Void)?
     let onReply: (MessageActionContext) -> Void
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
@@ -1053,11 +1057,11 @@ private struct ChatTranscriptMessageRow: View {
                         isEditingMessage: isEditingMessage,
                         isForkingMessage: isForkingMessage,
                         onToggleListening: onToggleListening,
-                        onSelectText: onSelectText,
                         onRegenerate: onRegenerate,
                         onEdit: onEdit,
                         onFork: onFork,
                         onCopy: onCopy,
+                        onSelectText: onSelectText,
                         onReply: onReply,
                         onForward: onForward,
                         onSave: onSave,
@@ -1128,11 +1132,11 @@ private struct ChatTranscriptMessageRow: View {
             isEditingMessage: isEditingMessage,
             isForkingMessage: isForkingMessage,
             onToggleListening: onToggleListening,
-            onSelectText: onSelectText,
             onRegenerate: onRegenerate,
             onEdit: onEdit,
             onFork: onFork,
             onCopy: onCopy,
+            onSelectText: onSelectText,
             onReply: onReply,
             onForward: onForward,
             onSave: onSave,
