@@ -124,8 +124,6 @@ struct SessionListView: View {
 
     var body: some View {
         navigationContainer
-            .onChange(of: pendingDeepLinkedSessionID) { if pendingDeepLinkedSessionID != nil { showsBots = false } }
-            .onChange(of: requestedNewChat) { if requestedNewChat != nil { showsBots = false } }
             .onChange(of: pendingSharedImport?.reservationID) { if pendingSharedImport != nil { showsBots = false } }
             .onChange(of: isBotModeEnabled) { if !isBotModeEnabled { showsBots = false } }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -394,9 +392,13 @@ struct SessionListView: View {
                 openPendingSharedImportIfNeeded()
             }
             .onChange(of: pendingDeepLinkedSessionID) {
+                // A deep link or a new-chat request is a navigation intent:
+                // close the bots sheet first, then open the session.
+                if pendingDeepLinkedSessionID != nil { showsBots = false }
                 Task { await openPendingDeepLinkedSessionIfNeeded() }
             }
             .onChange(of: requestedNewChat) {
+                if requestedNewChat != nil { showsBots = false }
                 openRequestedNewChatIfNeeded()
             }
             .onChange(of: showsProjectsSection) {

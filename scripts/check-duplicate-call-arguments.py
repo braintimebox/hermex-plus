@@ -307,6 +307,61 @@ def scan_adjacent_strings(path: Path) -> list[str]:
     return problems
 
 
+# --- third shape: the same modifier applied twice in one chain ---------------
+#
+# A union of two branches that both added a modifier to the same view produces
+#
+#     .onChange(of: streamingScrollTrigger) { ... }   // ours
+#     .onChange(of: streamingScrollTrigger) { ... }   // theirs
+#
+# in one modifier chain. It parses, and then the compiler gives up:
+#
+#     error: the compiler is unable to type-check this expression in
+#            reasonable time
+#
+# reported at an unrelated line inside the chain, with a cascade after it —
+# `ForEach` over a plain array appears to need a Binding, `Binding<Subject>`
+# turns up where a String is expected. `transcriptScrollView` cost a CI round
+# that way: 154 lines against upstream's 98.
+MODIFIER_RE = re.compile(r"^\s*\.(onChange|onReceive|onAppear|onDisappear|task|"
+                         r"onSubmit|onDrop|onPaste|onScrollGeometryChange)\s*\(\s*(.+?)\)\s*\{")
+
+
+def scan_duplicate_modifiers(path: Path) -> list[str]:
+    lines = strip_noise(path.read_text(encoding="utf-8", errors="replace")).splitlines()
+    seen: dict[tuple[int, str], int] = {}
+    problems: list[str] = []
+    depth = 0
+    prev_depth = 0
+    for idx, line in enumerate(lines, start=1):
+        if depth < prev_depth:
+            # a scope closed: every chain at that depth or deeper has ended, so
+            # two same-named modifiers at the same depth in *different* chains
+            # (a second `var body`, a sibling builder) must not be paired up.
+            # Keep chains at the current depth: a closure body closing back to
+            # the chain's own depth is still the same chain. Only a drop BELOW a
+            # chain's depth means it ended (a sibling `var body`, another view).
+            seen = {k: v for k, v in seen.items() if k[0] <= depth}
+        prev_depth = depth
+        m = MODIFIER_RE.match(line)
+        if m:
+            # key by the enclosing brace depth so two chains on different views
+            # (different depths, or separated by a closer) do not collide
+            normalised = re.sub(r"\s+", "", m.group(2))
+            key = (depth, f".{m.group(1)}({normalised})")
+            if key in seen:
+                problems.append(
+                    f"{path.name}:{idx} {m.group(1)}({m.group(2).strip()}) applied twice "
+                    f"in one chain (first at :{seen[key]})"
+                )
+            else:
+                seen[key] = idx
+        depth += line.count("{") - line.count("}")
+        if depth < 0:
+            depth = 0
+    return problems
+
+
 def changed_swift() -> list[str]:
     try:
         base = subprocess.run(
@@ -344,6 +399,7 @@ def main() -> int:
         if p.exists() and p.suffix == ".swift":
             total.extend(scan(p))
             total.extend(scan_adjacent_strings(p))
+            total.extend(scan_duplicate_modifiers(p))
 
     print("[11/11] duplicate call arguments (same label twice in one call)")
     if total:
