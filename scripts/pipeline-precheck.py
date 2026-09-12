@@ -131,32 +131,51 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/9] pbxproj registration of new .swift files")
+    """Gate 3 — every Swift file is registered, and no pbxproj id is reused.
+
+    Two failures this now catches, both of which produced a green earlier today:
+
+      * a file that exists in the tree with no entry in the project at all — the
+        1.6.0 merge dropped the four lines registering our
+        `ClarificationRequestOverlay.swift`, so it silently stopped compiling and
+        `ClarificationRequestCard` was reported "cannot find in scope"
+      * one 24-hex id used for two different files. The merge left upstream's
+        `ClarificationRequestCard.swift` holding the id our overlay file also
+        used; Xcode resolves an id to one path, so the other disappears. A
+        `grep -c` said "4 refs, registered" for both — which is why counting
+        references is not the check.
+    """
+    print("[3/12] pbxproj: every .swift registered, every id unique")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
     text = pbx.read_text(errors="ignore")
 
-    new_files = [
-        f for f in git("diff", "--cached", "--name-only", "--diff-filter=A",
-                       "--", "HermesMobile/**/*.swift").splitlines() if f.strip()
-    ]
-    if not new_files:
-        print("      no new .swift files staged — nothing to register")
-        return 0
+    problems: list[str] = []
 
-    missing = []
-    for f in new_files:
-        name = Path(f).name
-        # 4 registrations: PBXBuildFile, PBXFileReference, group children, build phase
-        if text.count(name) < 2:
-            missing.append(f"{name}: found {text.count(name)} refs, expected >=2")
-    if missing:
-        return blockers([
-            "new .swift not registered in pbxproj (needs PBXBuildFile + "
-            "PBXFileReference + group + build phase):"
-        ] + [f"  {m}" for m in missing])
-    print(f"      {len(new_files)} new file(s) registered")
+    # (a) every Swift file in the tree appears in the project
+    tracked = git("ls-tree", "-r", "--name-only", "HEAD", "--", "HermesMobile/")
+    for f in tracked.splitlines():
+        if not f.strip().endswith(".swift"):
+            continue
+        if Path(f).name not in text:
+            problems.append(f"{f} is in the tree but not in project.pbxproj")
+
+    # (b) no id defined twice
+    seen: dict[str, str] = {}
+    for line in text.splitlines():
+        m = re.match(r"^\s*([0-9A-F]{24})\s+/\*\s*(.+?)\s*\*/\s*=\s*\{", line)
+        if not m:
+            continue
+        ident, label = m.group(1), m.group(2)
+        if ident in seen:
+            problems.append(f"id {ident} used twice: '{seen[ident]}' and '{label}'")
+        else:
+            seen[ident] = label
+
+    if problems:
+        return blockers(["project.pbxproj is inconsistent:"] + [f"  {p}" for p in problems[:15]])
+    print(f"      {len(seen)} ids, all unique; every tracked .swift registered")
     return 0
 
 
