@@ -3494,7 +3494,8 @@ struct ChatView: View {
         let wasNearBottomBeforeReport = isScrolledNearBottom
         // Ownership uses the unified threshold: the reader owns the viewport
         // unless they are within 80pt of the bottom.
-        let isAtVeryBottom = metrics.distanceFromBottom <= ChatScrollPolicy.bottomThreshold
+        let isAtVeryBottom = metrics.distanceFromBottom
+            <= ChatScrollPolicy.bottomThreshold(isStreaming: isStreaming)
         // Only assign when the value actually flips — reassigning an identical
         // Bool still fans a @State write through the whole ChatView body, which
         // is exactly the per-tick re-render churn this method exists to avoid.
@@ -4455,5 +4456,22 @@ fileprivate struct ChatSearchSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct ChatDraftSyncModifier: ViewModifier {
+    let pendingAttachments: [PendingAttachment]
+    let composerSettings: ChatDraftSettings
+    let onAttachmentsChange: () -> Void
+    let onSettingsChange: (ChatDraftSettings) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: pendingAttachments) { _, _ in
+                onAttachmentsChange()
+            }
+            .onChange(of: composerSettings) { _, newSettings in
+                onSettingsChange(newSettings)
+            }
     }
 }

@@ -633,7 +633,7 @@ struct SessionListView: View {
             }
 
             if viewModel.isViewingCachedData {
-                OfflineCacheBanner()
+                OfflineCacheBanner(isViewingCachedData: viewModel.isViewingCachedData)
                     .padding(.top, 16)
                     .sessionsScreenListRow()
             }
