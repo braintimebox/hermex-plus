@@ -245,17 +245,21 @@ jobs:
         # artifact of a version that was ALREADY handed to the user. Measured on
         # v3.6.1: release published 22:06:12Z, its .ipa asset re-created at
         # 22:17:10Z by a later run of an unrelated commit. Four consecutive runs
-        # did this.
+        # did this, because `VERSION` stays at 3.6.1 until someone bumps it, so
+        # every later commit still claims to be 3.6.1.
         #
         # The failure is silent and the version number lies afterwards: a tester
         # installing "3.6.1" cannot know which build they have. That is exactly
         # the "1.5.5 twice" defect the version invariant exists to prevent — the
         # workflow was reproducing it structurally, not through anyone's mistake.
         #
-        # Publishing is skipped when the tag already has a Release WITH an
-        # artifact. The tag alone is not enough: a tag exists from the moment the
-        # release step first runs, and the point is to distinguish "number never
-        # delivered" from "number delivered, do not touch".
+        # A tag is NOT evidence of delivery: it exists from the first release run
+        # onward. The question is whether an artifact was published for it, since
+        # the artifact is what a person installs.
+        #
+        # Order matters here: the guard is evaluated before any write, and it names
+        # the commit it is judging so a skipped publish is never mistaken for a
+        # failed one in the log.
         id: delivered
         if: github.event_name == 'push'
         env:
@@ -263,16 +267,44 @@ jobs:
         run: |
           set -euo pipefail
           VER="${{ steps.version.outputs.VER }}"
+          echo "judging version ${VER} at commit ${GITHUB_SHA:0:8}"
           if gh release view "v${VER}" --repo "${{ github.repository }}" \
                --json assets --jq 'select(.assets | length > 0) | "has-asset"' 2>/dev/null \
                | grep -q has-asset; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Version ${VER} is already RELEASED with an artifact — not re-publishing."
+            echo "::notice title=Release skipped::Version ${VER} is already released with an artifact — not re-publishing."
             echo "This run's IPA stays available as a workflow artifact for inspection."
             echo "If the app content changed, bump VERSION (one release = one version)."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "Version ${VER} is not delivered yet — the Release will be published."
+          fi
+
+      - name: Tag this commit if it is the first to carry this version
+        # The tag is what ties a version NUMBER to the exact CONTENTS that were
+        # delivered. Creating it here — on the commit whose VERSION is being
+        # published, after CI passed — means the tag can never point at a later
+        # commit that merely still says the same number.
+        #
+        # This closes the ordering hole that produced the v3.6.1 overwrite: the
+        # release action created the tag implicitly, so the tag's commit depended
+        # on which run happened to publish first rather than on which commit the
+        # version was finalised in.
+        id: tagging
+        if: github.event_name == 'push' && steps.delivered.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.VER }}"
+          if git ls-remote --exit-code --tags origin "v${VER}" >/dev/null 2>&1; then
+            echo "tag v${VER} already exists on origin — leaving it alone."
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "v${VER}" -m "Hermex Plus ${VER}" "${GITHUB_SHA}"
+            git push origin "v${VER}"
+            echo "tagged ${GITHUB_SHA:0:8} as v${VER} — the commit this version was built from."
           fi
 
       - name: Create Release
