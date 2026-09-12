@@ -728,45 +728,6 @@ final class ChatViewModel {
     var isRespondingToClarification: Bool { actions.isRespondingToClarification }
     var clarificationErrorMessage: String? { actions.clarificationErrorMessage }
 
-    // MARK: - Stream delegates
-
-    var streamingAssistantMessageID: String? {
-        get { stream.streamingAssistantMessageID }
-        set { stream.streamingAssistantMessageID = newValue }
-    }
-    var toolCallAnchorMessageID: String? {
-        get { stream.toolCallAnchorMessageID }
-        set { stream.toolCallAnchorMessageID = newValue }
-    }
-    var reasoningAnchorMessageID: String? {
-        get { stream.reasoningAnchorMessageID }
-        set { stream.reasoningAnchorMessageID = newValue }
-    }
-    var liveToolCalls: [ToolCall] {
-        get { stream.liveToolCalls }
-        set { stream.liveToolCalls = newValue }
-    }
-    var liveReasoningText: String {
-        get { stream.liveReasoningText }
-        set { stream.liveReasoningText = newValue }
-    }
-    var streamingScrollTrigger: Int {
-        get { stream.streamingScrollTrigger }
-        set { stream.streamingScrollTrigger = newValue }
-    }
-    var cacheFirstReconcileScrollToken: Int {
-        get { stream.cacheFirstReconcileScrollToken }
-        set { stream.cacheFirstReconcileScrollToken = newValue }
-    }
-    var responseCompletionHapticTrigger: Int {
-        get { stream.responseCompletionHapticTrigger }
-        set { stream.responseCompletionHapticTrigger = newValue }
-    }
-    var responseCompletionNeedsTranscriptRefresh: Bool {
-        get { stream.responseCompletionNeedsTranscriptRefresh }
-        set { stream.responseCompletionNeedsTranscriptRefresh = newValue }
-    }
-
     private let listenAudioSession: any ListenAudioSessionControlling
     private let listenRemoteControlCenter: any ListenRemoteControlControlling
     private let userDefaults: UserDefaults

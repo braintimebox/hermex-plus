@@ -236,6 +236,55 @@ def find_duplicates(path: Path) -> list[str]:
     return report
 
 
+def cross_scope_duplicates(path: Path) -> list[str]:
+    """Same property name on a type AND on a type it OWNS.
+
+    That is the exact shape that compiles to `ambiguous use of 'x'`: when
+    `ChatViewModel` holds `let composer = ChatComposerState()` and both declare
+    `modelCatalogGroups`, an unqualified reference inside the view model has two
+    candidates and Swift refuses to pick.
+
+    Two independent types sharing a name (`id` on six unrelated structs) is
+    perfectly legal and must not be reported — an earlier version of this check
+    flagged 53 of those and would have been switched off.
+    """
+    clean = strip_noise(path.read_text(encoding="utf-8", errors="replace"))
+    lines = clean.splitlines()
+    info = enclosing_types(lines)
+
+    props: dict[tuple[str, str], int] = {}
+    for lineno, line in enumerate(lines, start=1):
+        m = MEMBER_RE.match(line)
+        if not m:
+            continue
+        indent, kind, name = m.group(1), m.group(2), m.group(3).strip("`")
+        scope, in_body = info.get(lineno, ("<file>", False))
+        if in_body or kind == "func":
+            continue
+        props[(scope, name)] = lineno
+
+    # which types does each scope own?  `let composer = ChatComposerState()`
+    OWNED_RE = re.compile(r"\blet\s+\w+\s*=\s*([A-Z]\w*)\s*\(")
+    owns: dict[str, set[str]] = {}
+    for line in lines:
+        m_own = OWNED_RE.search(line)
+        if m_own:
+            owner = info.get(lines.index(line) + 1, ("<file>", False))[0]
+            owns.setdefault(owner, set()).add(m_own.group(1))
+
+    report: list[str] = []
+    for (scope, name), lineno in sorted(props.items(), key=lambda kv: kv[1]):
+        for owned in owns.get(scope, ()):
+            other = props.get((owned, name))
+            if other and other != lineno:
+                report.append(
+                    f"{path.name}:{lineno} '{name}' on {scope} AND "
+                    f":{other} on {owned} (owned by {scope}) — "
+                    f"unqualified use is ambiguous"
+                )
+    return report
+
+
 def changed_swift() -> list[str]:
     files: set[str] = set()
     for args in (["--name-only", "HEAD"], ["--name-only", "--cached"]):
@@ -260,10 +309,28 @@ def main() -> int:
         return 0
 
     total: list[str] = []
+    cross: list[str] = []
     for rel in files:
         p = ROOT / rel
-        if p.exists():
-            total.extend(find_duplicates(p))
+        if not p.exists():
+            continue
+        total.extend(find_duplicates(p))
+        cross.extend(cross_scope_duplicates(p))
+
+    cross_enabled = "--strict-cross-scope" in sys.argv
+    if cross and cross_enabled:
+        print(f"      BLOCKER: {len(cross)} property name(s) declared in >1 type")
+        for line in cross[:15]:
+            print(f"        {line}")
+        print("      Two candidates with one name at a call site compile to")
+        print("      `ambiguous use of 'x'`. Keep the owner that the call sites")
+        print("      resolve through and delete the other declaration.")
+        return 1
+
+    if cross and not cross_enabled:
+        print(f"      deferred  {len(cross)} cross-scope name(s) — see "
+              f"docs/agents/arch-001-extracted-state.md (ARCH-001)")
+        print(f"                run with --strict-cross-scope to fail on them")
 
     if total:
         print(f"      BLOCKER: {len(total)} duplicated declaration(s) in one type")

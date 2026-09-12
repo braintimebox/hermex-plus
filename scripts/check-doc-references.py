@@ -56,6 +56,7 @@ SCANNED = [
     "docs/agents/testing.md",
     "docs/agents/upstream-sync-plan.md",
     "docs/agents/sync-layers.md",
+    "docs/agents/arch-001-extracted-state.md",
     "ops/README.md",
 ]
 
