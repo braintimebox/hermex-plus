@@ -311,6 +311,11 @@ struct ChatView: View {
     /// the collision-avoidance lift for the floating controls so they clear the
     /// actual card, not a fixed maximum (which would over-lift for short cards).
     @State private var clarificationCardHeight: CGFloat = 0
+    @State private var isUserInteractingWithScroll = false
+    /// Our spacing constants: the transcript reads a block apart, rows inside a
+    /// block a little tighter. Passed down rather than read from the view.
+    private let transcriptMessageSpacing: CGFloat = 10
+    private let transcriptBlockSpacing: CGFloat = 6
     @State private var followScrollGeneration = 0
     /// While true the transcript's bottom size-change anchor and follow-driven
     /// scrolls are suspended so a disclosure toggle grows or shrinks in place.
@@ -1643,7 +1648,7 @@ struct ChatView: View {
             },
             displayedTranscriptMessages: displayedTranscriptMessages,
             compressionReferenceCard: viewModel.compressionReferenceCard,
-            reasoningGroups: reasoningGroups,
+            reasoningGroups: viewModel.displayedReasoningGroups,
             completedToolCallGroupsForAnchor: { anchorMessageID in
                 viewModel.completedToolCallGroupsForAnchor(anchorMessageID)
             },
@@ -1655,6 +1660,9 @@ struct ChatView: View {
             liveTokensPerSecond: viewModel.liveTokensPerSecond,
             activeStreamRecoveryState: viewModel.activeStreamRecoveryState,
             clarificationPromptID: viewModel.clarificationPrompt?.id,
+            clarificationPrompt: viewModel.clarificationPrompt,
+            isRespondingToClarification: viewModel.isRespondingToClarification,
+            clarificationErrorMessage: viewModel.clarificationErrorMessage,
             cacheFirstReconcileScrollToken: viewModel.cacheFirstReconcileScrollToken,
             hidesRunStatusAccessibility: activeRunStatusPresentation != nil,
             showsThinkingAndToolCards: showsThinkingAndToolCards,
@@ -1717,7 +1725,7 @@ struct ChatView: View {
             onUpdateScrollMetrics: updateScrollMetrics,
             onFollowEvent: handleFollowEvent,
             onDisclosureToggle: handleDisclosureToggle,
-            turnFolds: turnFolds(reasoningGroups: reasoningGroups),
+            turnFolds: turnFolds(reasoningGroups: viewModel.displayedReasoningGroups),
             terminalReplyRenderIDs: terminalReplyRenderIDs,
             expandedTurnKeys: expandedTurnKeys,
             onToggleTurnFold: toggleTurnFold,
@@ -1994,6 +2002,58 @@ struct ChatView: View {
             isCancellingStream: viewModel.isCancellingStream,
             hasPendingClarificationPrompt: viewModel.clarificationPrompt != nil
         )
+    }
+
+    private func turnFolds(reasoningGroups: [ReasoningGroup]) -> TranscriptTurnFolds {
+        guard foldsSettledTurns else { return .none }
+
+        let activityAnchorIDs: Set<String> = showsThinkingAndToolCards
+            ? Set(reasoningGroups.compactMap(\.anchorMessageID))
+                .union(viewModel.completedToolCallGroups.compactMap(\.anchorMessageID))
+            : []
+
+        return TranscriptTurnFolds.derive(
+            transcriptMessages: transcriptMessages,
+            messages: viewModel.messages,
+            messageOffset: viewModel.messagesOffset,
+            activityAnchorIDs: activityAnchorIDs,
+            rendersBubble: shouldRenderMessageRow,
+            isStreamActive: viewModel.activeStreamID != nil,
+            streamingAssistantMessageID: viewModel.streamingAssistantMessageID,
+            latestRunOutcome: viewModel.latestRunOutcome
+        )
+    }
+
+    private var terminalReplyRenderIDs: Set<String> {
+        TranscriptMessageMetaPolicy.terminalReplyRenderIDs(
+            transcriptMessages: transcriptMessages,
+            messages: viewModel.messages,
+            messageOffset: viewModel.messagesOffset,
+            rendersBubble: shouldRenderMessageRow,
+            isStreamActive: viewModel.activeStreamID != nil,
+            streamingAssistantMessageID: viewModel.streamingAssistantMessageID
+        )
+    }
+
+    private var showsAssistantTypingIndicator: Bool {
+        ChatTranscriptDisplaySettings.shouldShowAssistantTypingIndicator(
+            hasActiveStream: viewModel.activeStreamID != nil,
+            isCancellingStream: viewModel.isCancellingStream,
+            hasStreamingAssistantMessage: viewModel.hasStreamingAssistantMessageContent,
+            hasPendingClarificationPrompt: viewModel.clarificationPrompt != nil,
+            liveReasoningText: viewModel.liveReasoningText,
+            hasLiveToolCalls: !viewModel.liveToolCalls.isEmpty,
+            showsThinkingAndToolCards: showsThinkingAndToolCards
+        )
+    }
+
+    private var isComposerChromeCompact: Bool {
+        // Compact chrome is a *reading* mode: the composer's secondary bar (workspace
+        // dir + profile + git) appears only on an explicit write action, never as a
+        // side effect of scrolling back down or tapping ↓ — that decoupling is what
+        // stopped the "composer jumps / folder+profile flash" when the transcript
+        // re-anchors.
+        isReadingOlderTranscript && !composerIsFocused && !viewModel.messages.isEmpty
     }
 
     private var transcriptBottomInsetHeight: CGFloat {
