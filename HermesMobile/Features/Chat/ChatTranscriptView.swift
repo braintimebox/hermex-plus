@@ -68,6 +68,9 @@ struct ChatTranscriptView: View {
     /// The pending clarification's id. The card itself is pinned above the
     /// composer by `ChatView`; the transcript only follows its arrival.
     let clarificationPromptID: String?
+    let clarificationPrompt: ClarificationPromptState?
+    let isRespondingToClarification: Bool
+    let clarificationErrorMessage: String?
     /// Bumped when the cache-first reconcile replaces the lighter cached render
     /// (#289), so the transcript can snap to the bottom without animation.
     let cacheFirstReconcileScrollToken: Int
@@ -376,71 +379,6 @@ struct ChatTranscriptView: View {
         // real content — the "↓ ведёт ниже и виден чёрный экран" bug. A
         // non-lazy 1pt marker at the content's true end is always mounted and
         // always resolvable.
-        VStack(spacing: 0) {
-            // P0 ROOT CAUSE FIX (3.4.8): The LazyVStack + ForEach content is wrapped
-            // in an EquatableView so scroll/composer state changes in ChatView do NOT
-            // trigger Markdown re-layout for N visible rows. Without this, every scroll
-            // owner change, composer height update, or near-bottom flip re-evaluated
-            // ChatTranscriptView body → ForEach created N ChatTranscriptMessageBlock
-            // structs → SwiftUICore re-laid-out all visible Markdown views → 2-4s freeze.
-            // EquatableView prevents body re-evaluation when content inputs are stable.
-            EquatableView(content: TranscriptMessageContent(
-                displayedTranscriptMessages: displayedTranscriptMessages,
-                compressionReferenceCard: compressionReferenceCard,
-                reasoningGroups: reasoningGroups,
-                completedToolCallGroupsForAnchor: completedToolCallGroupsForAnchor,
-                liveReasoningText: liveReasoningText,
-                reasoningAnchorMessageID: reasoningAnchorMessageID,
-                liveToolCalls: liveToolCalls,
-                toolCallAnchorMessageID: toolCallAnchorMessageID,
-                streamingAssistantMessageID: streamingAssistantMessageID,
-                liveTokensPerSecond: liveTokensPerSecond,
-                activeStreamID: activeStreamID,
-                localAttachmentPreviews: localAttachmentPreviews,
-                listeningMessageID: listeningMessageID,
-                isViewingCachedData: isViewingCachedData,
-                isRegeneratingMessage: isRegeneratingMessage,
-                isEditingMessage: isEditingMessage,
-                isForkingMessage: isForkingMessage,
-                showsThinkingAndToolCards: showsThinkingAndToolCards,
-                showsCompressingStatus: showsCompressingStatus,
-                transcriptBlockSpacing: transcriptBlockSpacing,
-                transcriptMessageSpacing: transcriptMessageSpacing,
-                actionContext: actionContext,
-                shouldRenderMessageRow: shouldRenderMessageRow,
-                loadAttachmentImage: loadAttachmentImage,
-                loadAttachmentData: loadAttachmentData,
-                loadTranscriptMediaImage: loadTranscriptMediaImage,
-                loadTranscriptMediaData: loadTranscriptMediaData,
-                transcriptMediaCacheNamespace: transcriptMediaCacheNamespace,
-                onPreviewAttachment: onPreviewAttachment,
-                onPreviewTranscriptMedia: onPreviewTranscriptMedia,
-                onToggleListening: onToggleListening,
-                onSelectText: onSelectText,
-                onRegenerate: onRegenerate,
-                onEdit: onEdit,
-                onFork: onFork,
-                onCopy: onCopy,
-                onReply: onReply,
-                onForward: onForward,
-                onSave: onSave,
-                onPin: onPin,
-                isMessagePinned: isMessagePinned,
-                olderMessagesButton: AnyView(olderMessagesButton(proxy: proxy)),
-                liveResponseBlocks: AnyView(liveResponseBlocks),
-                inlineClarificationCard: AnyView(inlineClarificationCard
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        onClarificationCardHeightChange(height)
-                    }),
-                typingIndicator: AnyView(typingIndicator),
-                turnChangesCard: AnyView(turnChangesCard),
-                inlineCommitButton: AnyView(inlineCommitButton),
-                transcriptLooseBlocks: AnyView(transcriptLooseBlocks),
-                bottomAnchorID: bottomAnchorID,
-                compressionReferenceCardView: { card in AnyView(compressionReferenceCardView(card)) }
-            ))
         // One clock read per body pass; each row compares its timestamp to it.
         let now = Date()
 
@@ -559,7 +497,6 @@ struct ChatTranscriptView: View {
                 Color(.systemBackground)
             }
             .accessibilityHidden(true)
-        }
         }
     }
 
