@@ -288,7 +288,7 @@ def check_swift_structural_balance() -> int:
 
     Blocking, not advisory: a dropped brace is never a judgment call.
     """
-    print("[8/9] swift structural balance vs both parents")
+    print("[8/10] swift structural balance vs both parents")
     script = ROOT / "scripts" / "check-swift-structural-balance.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -322,7 +322,7 @@ def check_duplicate_declarations() -> int:
     matters: an earlier version grouped by indentation alone and produced 2505
     false hits, which is a gate someone switches off.
     """
-    print("[9/9] duplicate declarations in the same type scope")
+    print("[9/10] duplicate declarations in the same type scope")
     script = ROOT / "scripts" / "check-duplicate-declarations.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -332,6 +332,36 @@ def check_duplicate_declarations() -> int:
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
             if not ln.startswith("[9/9]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_initializer_completeness() -> int:
+    """Gate 10 — no stored property left unset by an init that sets others.
+
+    Gates 8 and 9 catch a union that pasted both sides of a declaration. This
+    catches the mirror-image defect: upstream ADDS a stored property and our
+    own init keeps its old assignment list, so Swift reports
+
+        return from initializer without initializing all stored properties
+
+    `SessionSummary.matchPreview` arrived exactly that way — upstream added the
+    property and its decoder, while `init(sessionId:title:)` (which upstream
+    does not have) still listed 32 of 34 fields. One line, one full CI round.
+    """
+    print("[10/10] initializer completeness (all stored properties set)")
+    script = ROOT / "scripts" / "check-initializer-completeness.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[10/10]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -349,6 +379,7 @@ CHECKS = {
     7: check_doc_references,
     8: check_swift_structural_balance,
     9: check_duplicate_declarations,
+    10: check_initializer_completeness,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

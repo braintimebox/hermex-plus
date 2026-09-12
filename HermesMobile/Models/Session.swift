@@ -535,6 +535,7 @@ struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
         self.readOnly = nil
         self.isReadOnly = nil
         self.matchType = nil
+        self.matchPreview = nil
     }
 }
 
