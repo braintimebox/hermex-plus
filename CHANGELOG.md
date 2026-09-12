@@ -1,3 +1,74 @@
+## 3.7.0 — Upstream 1.6.0 sync
+
+Merged `uzairansarzi/hermex` upstream `1.6.0` (105 commits since the fork point).
+Every conflict block was resolved by measurement, not by preference: our blocks
+carry a measured cause in their comments and were kept, their structural
+additions were taken, and independent additions were unioned.
+
+### Scroll — the two models now cooperate instead of competing
+
+- `sizeChangeAnchor` is **back**, conditioned on `shouldFollowLatestMessage` and
+  `isDisclosureSettling`. It returns `nil` while the reader is parked, so the
+  engine can no longer yank the viewport on its own. Our own code had removed
+  this anchor because the unconditional form yanked, then compensated by hand
+  across 27 commits.
+- Our `ChatScrollOwner` / `ScrollOwnershipState` stay alongside their
+  `FollowLatch` / `FollowEvent`: the owner answers *who* holds the viewport,
+  the latch answers *when* follow resumes. Their event stream already carries
+  every input `resolveOwner` needs.
+- `ChatPrependScrollPositionController` is replaced by
+  `ChatScrollPositionController`, which is that class plus `Mode.hold`,
+  `hasPrependCapture`, `didRevertSwiftUIOffset`, `resyncAfterHold`,
+  `contentSizeChangedThisTurn` and `quietReleaseTask`. Position is released
+  when content settles rather than after a fixed one-second timer.
+- Their `ignoresCoastingGesture` closes a case we never modelled: a send or
+  scroll-to-bottom while the transcript is still decelerating.
+
+### Share — one transport, one visible failure path
+
+- The share extension and the app now exchange drafts through the App Group
+  container with a reservation, instead of our pasteboard channel plus a
+  URL payload. The extension also reports every failure in place
+  ("Could not save shared content.", "Shared content saved. Open Hermex
+  manually.") and tries four ways of opening the host app.
+- Destination **choice is kept**: shared content asks where it should land
+  ("New Chat" / "Choose existing…"), and the reservation is released exactly
+  once for whichever branch consumes it, cancel included.
+
+### Streaming — cheap live path, complete settled path
+
+- Kept our O(1) live renderer; the settled path takes their
+  `MarkdownMathLayoutCache` and selectable headings. Formatting and math still
+  appear when the stream settles; the hot path never pays for them.
+- Kept our measured per-token fixes: the incremental transcript fast path, the
+  reload-amplification guard, the pagination cursor, EXPERIMENT B identity, the
+  `TranscriptMessageContent` extraction and the pan-gesture metrics hook.
+- Took their terminal content fence (it survives `streamEnd`, which our flag did
+  not) and `setLiveTokensPerSecondIfChanged` (no write when the value is
+  unchanged).
+
+### Chat — features
+
+- Pin, Save, Scheduled Messages, Forward and Reply are preserved. All five are
+  expressed through the upstream `ChatMessageActionItem` API so the SwiftUI
+  menu and the UIKit context menu stay in step.
+- Took `ChatDraftStore`: drafts are keyed per chat **and per server**, flushed
+  to disk, and carry quotes, attachments and settings. On-hydration text is
+  preserved instead of being overwritten.
+
+### Composer
+
+- Collapsed pill / expanded card behaviour, where a tap on the field expands it
+  and presenting a sheet never snaps it shut. Our height cap (96pt) and the
+  no-op height-update guard are kept, so the field cannot balloon and typing
+  does not relayout the transcript.
+
+### Release mechanics
+
+- `VERSION`, the CHANGELOG heading and every `MARKETING_VERSION` now agree.
+
+---
+
 ## 3.6.1 — release 3.6.1
 
 ## 3.6.0 — Scroll cleanup (dead code removal + stream guard)
