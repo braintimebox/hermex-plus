@@ -100,6 +100,32 @@ enum ChatScrollPolicy {
     /// the two thresholds stops a row that lands exactly on the boundary from
     /// flipping ownership back and forth on every layout pass.
     static let readingOlderHysteresis: CGFloat = 64
+    /// How long automatic follow-scroll stays paused after the user last
+    /// interacted with the scroll view.
+    static let userScrollCooldown: TimeInterval = 0.25
+
+    static func cooldownDeadline(after date: Date = Date()) -> Date {
+        date.addingTimeInterval(userScrollCooldown)
+    }
+
+    /// Automatic follow-scroll is paused while the user is actively touching the
+    /// scroll view and for a brief cooldown window afterward. Explicit user
+    /// actions (tapping scroll-to-bottom, sending a message) bypass this.
+    static func isAutoScrollPaused(
+        isUserInteracting: Bool,
+        cooldownUntil: Date?,
+        now: Date = Date()
+    ) -> Bool {
+        if isUserInteracting {
+            return true
+        }
+
+        guard let cooldownUntil else {
+            return false
+        }
+
+        return now < cooldownUntil
+    }
     /// Rich Markdown can finish measuring after the scroll view's initial
     /// layout. Keep those size changes bottom-pinned only while follow is
     /// latched on and no disclosure toggle is settling; otherwise return nil so
