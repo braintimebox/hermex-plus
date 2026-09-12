@@ -318,6 +318,9 @@ final class ChatViewModel {
     private(set) var latestRunOutcome: TranscriptTurnRunOutcome?
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
+    /// Bumped when the cache-first reconcile swaps the cached render for the
+    /// server's transcript (#289); the transcript snaps to the bottom on it.
+    var cacheFirstReconcileScrollToken: Int = 0
     @ObservationIgnored private var sendErrorIsFromStreamRecovery = false
     /// Set while `POST /api/session/clear` is in flight. A send or a second
     /// `/clear` refuses while it is set, so the clear response cannot wipe a

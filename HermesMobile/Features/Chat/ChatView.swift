@@ -1246,6 +1246,19 @@ struct ChatView: View {
             } message: {
                 Text(viewModel.messageActionErrorMessage ?? "")
             }
+        // Off the main body chain, which is at the type-checker's limit.
+        .onChange(of: viewModel.latestRunOutcome) {
+            handleLatestRunOutcomeChange(viewModel.latestRunOutcome)
+        }
+        .environment(\.composerChipCatalog, viewModel.composerChipCatalog)
+        .environment(\.openURL, OpenURLAction(handler: handleTranscriptLink))
+        .environment(\.chatWorkspaceRoot, session.workspace)
+        .task(id: transcriptSkillReferenceCount) {
+            await loadSkillSuggestionsForTranscriptChipsIfNeeded()
+        }
+        .task(id: fileChipReferenceScanToken) {
+            await viewModel.loadFileChipReferences(draft: draftMessage)
+        }
     }
 
     @ViewBuilder
@@ -1904,19 +1917,6 @@ struct ChatView: View {
         }
 
         return plain
-        // Off the main body chain, which is at the type-checker's limit.
-        .onChange(of: viewModel.latestRunOutcome) {
-            handleLatestRunOutcomeChange(viewModel.latestRunOutcome)
-        }
-        .environment(\.composerChipCatalog, viewModel.composerChipCatalog)
-        .environment(\.openURL, OpenURLAction(handler: handleTranscriptLink))
-        .environment(\.chatWorkspaceRoot, session.workspace)
-        .task(id: transcriptSkillReferenceCount) {
-            await loadSkillSuggestionsForTranscriptChipsIfNeeded()
-        }
-        .task(id: fileChipReferenceScanToken) {
-            await viewModel.loadFileChipReferences(draft: draftMessage)
-        }
     }
 
     /// Changes whenever there is new text that could name a workspace file, or
@@ -2022,6 +2022,15 @@ struct ChatView: View {
             streamingAssistantMessageID: viewModel.streamingAssistantMessageID,
             latestRunOutcome: viewModel.latestRunOutcome
         )
+    }
+
+    private func toggleTurnFold(_ turnKey: String) {
+        handleDisclosureToggle()
+        withAnimation(ChatMotion.disclosure(reduceMotion: reduceMotion)) {
+            if !expandedTurnKeys.insert(turnKey).inserted {
+                expandedTurnKeys.remove(turnKey)
+            }
+        }
     }
 
     private var terminalReplyRenderIDs: Set<String> {

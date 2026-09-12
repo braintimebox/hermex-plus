@@ -595,14 +595,14 @@ struct ChatTranscriptView: View {
 
     @ViewBuilder
     private var inlineClarificationCard: some View {
-        if let clarificationPromptID {
+        if let clarificationPrompt {
             ClarificationRequestCard(
                 prompt: clarificationPrompt,
                 isResponding: isRespondingToClarification,
                 errorMessage: clarificationErrorMessage,
                 onSubmit: onSubmitClarification
             )
-            .id(clarificationPromptID)
+            .id(clarificationPrompt.id)
             .frame(maxWidth: .infinity, alignment: .leading)
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
         }
