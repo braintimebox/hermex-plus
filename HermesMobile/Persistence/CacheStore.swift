@@ -439,7 +439,7 @@ private extension ChatMessage {
             reasoning: cachedMessage.reasoning,
             attachments: attachments,
             turnTps: cachedMessage.turnTps,
-            serverID: cachedMessage.serverID
+            serverID: cachedMessage.serverID,
             turnDuration: cachedMessage.turnDuration
         )
     }

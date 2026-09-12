@@ -42,7 +42,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         reasoning: String? = nil,
         attachments: [MessageAttachment]? = nil,
         turnTps: Double? = nil,
-        serverID: Int? = nil
+        serverID: Int? = nil,
         turnDuration: Double? = nil
     ) {
         self.role = role

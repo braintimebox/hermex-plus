@@ -860,19 +860,24 @@ struct ChatView: View {
 
                     composerAccessoryStack
 
-            clarificationInset
+                    clarificationInset
 
-            messageComposer
+                    messageComposer
 
-            approvalOverlay
+                    approvalOverlay
+                } else if viewModel.clarificationPrompt == nil {
+                    composeFAB
+                }
+            }
+            .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
+        }
+        .overlay(alignment: .top) {
+            GitActionToastOverlay(state: gitToastState)
         }
     }
 
     private var chatViewContent: some View {
         chatContent
-            .overlay(alignment: .top) {
-            GitActionToastOverlay(state: gitToastState)
-        }
         // The appearance-completion observer lives at the whole-chat level (not
         // inside the composer): with reading mode the composer is hidden, so the
         // observer must fire regardless of composer visibility — it drives the
