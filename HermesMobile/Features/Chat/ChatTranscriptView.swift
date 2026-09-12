@@ -78,9 +78,6 @@ struct ChatTranscriptView: View {
     let showsThinkingAndToolCards: Bool
     let showsAssistantTypingIndicator: Bool
     let showsCompressingStatus: Bool
-    let scrollOwnership: ScrollOwnershipState
-    /// Derived from scrollOwnership — no environment cascade needed.
-    private var scrollOwner: ChatScrollOwner { scrollOwnership.owner }
     /// Start date for the "Working for" tail row; nil hides the row.
     let workingRowStartedAt: Date?
     let showsScrollToBottomButton: Bool
@@ -255,7 +252,7 @@ struct ChatTranscriptView: View {
                     // Only follow when the APP owns the viewport. A stale
                     // ownership (linger after a stream) must not yank the
                     // viewport while the user reads older text.
-                    guard scrollOwner == .app else { return }
+                    guard shouldFollowLatestMessage else { return }
                     guard isFollowingLatestContent else { return }
 
                     if latestTranscriptMessageRole == "user" {
@@ -271,18 +268,18 @@ struct ChatTranscriptView: View {
                     // stream guard, non-streaming events (loadMessages,
                     // reloadMessages) that also bump the trigger would cause
                     // a redundant scrollTo alongside onChange(of: messages.count).
-                    guard scrollOwner == .app, activeStreamID != nil else { return }
+                    guard shouldFollowLatestMessage, activeStreamID != nil else { return }
                     onScrollToLatestContent(proxy, true, "streamingToken")
                 }
                 .onChange(of: cacheFirstReconcileScrollToken) {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no
                     // animation) unless the reader owns the viewport.
-                    guard scrollOwner == .app else { return }
+                    guard shouldFollowLatestMessage else { return }
                     onScrollToLatestContent(proxy, false, "cacheReconcile")
                 }
                 .onChange(of: clarificationPromptID) {
-                    guard clarificationPromptID != nil, scrollOwner == .app else { return }
+                    guard clarificationPromptID != nil, shouldFollowLatestMessage else { return }
                     onScrollToBottom(proxy)
                         releasingHold { onScrollToLatestContent(proxy, true) }
                     }
@@ -330,7 +327,7 @@ struct ChatTranscriptView: View {
                     // Keyboard may show while the reader is up (e.g. FAB tap):
                     // only the app owner may snap to the bottom; a reader who
                     // scrolled up must NOT get yanked by the keyboard event.
-                    if scrollOwner == .app, isScrolledNearBottom {
+                    if shouldFollowLatestMessage, isScrolledNearBottom {
                         onScrollToBottom(proxy)
                     if isScrolledNearBottom {
                         releasingHold { onScrollToBottom(proxy) }
@@ -555,10 +552,6 @@ struct ChatTranscriptView: View {
         await Task.yield()
         proxy.scrollTo(renderID, anchor: .top)
 
-        guard let renderID else { return }
-
-        await Task.yield()
-        proxy.scrollTo(renderID, anchor: .top)
     }
 
     @ViewBuilder
@@ -741,6 +734,7 @@ private struct ChatTranscriptMessageBlock: View, Equatable {
     let onForward: (MessageActionContext) -> Void
     let onSave: (MessageActionContext) -> Void
     let onPin: ((MessageActionContext) -> Void)?
+    let onSelectText: ((MessageActionContext) -> Void)?
     let isMessagePinned: (String) -> Bool
 
     // Equality over the value inputs only. The closures are pure functions of
