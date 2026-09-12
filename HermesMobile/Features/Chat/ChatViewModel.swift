@@ -6878,11 +6878,11 @@ extension ChatViewModel {
             )
             guard anchorID == preservingEmptyAssistantID
                 || activityAnchorIDs.contains(anchorID)
-                || hasTranscriptMessageRowContent(message)
+                || hasTranscriptMessageRowContent(candidate.message)
             else {
                 continue
             }
-            let absoluteIndex = offset + loadedIndex
+            let absoluteIndex = offset + candidate.loadedIndex
             let renderID = "transcript:\(absoluteIndex)"
 
             transcriptMessages.append(TranscriptMessage(
