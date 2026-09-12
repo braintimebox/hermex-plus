@@ -573,12 +573,6 @@ final class ChatViewModel {
     var attachmentUploadGeneration: Int { attachmentCoordinator.uploadStartGeneration }
     var uploadAttachmentErrorMessage: String? { attachmentCoordinator.uploadAttachmentErrorMessage }
     var localAttachmentPreviews: [String: [String: Data]] { attachmentCoordinator.localAttachmentPreviews }
-    private(set) var pinnedLocalNotices: [String] = []
-    private(set) var steeringConfirmationNotice: String?
-    private(set) var currentGoal: SubmittedGoal?
-    private(set) var isSubmittingGoal = false
-    private(set) var goalErrorMessage: String?
-    private(set) var hasActivatedGoalCommand = false
 
     private let sessionID: String?
     /// The workspace this chat's session is pointed at. `/workspace` and the
@@ -6844,19 +6838,12 @@ extension ChatViewModel {
                 baseID: stableBaseIdentity(for: message)
             ))
         }
-
-        // Pass 2: assign SwiftUI identity. Same base id across rows is NORMAL
-        // (one logical turn = several server rows sharing a serverID). Rows
-        // that differ only content-wise get a digest suffix; byte-identical
-        // duplicates (same serverID AND same digest) collapse to their first
-        // occurrence — stable because the server only appends such rows, and
-        // "first in server order" is deterministic for identical rows.
         var baseCount: [String: Int] = [:]
         for candidate in candidates {
             baseCount[candidate.baseID, default: 0] += 1
         }
         var digestOccurrence: [String: Int] = [:]
-        var transcriptMessages: [TranscriptMessage] = []
+        transcriptMessages.removeAll(keepingCapacity: true)
         transcriptMessages.reserveCapacity(candidates.count)
 
         for candidate in candidates {
