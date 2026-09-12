@@ -53,9 +53,21 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        HermesShareDraft.saveToPasteboard(draft: draft, attachments: input.attachments)
+        guard let directory = HermesShareDraft.containerURL() else {
+            showStatus("Could not access Hermex storage.")
+            completeRequest(after: 0.8)
+            return
+        }
 
-        openHermes(withDraft: draft)
+        do {
+            try HermesShareDraft.savePendingImport(draft: draft, attachments: input.attachments, in: directory)
+        } catch {
+            showStatus("Could not save shared content.")
+            completeRequest(after: 0.8)
+            return
+        }
+
+        openHermes()
     }
 
     private func showStatus(_ text: String) {
@@ -63,8 +75,8 @@ final class ShareViewController: UIViewController {
         statusLabel.isHidden = false
     }
 
-    private func openHermes(withDraft draft: String) {
-        let url = HermesShareDraft.openURL(withDraft: draft)
+    private func openHermes() {
+        let url = HermesShareDraft.openURL
 
         extensionContext?.open(url, completionHandler: { [weak self] success in
             Task { @MainActor [weak self] in

@@ -4,6 +4,28 @@ import XCTest
 @testable import HermesMobile
 
 final class MarkdownMathRendererTests: XCTestCase {
+    func testMathFreeTextIsPreservedAcrossFormattingAndLayout() {
+        for input in ["", "a", "\n\n", "**Bold** and `code`", "中文 العربية 👨‍👩‍👧‍👦 e\u{301}",
+                      String(repeating: "A normal response.\n", count: 1_000)] {
+            XCTAssertEqual(MarkdownMathFormatter.replacingInlineMath(in: input), input)
+            XCTAssertEqual(MarkdownMathSegmenter.segments(in: input), [.markdown(input)])
+            XCTAssertEqual(MarkdownMathLayoutCache.uncachedLayout(for: input), .plain(input))
+        }
+    }
+
+    func testLiteralCommandsPreserveCasePrefixesAndUnicodeSuffixes() {
+        XCTAssertEqual(
+            MarkdownMathFormatter.replacingKnownCommands(
+                in: #"\leftarrow \left x \right \Rightarrow \top \to \leq \le \neq \ne \varepsilon \epsilon"#
+            ),
+            "←  x  ⇒ ⊤ → ≤ ≤ ≠ ≠ ε ε"
+        )
+        XCTAssertEqual(
+            MarkdownMathFormatter.replacingKnownCommands(in: "\\alpha\u{301} \\Alpha \\unknown"),
+            "α\u{301} \\Alpha \\unknown"
+        )
+    }
+
     func testInlineMathReplacesCommonLatexCommands() {
         let input = #"Inline: the quadratic formula $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$ works."#
 
@@ -25,6 +47,49 @@ final class MarkdownMathRendererTests: XCTestCase {
         XCTAssertTrue(rendered.contains("Where m is count"))
         XCTAssertTrue(rendered.contains("y is label"))
         XCTAssertTrue(rendered.contains(#"\$not math\$"#))
+    }
+
+    func testInlineAssignmentsRecognizeVectorsTuplesAndExistingScriptForms() {
+        let input = #"Vectors $E=[4,-2]$ and $O=[6,-2]$; tuple $P=(x,y)$; scripts $W_0=e^0$, $W_2$, $O_0$, and $X_0=\sum x_n$."#
+
+        let rendered = MarkdownMathFormatter.replacingInlineMath(in: input)
+
+        XCTAssertFalse(rendered.contains("$"))
+        XCTAssertTrue(rendered.contains("E=[4,-2]"))
+        XCTAssertTrue(rendered.contains("O=[6,-2]"))
+        XCTAssertTrue(rendered.contains("P=(x,y)"))
+        XCTAssertTrue(rendered.contains("W₀=e⁰"))
+        XCTAssertTrue(rendered.contains("W₂"))
+        XCTAssertTrue(rendered.contains("O₀"))
+        XCTAssertTrue(rendered.contains("X₀=∑ xₙ"))
+    }
+
+    func testInlineAssignmentRecognitionPreservesCurrencyAndProtectedDollars() {
+        let inputs = [
+            "It costs $5 today.",
+            #"Escaped \$E=[4,-2]\$ stays."#,
+            "Unmatched $O=[6,-2] stays.",
+            "Code `$P=(x,y)$` stays.",
+            "```md\n$E=[4,-2]$\n```"
+        ]
+
+        for input in inputs {
+            XCTAssertEqual(MarkdownMathFormatter.replacingInlineMath(in: input), input)
+        }
+    }
+
+    func testProductionLayoutsRecognizeAssignmentsForStreamingAndFinalizedMarkdown() {
+        let input = #"Result: **$E=[4,-2]$** and `$O=[6,-2]$` stays code."#
+
+        let finalized = MarkdownMathLayoutCache.layout(for: input)
+        let streaming = MarkdownMathLayoutCache.uncachedLayout(for: input)
+
+        XCTAssertEqual(finalized, streaming)
+        guard case .plain(let rendered) = finalized else {
+            return XCTFail("Expected inline math to keep the production renderer on its plain layout path.")
+        }
+        XCTAssertTrue(rendered.contains("**E=[4,-2]**"))
+        XCTAssertTrue(rendered.contains("`$O=[6,-2]$`"))
     }
 
     func testInlineScreenshotCommandsDoNotLeakRawLatex() {

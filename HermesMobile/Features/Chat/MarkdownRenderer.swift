@@ -56,9 +56,8 @@ struct MarkdownRenderer: View {
 
     @ViewBuilder
     private var markdownContent: some View {
-        let segments = MarkdownMathSegmenter.segments(in: content)
-
-        if segments.containsMath {
+        switch MarkdownMathLayoutCache.layout(for: content) {
+        case .segmented(let segments):
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     switch segment {
@@ -75,12 +74,14 @@ struct MarkdownRenderer: View {
                     }
                 }
             }
-        } else {
+            .responseTextSelectionPolicy()
+        case .plain(let markdown):
             ChatMarkdownView(
-                content: MarkdownMathFormatter.replacingInlineMath(in: content),
+                content: markdown,
                 colorScheme: colorScheme,
                 isStreaming: isStreaming
             )
+            .responseTextSelectionPolicy()
         }
     }
 }
@@ -463,7 +464,7 @@ private struct ChatCodeBlock: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(ChatTranscriptDisplaySettings.wrapsCodeBlockLinesKey) private var wrapsCodeBlockLines = false
-    @State private var didCopy = false
+    @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @State private var highlightedCode: NSAttributedString?
 
     private let logger = Logger.hermesMarkdownRendering
@@ -484,22 +485,21 @@ private struct ChatCodeBlock: View {
                         .frame(width: 36, height: 36)
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chatTactile(.icon))
                 .foregroundStyle(SwiftUI.Color.primary)
                 .accessibilityLabel(wrapsCodeBlockLines ? "Disable code line wrapping" : "Enable code line wrapping")
 
-                Button {
+                ChatCopyButton(
+                    label: String(localized: "Copy code"),
+                    copiedLabel: String(localized: "Copied code"),
+                    size: 36,
+                    glyphSize: 18,
+                    glyphWeight: .semibold
+                ) {
                     UIPasteboard.general.string = content
-                    didCopy = true
-                } label: {
-                    Image(systemName: didCopy ? "checkmark" : "square.on.square")
-                        .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 36, height: 36)
-                    .contentTransition(.symbolEffect(.replace))
+                    ChatHaptics.copied(isEnabled: isHapticsEnabled)
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(SwiftUI.Color.primary)
-                .accessibilityLabel(didCopy ? "Copied code" : "Copy code")
             }
             .padding(.leading, 16)
             .padding(.trailing, 10)
@@ -520,9 +520,6 @@ private struct ChatCodeBlock: View {
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(SwiftUI.Color(.separator).opacity(0.35), lineWidth: 1)
-        }
-        .onChange(of: content) { _, _ in
-            didCopy = false
         }
         .task(id: highlightRequest) {
             await updateHighlightedCode(for: highlightRequest)
@@ -647,6 +644,7 @@ private struct PlainCodeBlockText: View {
             ForEach(lines) { line in
                 if wraps {
                     combinedText(for: line)
+                        .responseSelectableText(line.segments.map(\.text).joined())
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .multilineTextAlignment(.leading)
@@ -654,6 +652,7 @@ private struct PlainCodeBlockText: View {
                     HStack(alignment: .firstTextBaseline, spacing: 0) {
                         ForEach(line.segments) { segment in
                             Text(verbatim: segment.text)
+                                .responseSelectableText(segment.text, separator: segment.id == line.segments.last?.id ? "\n" : "")
                         }
                     }
                 }
@@ -685,6 +684,7 @@ private struct HighlightedCodeBlockText: View {
             ForEach(lines) { line in
                 if wraps {
                     combinedText(for: line)
+                        .responseSelectableText(line.segments.map { $0.attributedText.string }.joined())
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .multilineTextAlignment(.leading)
@@ -692,6 +692,7 @@ private struct HighlightedCodeBlockText: View {
                     HStack(alignment: .firstTextBaseline, spacing: 0) {
                         ForEach(line.segments) { segment in
                             Text(AttributedString(segment.attributedText))
+                                .responseSelectableText(segment.attributedText.string, separator: segment.id == line.segments.last?.id ? "\n" : "")
                         }
                     }
                 }
@@ -940,7 +941,7 @@ enum MarkdownHighlightPolicy {
         "text",
         "txt"
     ]
-    private static let highlightrLanguages: Set<String> = [
+    static let highlightrLanguages: Set<String> = [
         "bash",
         "c",
         "cpp",
@@ -1231,9 +1232,11 @@ private struct PlainMarkdownFallbackView: View {
 
     var body: some View {
         Text(verbatim: content)
+            .responseSelectableText(content)
             .font(.body)
             .foregroundStyle(.primary)
             .fixedSize(horizontal: false, vertical: true)
+            .responseTextSelectionPolicy()
             .onAppear {
                 logger.info(
                     "Markdown plain fallback reason=\(reason.rawValue, privacy: .public) characters=\(content.count, privacy: .public) lines=\(MarkdownHighlightPolicy.lineCount(in: content), privacy: .public)"
@@ -1250,6 +1253,19 @@ private extension MarkdownUI.Theme {
                 BackgroundColor(nil)
                 FontSize(16)
             }
+            .paragraph { configuration in
+                configuration.label
+                    .responseSelectableText(configuration.content.renderPlainText().trimmingCharacters(in: .newlines), separator: "\n\n")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativeLineSpacing(.em(0.25))
+                    .markdownMargin(top: 0, bottom: 16)
+            }
+            .heading1 { SelectableMarkdownHeading(configuration: $0, level: 1, colorScheme: colorScheme) }
+            .heading2 { SelectableMarkdownHeading(configuration: $0, level: 2, colorScheme: colorScheme) }
+            .heading3 { SelectableMarkdownHeading(configuration: $0, level: 3, colorScheme: colorScheme) }
+            .heading4 { SelectableMarkdownHeading(configuration: $0, level: 4, colorScheme: colorScheme) }
+            .heading5 { SelectableMarkdownHeading(configuration: $0, level: 5, colorScheme: colorScheme) }
+            .heading6 { SelectableMarkdownHeading(configuration: $0, level: 6, colorScheme: colorScheme) }
             .code {
                 FontFamilyVariant(.monospaced)
                 FontSize(.em(0.85))
@@ -1280,6 +1296,7 @@ private extension MarkdownUI.Theme {
                     maxWidth: ChatMarkdownTable.cellMaxWidth
                 ) {
                     configuration.label
+                        .responseSelectableText(configuration.content.renderPlainText().trimmingCharacters(in: .newlines), separator: "\t", tableColumn: configuration.column)
                         .markdownTextStyle {
                             if configuration.row == 0 {
                                 FontWeight(.semibold)
@@ -1418,5 +1435,43 @@ struct LightStreamingRenderer: View {
             .font(.body)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+/// Matches MarkdownUI's GitHub heading metrics, registering only the text label.
+private struct SelectableMarkdownHeading: View {
+    let configuration: BlockConfiguration
+    let level: Int
+    let colorScheme: ColorScheme
+
+    private var fontScale: Double { [2, 1.5, 1.25, 1, 0.875, 0.85][level - 1] }
+    private var tertiaryColor: SwiftUI.Color {
+        colorScheme == .dark
+            ? SwiftUI.Color(red: 109 / 255, green: 112 / 255, blue: 125 / 255)
+            : SwiftUI.Color(red: 107 / 255, green: 110 / 255, blue: 123 / 255)
+    }
+    private var dividerColor: SwiftUI.Color {
+        colorScheme == .dark
+            ? SwiftUI.Color(red: 51 / 255, green: 52 / 255, blue: 56 / 255)
+            : SwiftUI.Color(red: 208 / 255, green: 208 / 255, blue: 211 / 255)
+    }
+    var body: some View {
+        if level <= 2 {
+            VStack(alignment: .leading, spacing: 0) {
+                label.relativePadding(.bottom, length: .em(0.3))
+                Divider().overlay(dividerColor)
+            }
+        } else {
+            label
+        }
+    }
+    private var label: some View {
+        configuration.label
+            .responseSelectableText(configuration.content.renderPlainText().trimmingCharacters(in: .newlines), separator: "\n\n")
+            .relativeLineSpacing(.em(0.125))
+            .markdownMargin(top: 24, bottom: 16)
+            .markdownTextStyle {
+                FontWeight(.semibold)
+                FontSize(.em(fontScale))
+                if level == 6 { ForegroundColor(tertiaryColor) }
+            }
     }
 }

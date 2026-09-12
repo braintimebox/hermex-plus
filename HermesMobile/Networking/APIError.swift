@@ -22,24 +22,29 @@ enum APIError: LocalizedError {
             case -1:
                 return String(localized: "The server response could not be read. Check that the URL points to a Hermes server.")
             case 400:
-                if let message = Self.serverErrorMessage(from: body) {
+                if let message = Self.displayableServerMessage(from: body) {
                     return String(localized: "The server rejected the request: \(message)")
                 }
                 return String(localized: "The server rejected the request.")
             case 403:
-                return String(localized: "The server refused access. Check the server password and permissions.")
+                // A 403 is a per-request refusal (read-only imported session, missing
+                // permission), not a bad password: 401 owns the password copy.
+                if let message = Self.displayableServerMessage(from: body) {
+                    return String(localized: "The server refused the request: \(message)")
+                }
+                return String(localized: "The server refused the request. Check the server permissions and try again.")
             case 404:
                 return String(localized: "The server endpoint was not found. Check that the URL points to a Hermes server.")
             case 408:
-                return String(localized: "The server took too long to respond. Check that the server is running and reachable.")
+                return String(localized: "The server did not respond in time. Check that the server is running and the connection is available.")
             case 429:
                 return String(localized: "The server is receiving too many requests. Wait a moment, then try again.")
             case 500:
                 return String(localized: "The Hermes server hit an internal error. Check the server logs, then try again.")
             case 502, 503, 504:
-                return String(localized: "The server is temporarily unavailable. Check that it's running, then try again.")
+                return String(localized: "Could not connect to the server. Check that hermes-webui is running and the tunnel is connected.")
             default:
-                if let message = Self.serverErrorMessage(from: body) {
+                if let message = Self.displayableServerMessage(from: body) {
                     return String(localized: "Server returned HTTP \(statusCode): \(message)")
                 }
                 return String(localized: "Server returned HTTP \(statusCode).")
@@ -162,7 +167,7 @@ private extension APIError {
 
         switch urlError.code {
         case .timedOut:
-            return String(localized: "The server did not respond in time. Check that it's running and reachable.")
+            return String(localized: "The server did not respond in time. Check that the server is running and the connection is available.")
         case .cannotFindHost, .dnsLookupFailed:
             return String(localized: "Could not find that server. Check the URL and network connection.")
         case .cannotConnectToHost, .networkConnectionLost:
@@ -187,6 +192,17 @@ private extension APIError {
     static func isVanishedSession(statusCode: Int, body: String?) -> Bool {
         guard statusCode == 404 else { return false }
         return serverErrorMessage(from: body)?.localizedCaseInsensitiveContains("Session not found") == true
+    }
+
+    /// Longest server-provided message we interpolate into user-facing copy.
+    static let displayedServerMessageLimit = 200
+
+    /// The structured server message, bounded for display. Shared by every HTTP
+    /// branch that shows server text so an oversized body never floods an alert.
+    static func displayableServerMessage(from body: String?) -> String? {
+        guard let message = serverErrorMessage(from: body) else { return nil }
+        guard message.count > displayedServerMessageLimit else { return message }
+        return String(message.prefix(displayedServerMessageLimit)) + "…"
     }
 
     static func serverErrorMessage(from body: String?) -> String? {

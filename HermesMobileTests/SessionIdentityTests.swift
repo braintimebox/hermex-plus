@@ -83,7 +83,7 @@ final class SessionIdentityTests: XCTestCase {
         XCTAssertNil(SessionRowView.metadataLabel(for: session, showsMessageCount: false, showsWorkspace: false))
     }
 
-    func testSessionRowAccessibilityStateLabelsIncludeStreamingPinnedAndCachedState() {
+    func testSessionRowAccessibilityStateLabelsIncludeAttentionPinnedAndCachedState() {
         let session = SessionSummary(
             sessionId: "stateful",
             pinned: true,
@@ -91,13 +91,93 @@ final class SessionIdentityTests: XCTestCase {
             isStreaming: false
         )
 
+        // Cached rows say nothing about attention: the stream fields in a
+        // cached summary are as old as the cache.
         XCTAssertEqual(
             SessionRowView.accessibilityStateLabels(for: session, isViewingCachedData: true),
-            ["Streaming", "Pinned", "Cached"]
+            ["Pinned", "Cached"]
+        )
+        XCTAssertEqual(
+            SessionRowView.accessibilityStateLabels(for: session, isViewingCachedData: false),
+            ["Working", "Pinned"]
         )
         XCTAssertEqual(
             SessionRowView.accessibilityStateLabels(for: SessionSummary(sessionId: "plain"), isViewingCachedData: false),
             []
+        )
+    }
+
+    func testExternalSessionSourceLabelsPreferServerValueAndUseStableFallbacks() {
+        let serverLabeled = SessionSummary(
+            sessionId: "telegram",
+            isCliSession: true,
+            rawSource: "telegram",
+            sessionSource: "messaging",
+            sourceLabel: "Telegram Business"
+        )
+        let legacyTelegram = SessionSummary(
+            sessionId: "legacy-telegram",
+            rawSource: "telegram",
+            sessionSource: "messaging"
+        )
+        let legacyCLI = SessionSummary(sessionId: "cli", sourceTag: "cli")
+
+        XCTAssertTrue(serverLabeled.requiresExternalImport)
+        XCTAssertEqual(serverLabeled.sourceDisplayLabel, "Telegram Business")
+        XCTAssertTrue(legacyTelegram.requiresExternalImport)
+        XCTAssertEqual(legacyTelegram.sourceDisplayLabel, "Telegram")
+        XCTAssertTrue(legacyCLI.requiresExternalImport)
+        XCTAssertEqual(legacyCLI.sourceDisplayLabel, "CLI")
+    }
+
+    func testWebUISourceOverridesStaleCLIFlag() {
+        let imported = SessionSummary(
+            sessionId: "imported",
+            isCliSession: true,
+            rawSource: "telegram",
+            sessionSource: "webui",
+            sourceLabel: "WebUI"
+        )
+
+        XCTAssertFalse(imported.requiresExternalImport)
+        XCTAssertNil(imported.sourceDisplayLabel)
+    }
+
+    func testSessionRowAccessibilityIncludesSourceAndReadOnlyState() {
+        let session = SessionSummary(
+            sessionId: "telegram",
+            isCliSession: true,
+            rawSource: "telegram",
+            sourceLabel: "Telegram",
+            readOnly: true
+        )
+
+        XCTAssertEqual(
+            SessionRowView.accessibilityStateLabels(for: session, isViewingCachedData: false),
+            ["Telegram", "Read-only"]
+        )
+    }
+
+    func testChatComposerReadOnlyMessageUsesServerAndOfflineState() {
+        XCTAssertEqual(
+            ChatView.composerReadOnlyMessage(
+                for: SessionSummary(sessionId: "read-only", readOnly: true),
+                isViewingCachedData: false
+            ),
+            "Read-only"
+        )
+        XCTAssertEqual(
+            ChatView.composerReadOnlyMessage(
+                for: SessionSummary(sessionId: "offline"),
+                isViewingCachedData: true
+            ),
+            "Reconnect to send messages."
+        )
+        XCTAssertNil(
+            ChatView.composerReadOnlyMessage(
+                for: SessionSummary(sessionId: "writable"),
+                isViewingCachedData: false
+            )
         )
     }
 

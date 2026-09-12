@@ -220,7 +220,7 @@ struct ChatComposerConfigLoader {
         guard let modelID = nonEmpty(modelID) else { return nil }
         let providers = Set(
             groups
-                .flatMap(\.slashAutocompleteModels)
+                .flatMap(\.allModels)
                 .filter { $0.id == modelID }
                 .compactMap { nonEmpty($0.providerID) }
         )
