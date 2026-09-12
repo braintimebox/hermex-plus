@@ -261,28 +261,12 @@ struct ChatTranscriptView: View {
                         onScrollToLatestContent(proxy, true, "newRow")
                     }
                 }
-                .onChange(of: streamingScrollTrigger) {
-                    // Streaming content grows without changing messages.count
-                    // (same message, more tokens). Follow when the app owns
-                    // the viewport AND a stream is active — without the
-                    // stream guard, non-streaming events (loadMessages,
-                    // reloadMessages) that also bump the trigger would cause
-                    // a redundant scrollTo alongside onChange(of: messages.count).
-                    guard shouldFollowLatestMessage, activeStreamID != nil else { return }
-                    onScrollToLatestContent(proxy, true, "streamingToken")
-                }
                 .onChange(of: cacheFirstReconcileScrollToken) {
                     // Cache-first reconcile (#289): the server transcript just replaced
                     // the lighter cached render, so snap back to the bottom (no
                     // animation) unless the reader owns the viewport.
                     guard shouldFollowLatestMessage else { return }
                     onScrollToLatestContent(proxy, false, "cacheReconcile")
-                }
-                .onChange(of: clarificationPromptID) {
-                    guard clarificationPromptID != nil, shouldFollowLatestMessage else { return }
-                    onScrollToBottom(proxy)
-                        releasingHold { onScrollToLatestContent(proxy, true) }
-                    }
                 }
                 .onChange(of: streamingScrollTrigger) {
                     if isFollowingLatestContent {
@@ -325,13 +309,8 @@ struct ChatTranscriptView: View {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                     // Keyboard may show while the reader is up (e.g. FAB tap):
-                    // only the app owner may snap to the bottom; a reader who
-                    // scrolled up must NOT get yanked by the keyboard event.
-                    if shouldFollowLatestMessage, isScrolledNearBottom {
-                        onScrollToBottom(proxy)
-                    if isScrolledNearBottom {
-                        releasingHold { onScrollToBottom(proxy) }
-                    }
+                    guard isFollowingLatestContent, isScrolledNearBottom else { return }
+                    releasingHold { onScrollToBottom(proxy) }
                 }
             }
         }
