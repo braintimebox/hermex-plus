@@ -248,29 +248,19 @@ struct ChatScrollObserver: UIViewRepresentable {
             scrollView = nil
         }
 
-        /// Reports metrics the moment a finger lands on the scroll view.
-        /// The contentOffset/contentSize KVO only fires once the offset
-        /// actually moves, so without this hook scroll ownership stays `.app`
-        /// through the stream token that lands between touch and first
-        /// movement — and the `.sizeChanges` bottom anchor then yanks the
-        /// viewport down. Flipping ownership at pan `.began` closes that
-        /// window (see the attach comment above).
-        @objc private func handlePanGesture(_ recognizer: UIPanGestureRecognizer) {
-            switch recognizer.state {
-            case .began, .changed:
-                reportMetrics(delivery: .immediate)
-            default:
-                break
-            }
-        }
 
-        func reportMetrics(delivery: MetricDelivery) {
-            guard let scrollView else { return }
         // MARK: Follow latch events
 
         @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
             switch gesture.state {
             case .began:
+                // Report metrics the moment the finger lands, before the offset
+                // moves: the contentOffset/contentSize KVO only fires once the
+                // offset actually changes, so without this the reader's ownership
+                // is not registered for the stream token that lands between touch
+                // and first movement — and the sizeChange bottom anchor then yanks
+                // the viewport down.
+                reportMetrics(delivery: .immediate)
                 cancelSettle()
                 isUserScrollSessionActive = true
                 onFollowEvent(.userScrollBegin)

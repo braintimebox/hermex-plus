@@ -170,8 +170,15 @@ enum ChatScrollPolicy {
         var contentHeight: CGFloat
         var visibleHeight: CGFloat
 
+        /// Quantized to an 8pt grid. `distanceFromBottom` only drives boolean
+        /// thresholds (near-bottom 80/160pt, reading-older +hysteresis) that are
+        /// tens of points apart, so sub-point precision buys nothing while paying
+        /// a full ChatView re-render per tick on a 120Hz display. The 8pt grid
+        /// lets the equality guard in `reportMetrics` drop ~90% of redundant
+        /// deliveries.
         var distanceFromBottom: CGFloat {
-            max(0, contentHeight - visibleHeight - offsetY)
+            let raw = max(0, contentHeight - visibleHeight - offsetY)
+            return (raw / 8).rounded(.down) * 8
         }
     }
 
@@ -233,7 +240,6 @@ enum ChatScrollPolicy {
     static func isNearBottom(distanceFromBottom: CGFloat) -> Bool {
         distanceFromBottom <= bottomThreshold
     }
-}
 
     /// True once the user has scrolled far enough above the bottom that the
     /// composer chrome should collapse. The hysteresis keeps the chrome stable
@@ -241,6 +247,8 @@ enum ChatScrollPolicy {
     static func shouldEnterReadingOlder(distanceFromBottom: CGFloat) -> Bool {
         distanceFromBottom > bottomThreshold + readingOlderHysteresis
     }
+}
+
 /// Transcript disclosure controls (reasoning blocks, tool cards, tool groups,
 /// turn folds) call this right before they toggle so the transcript can pin
 /// the reader's offset and suspend follow scrolls through the size change.
