@@ -93,25 +93,16 @@ enum HermesShareDraft {
     static let maximumSharedAttachmentBytes = 20 * 1_024 * 1_024
     static let maximumSharedAttachmentCount = 10
 
-    // MARK: - Pasteboard Sharing (no App Groups entitlement required)
+    // MARK: - Sharing
 
-    /// Named pasteboard for share-extension-to-app communication.
-    static func openURL(withDraft draftText: String?) -> URL {
+    /// The URL that wakes the host app for a share import. Carries no payload —
+    /// the draft itself travels through the App Group container and is claimed
+    /// with a reservation, so a large draft or an attachment is never limited
+    /// by URL length.
+    static var openURL: URL {
         var components = URLComponents()
         components.scheme = urlScheme
         components.host = shareURLHost
-        
-        if let draft = draftText, !draft.isEmpty {
-            let encoded = draft.data(using: .utf8)?
-                .base64EncodedString()
-                .replacingOccurrences(of: "+", with: "-")
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: "=", with: "")
-            if let encoded {
-                components.queryItems = [URLQueryItem(name: "d", value: encoded)]
-            }
-        }
-        
         guard let url = components.url else {
             preconditionFailure("Invalid share open URL configuration")
         }
