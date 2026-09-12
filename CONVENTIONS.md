@@ -208,10 +208,36 @@ round trip, and the follow-up check is what caught it.
 | Thing | Path |
 |---|---|
 | Release pipeline | `scripts/pipelines/release_hermesplus.py` |
-| Gates (5) | `scripts/pipeline-precheck.py` |
+| Gates (7) | `scripts/pipeline-precheck.py` |
+| Gate 6 — test-lint | `scripts/lint-tests.py` |
+| Gate 7 — doc references | `scripts/check-doc-references.py` (+ tests: `scripts/tests/test_doc_references.py`) |
 | Git hook | `.githooks/pre-push` (enable: `… release_hermesplus.py install`) |
 | Host services | `ops/` (install: `… release_hermesplus.py install-server`) |
 | Status snapshot | `docs/project-snapshot.md` (generated from git) |
 | Open tracks | `docs/hermesplus-status.yaml` |
 | Agent rules | `HERMES.md` (overrides `AGENTS.md`) |
 | Build + test + release | `.github/workflows/build-ipa.yml` |
+
+---
+
+## Don't assume a cost model — measure the one you have
+
+**Rule:** before planning work around a budget (Action-minutes, API quota, storage),
+read the parameter that decides it from the live system.
+
+**Why:** the upstream-sync plan carried "≈90 billed minutes per push, the Actions
+quota is the binding constraint" — copied from `telegram-plus`, which is **private**.
+This repository is **public**, and GitHub does not bill hosted-runner minutes at all
+for public repositories, macOS included. So the plan's central constraint did not
+exist, and it shaped how the work was batched for the wrong reason.
+
+The two cases, measured rather than remembered:
+
+| Visibility | Cost of a ~9-minute macOS job |
+|---|---|
+| **public** | **0 minutes** — not billed |
+| private | ~90 billed minutes (2000/month on Free; the macOS runner is charged ×10) |
+
+`sync-upstream --status` prints the live answer as a `billing:` line, so the fact
+travels with the command instead of living in a document someone must recall. When a
+number decides how work is planned, it belongs in the output of a tool, not in prose.

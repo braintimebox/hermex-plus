@@ -93,10 +93,21 @@ def check_mirror_purity(repo: Path) -> tuple[bool, str]:
             f"invariant 1 VIOLATED: {MIRROR_REF} is {ahead} commits ahead of {UPSTREAM_REF}.\n"
             f"  The mirror must stay pure. Move those commits to main and re-mirror."
         )
+    # `origin/master` is NOT a mirror that should track upstream tip, and
+    # "behind" is not a defect to fix. In this repository it is the FORK POINT:
+    # it equals `git merge-base main upstream/master` exactly, and it must stay
+    # an ancestor of `main`. Advancing it to upstream's tip would break that —
+    # measured: with origin/master := upstream/master, `git merge-base
+    # --is-ancestor upstream/master main` returns false, and every later
+    # measurement built on the fork point becomes wrong.
+    #
+    # Two different numbers, two different names. Do not merge them:
+    #   fork point      — where our line left upstream; frozen, deliberate
+    #   upstream drift  — how many upstream commits are absent from main (below)
     if behind != 0:
         return True, (
-            f"ok  mirror pure ({MIRROR_REF} is a pure ancestor of {UPSTREAM_REF}, "
-            f"{behind} commits behind)"
+            f"ok  mirror pure ({MIRROR_REF} is the fork point, an ancestor of "
+            f"{UPSTREAM_REF}, {behind} upstream commits since — frozen by design)"
         )
     return True, f"ok  mirror pure ({MIRROR_REF} == {UPSTREAM_REF})"
 
@@ -156,8 +167,8 @@ def cmd_status(repo: Path) -> int:
         print(f"merge-base:      {merge_base[:7]} {mb_subject.split(' ', 1)[-1][:52]}")
         print(f"upstream drift:  {drift} commits (absent from main — this is the sync size)")
     mirror_lag = git(repo, "rev-list", "--count", f"{MIRROR_REF}..{UPSTREAM_REF}", check=False)
-    print(f"mirror lag:      {mirror_lag} commits (staleness of {MIRROR_REF}; refresh with "
-          f"git push origin {UPSTREAM_REF}:master)")
+    print(f"fork point lag:  {mirror_lag} commits upstream since the fork point "
+          f"(informational — {MIRROR_REF} is frozen by design, do NOT advance it)")
 
     if base:
         base_sha = git(repo, "rev-list", "-n", "1", base, check=False)
@@ -174,6 +185,34 @@ def cmd_status(repo: Path) -> int:
         theirs = set(changed_files(repo, merge_base, UPSTREAM_REF))
         shared = sorted(f for f in ours & theirs if f.endswith(".swift"))
         print(f"conflict zone:   {len(shared)} .swift files (both sides edited)")
+    # How many Action-minutes a push costs depends on repository VISIBILITY, and
+    # the two cases differ by the whole budget:
+    #
+    #   public  — GitHub does not bill hosted-runner minutes at all (macOS too)
+    #   private — 2000 min/month on Free, and the macOS runner is charged ×10,
+    #             so a ~9-minute job bills ~90 minutes and a handful of runs
+    #             exhausts the month
+    #
+    # This repository is public. A sync plan written for a private repo therefore
+    # carried a budget that does not apply, and the number was treated as the
+    # binding constraint on how the work could be batched. Rather than leave that
+    # as a note someone has to remember, it is measured here and printed.
+    visibility = "unknown"
+    try:
+        r = subprocess.run(["gh", "repo", "view", "--json", "visibility",
+                            "--jq", ".visibility"],
+                           cwd=repo, capture_output=True, text=True, timeout=15)
+        if r.returncode == 0 and r.stdout.strip():
+            visibility = r.stdout.strip().upper()
+    except Exception:
+        pass
+    if visibility == "PUBLIC":
+        print("billing:         minutes are NOT billed (repository is PUBLIC)")
+    elif visibility == "PRIVATE":
+        print("billing:         minutes ARE billed (PRIVATE repo; macOS runner costs ×10)")
+    else:
+        print("billing:         could not read visibility (gh unavailable) — check before planning")
+
     print("=" * 68)
     return 0
 

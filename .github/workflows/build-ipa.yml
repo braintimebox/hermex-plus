@@ -15,6 +15,21 @@ on:
       - 'README.md'
   workflow_dispatch:
 
+# Serialise runs on main instead of letting them pile up.
+#
+# Without this, every push to `main` starts its own full macOS job and none of
+# them is cancelled — a fast correction to a broken push pays for both runs.
+# `cancel-in-progress: false` is deliberate: `main` is the deliverable branch and
+# a run that is already packaging an IPA should finish and publish its Release
+# rather than be killed half-way, which would leave a version without an
+# artifact. Queueing (rather than cancelling) keeps that guarantee.
+#
+# This is about wall-clock and release hygiene, not minutes: the repository is
+# public, so hosted-runner minutes are not billed at all.
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Fast fail: release invariants before spending a macOS runner.
   guard:
@@ -26,10 +41,10 @@ jobs:
       - name: Check release invariants
         run: python3 scripts/release-check.py --allow-untagged
       - name: Check local gates
-        # Runs all six gates the pre-push hook runs, so a push made with
+        # Runs all seven gates the pre-push hook runs, so a push made with
         # `--no-verify` (which skips the hook entirely) is still caught here.
-        # Gates 4 and 5 are advisory and print warnings without failing; gate 6
-        # (test-lint) is blocking and rejects race-shaped test assertions.
+        # Gates 4 and 5 are advisory and print warnings without failing; gates 6
+        # (test-lint) and 7 (doc references) are blocking.
         run: |
           python3 -c "import yaml, sys" 2>/dev/null || pip install -q pyyaml
           python3 scripts/pipeline-precheck.py
@@ -221,10 +236,50 @@ jobs:
           path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30
 
+      - name: Guard — never re-publish a delivered version
+        # The single most important check in this workflow.
+        #
+        # `softprops/action-gh-release` UPDATES an existing Release when the tag
+        # already exists — it does not fail. Combined with `if: push`, that meant
+        # every push to `main` after a release rebuilt the IPA and overwrote the
+        # artifact of a version that was ALREADY handed to the user. Measured on
+        # v3.6.1: release published 22:06:12Z, its .ipa asset re-created at
+        # 22:17:10Z by a later run of an unrelated commit. Four consecutive runs
+        # did this.
+        #
+        # The failure is silent and the version number lies afterwards: a tester
+        # installing "3.6.1" cannot know which build they have. That is exactly
+        # the "1.5.5 twice" defect the version invariant exists to prevent — the
+        # workflow was reproducing it structurally, not through anyone's mistake.
+        #
+        # Publishing is skipped when the tag already has a Release WITH an
+        # artifact. The tag alone is not enough: a tag exists from the moment the
+        # release step first runs, and the point is to distinguish "number never
+        # delivered" from "number delivered, do not touch".
+        id: delivered
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.VER }}"
+          if gh release view "v${VER}" --repo "${{ github.repository }}" \
+               --json assets --jq 'select(.assets | length > 0) | "has-asset"' 2>/dev/null \
+               | grep -q has-asset; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${VER} is already RELEASED with an artifact — not re-publishing."
+            echo "This run's IPA stays available as a workflow artifact for inspection."
+            echo "If the app content changed, bump VERSION (one release = one version)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${VER} is not delivered yet — the Release will be published."
+          fi
+
       - name: Create Release
         # Only on a real push. A manual workflow_dispatch run (used to verify
         # the suite without releasing) must not publish a release.
-        if: github.event_name == 'push'
+        # And never when the guard above found a delivered version.
+        if: github.event_name == 'push' && steps.delivered.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VER }}
