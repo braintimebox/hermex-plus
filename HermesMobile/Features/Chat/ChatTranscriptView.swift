@@ -550,13 +550,10 @@ struct ChatTranscriptView: View {
         // no scroll view). Snap, never animate: an animated ride down through
         // the lazy rows of a long transcript forces a re-layout of the markdown
         // tree on main — the same mechanism that rendered the black screen on ↓.
-        guard let identity else { return }
+        guard let renderID else { return }
 
         await Task.yield()
-        proxy.scrollTo(identity, anchor: .top)
-           scrollPositionController.restoreAfterPrepend() {
-            return
-        }
+        proxy.scrollTo(renderID, anchor: .top)
 
         guard let renderID else { return }
 
@@ -612,7 +609,7 @@ struct ChatTranscriptView: View {
                 errorMessage: clarificationErrorMessage,
                 onSubmit: onSubmitClarification
             )
-            .id(clarificationPrompt.id)
+            .id(clarificationPromptID)
             .frame(maxWidth: .infinity, alignment: .leading)
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
         }

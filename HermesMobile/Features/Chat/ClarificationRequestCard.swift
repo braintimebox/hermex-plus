@@ -44,7 +44,7 @@ struct ClarificationRequestInset: View {
             // No crossfade, and nothing is drawn over the composer below.
             ZStack(alignment: .bottom) {
                 if isExpanded {
-                    ClarificationRequestCard(
+                    ClarificationRequestBarCard(
                         prompt: prompt,
                         isResponding: isResponding,
                         errorMessage: errorMessage,
@@ -155,7 +155,7 @@ struct ClarificationRequestBar: View {
     }
 }
 
-struct ClarificationRequestCard: View {
+struct ClarificationRequestBarCard: View {
     let prompt: ClarificationPromptState
     let isResponding: Bool
     let errorMessage: String?
