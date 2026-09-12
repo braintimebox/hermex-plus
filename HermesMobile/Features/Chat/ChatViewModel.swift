@@ -321,6 +321,14 @@ final class ChatViewModel {
     /// Bumped when the cache-first reconcile swaps the cached render for the
     /// server's transcript (#289); the transcript snaps to the bottom on it.
     var cacheFirstReconcileScrollToken: Int = 0
+
+        var hasStreamingAssistantMessageContent: Bool {
+        guard let streamingAssistantMessageID,
+              let message = messages.first(where: { $0.messageId == streamingAssistantMessageID })
+        else { return false }
+
+        return message.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
     @ObservationIgnored private var sendErrorIsFromStreamRecovery = false
     /// Set while `POST /api/session/clear` is in flight. A send or a second
     /// `/clear` refuses while it is set, so the clear response cannot wipe a

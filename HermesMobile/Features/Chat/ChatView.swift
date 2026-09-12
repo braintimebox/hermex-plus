@@ -312,6 +312,9 @@ struct ChatView: View {
     /// actual card, not a fixed maximum (which would over-lift for short cards).
     @State private var clarificationCardHeight: CGFloat = 0
     @State private var isUserInteractingWithScroll = false
+    /// Upstream's follow latch: the single owner of who may move the
+    /// viewport. Replaces our `ScrollOwnershipState`.
+    @State private var followLatch = ChatScrollPolicy.FollowLatch()
     /// Our spacing constants: the transcript reads a block apart, rows inside a
     /// block a little tighter. Passed down rather than read from the view.
     private let transcriptMessageSpacing: CGFloat = 10
@@ -2024,6 +2027,11 @@ struct ChatView: View {
         )
     }
 
+    private func handleLatestRunOutcomeChange(_ outcome: TranscriptTurnRunOutcome?) {
+        guard let outcome, outcome.ending != .completed else { return }
+        expandedTurnKeys.insert(outcome.turnKey)
+    }
+
     private func toggleTurnFold(_ turnKey: String) {
         handleDisclosureToggle()
         withAnimation(ChatMotion.disclosure(reduceMotion: reduceMotion)) {
@@ -2345,7 +2353,7 @@ struct ChatView: View {
         }
     }
 
-    private func sendDraftMessage() async {
+    private func sendDraftMessage() async -> Bool {
         let submittedContent = ComposerDraftContent(text: draftMessage, quotes: draftQuotes)
         let submittedDraft = submittedContent.text
         let outboundMessage = ComposerQuoteMessageFormatter.message(
@@ -2368,7 +2376,7 @@ struct ChatView: View {
                     draft: submittedDraft,
                     draftRevision: submittedDraftRevision
                 )
-                return
+                return false
             }
             let result = await SlashCommandExecutor.execute(
                 text: submittedDraft,

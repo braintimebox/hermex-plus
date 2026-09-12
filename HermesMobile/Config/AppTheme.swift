@@ -206,6 +206,27 @@ enum StreamedTextAnimationSettings {
 }
 
 enum ChatTranscriptDisplaySettings {
+    static func shouldShowAssistantTypingIndicator(
+        hasActiveStream: Bool,
+        isCancellingStream: Bool,
+        hasStreamingAssistantMessage: Bool,
+        hasPendingClarificationPrompt: Bool = false,
+        liveReasoningText: String,
+        hasLiveToolCalls: Bool,
+        showsThinkingAndToolCards: Bool
+    ) -> Bool {
+        guard hasActiveStream, !isCancellingStream else { return false }
+        guard !hasStreamingAssistantMessage else { return false }
+        guard !hasPendingClarificationPrompt else { return false }
+
+        guard showsThinkingAndToolCards else {
+            return true
+        }
+
+        guard liveReasoningText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return !hasLiveToolCalls
+    }
+
     static let showsThinkingAndToolCardsKey = "chatTranscript.showsThinkingAndToolCards"
     static let thinkingCardsStartExpandedKey = "chatTranscript.thinkingCardsStartExpanded"
     static let toolCardsStartExpandedKey = "chatTranscript.toolCardsStartExpanded"

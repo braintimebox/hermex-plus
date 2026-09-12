@@ -626,6 +626,7 @@ struct ChatTranscriptView: View {
         }
     }
 
+    @ViewBuilder
     private var workingRow: some View {
         if let workingRowStartedAt {
             ChatWorkingRowView(startedAt: workingRowStartedAt)
