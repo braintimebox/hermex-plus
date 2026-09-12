@@ -2859,12 +2859,10 @@ final class ChatViewModel {
 
         let localMessageID = "local-\(UUID().uuidString)"
         let attachmentPreparation = attachmentCoordinator.prepareForSend(localMessageID: localMessageID)
-        let messageForAPI = attachmentPreparation.chatMessageText(draft: message)
-        // Attachment-only sends show the synthesized text in the bubble, matching
-        // what a reload from the server displays; text sends keep the bare draft.
-        let displayText = message.isEmpty ? messageForAPI : message
 
-        // Prepend quoted text as blockquote when replying
+        // Prepend quoted text as blockquote when replying. Reply is ours: the
+        // quote has to reach both the bubble (displayContent) and the server
+        // (messageForAPI), otherwise replying silently loses the quote.
         let finalContent: String
         if let quote = quotedMessage {
             let quotedBlock = quote.text
@@ -2877,15 +2875,15 @@ final class ChatViewModel {
             finalContent = message
         }
 
-        return await performChatSend(
-            sessionID: sessionID,
-            localMessageID: localMessageID,
-            displayContent: finalContent,
-            messageForAPI: attachmentPreparation.chatMessageText(draft: finalContent),
+        // Attachment-only sends show the synthesized text in the bubble, matching
+        // what a reload from the server displays; text sends keep the bare draft.
+        let messageForAPI = attachmentPreparation.chatMessageText(draft: finalContent)
+        let displayContent = finalContent.isEmpty ? messageForAPI : finalContent
+
         let didStart = await performChatSend(
             sessionID: sessionID,
             localMessageID: localMessageID,
-            displayContent: displayText,
+            displayContent: displayContent,
             messageForAPI: messageForAPI,
             messageAttachments: attachmentPreparation.messageAttachments,
             apiPayloads: attachmentPreparation.apiPayloads,

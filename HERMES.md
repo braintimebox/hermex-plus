@@ -319,6 +319,8 @@ scripts/check-swift-file-sizes  ← лимит 500 LOC на файл (найде
 scripts/upstream-watch          ← слежка за hermes-webui (сервер)
 scripts/webui-json              ← JSON-запросы к серверу (нужен HERMES_WEBUI_BASE_URL)
 scripts/verify_kanban_reference_server.py
+scripts/benchmark-math-formatting + scripts/benchmarks/MathFormatting.swift
+                                ← замер стоимости форматирования math в стриминге
 ```
 
 ### GitHub Actions
