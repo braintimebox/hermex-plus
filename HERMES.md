@@ -244,13 +244,17 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
     ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 8 гейтов (вызывается хуком И CI)
+scripts/pipeline-precheck.py                ← 9 гейтов (вызывается хуком И CI)
 scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
 scripts/check-doc-references.py             ← гейт 7: ссылки на несуществующее
 scripts/check-swift-structural-balance.py   ← гейт 8: баланс скобок против ОБОИХ родителей
                                               (union двух сторон конфликта теряет `}` в конце
                                                стороны; Swift показывает это лавиной
                                                несвязанных ошибок — стоило 5 прогонов CI)
+scripts/check-duplicate-declarations.py     ← гейт 9: одно объявление дважды в одном типе
+                                              (`invalid redeclaration of 'x'` × N = один
+                                               склеенный блок; калиброван по enclosing-типу,
+                                               var vs func и сигнатуре — иначе 2505 ложных)
 scripts/tests/test_doc_references.py        ← юнит-тесты гейта 7 (10 кейсов, запускать после правки)
 docs/agents/sync-layers.md                  ← три слоя: последовательность / сборка / pipeline
 scripts/upstream-rehearse.py                ← разведка upstream-merge (рабочий репо не трогает)
@@ -370,7 +374,7 @@ macOS-джобу до конца.
 
 ```
 Слой 1 — инструкции и процесс      [готов]
-  ✓ release_hermesplus.py + pipeline-precheck (8 гейтов)
+  ✓ release_hermesplus.py + pipeline-precheck (9 гейтов)
   ✓ sync-upstream (merge, не rebase)
   ✓ upstream-rehearse.py (разведка конфликтов, 0 CI-минут)
   ✓ project_snapshot (статус из git)

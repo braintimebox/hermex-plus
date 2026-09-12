@@ -75,10 +75,6 @@ struct ChatTranscriptView: View {
     let scrollOwnership: ScrollOwnershipState
     /// Derived from scrollOwnership — no environment cascade needed.
     private var scrollOwner: ChatScrollOwner { scrollOwnership.owner }
-    private var showsScrollToBottomButton: Bool { scrollOwnership.owner == .user }
-    @Environment(\.isAutoScrollPaused) private var isAutoScrollPaused
-    @Environment(\.latestTranscriptMessageRole) private var latestTranscriptMessageRole
-    @Environment(\.isScrolledNearBottom) private var isScrolledNearBottom
     /// Start date for the "Working for" tail row; nil hides the row.
     let workingRowStartedAt: Date?
     let showsScrollToBottomButton: Bool

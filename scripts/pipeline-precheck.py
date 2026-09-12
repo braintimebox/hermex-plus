@@ -24,6 +24,10 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
                                      that sat at the end of a side; Swift then
                                      reports it as a cascade of unrelated
                                      errors, which cost five CI runs)
+    9. duplicate declarations        no member declared twice in one type (the
+                                     same union leaves both copies of a field —
+                                     `invalid redeclaration of 'x'` × N, which
+                                     reads as N bugs but is one spliced block)
 
     Checks are fail-fast: the first BLOCKER stops the push.
 
@@ -83,7 +87,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/8] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1/9] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -102,7 +106,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/8] conflict markers in tracked files")
+    print("[2/9] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -127,7 +131,7 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/8] pbxproj registration of new .swift files")
+    print("[3/9] pbxproj registration of new .swift files")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -159,7 +163,7 @@ def check_pbxproj_registration() -> int:
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/8] upstream-owned files not modified")
+    print("[4/9] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -192,7 +196,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/8] upstream drift (advisory)")
+    print("[5/9] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -220,7 +224,7 @@ def check_test_lint() -> int:
     hours later in the same session — a note asks the next person to remember and
     to judge whether it applies; a gate does not.
     """
-    print("[6/8] test-lint (race-shaped assertions)")
+    print("[6/9] test-lint (race-shaped assertions)")
     script = ROOT / "scripts" / "lint-tests.py"
     if not script.exists():
         print("      linter not found — skipped")
@@ -249,7 +253,7 @@ def check_doc_references() -> int:
     it is gone — is recognised by the absence wording on the same line, which is
     how the tools register already writes those entries.
     """
-    print("[7/8] doc references resolve")
+    print("[7/9] doc references resolve")
     script = ROOT / "scripts" / "check-doc-references.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -284,7 +288,7 @@ def check_swift_structural_balance() -> int:
 
     Blocking, not advisory: a dropped brace is never a judgment call.
     """
-    print("[8/8] swift structural balance vs both parents")
+    print("[8/9] swift structural balance vs both parents")
     script = ROOT / "scripts" / "check-swift-structural-balance.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -302,6 +306,39 @@ def check_swift_structural_balance() -> int:
     return r.returncode
 
 
+
+def check_duplicate_declarations() -> int:
+    """Reject a change that declares the same member twice in one type.
+
+    The companion to gate 8. A brace can be balanced and the file still not
+    compile: when a union pastes both sides of a conflict, a whole block of
+    declarations appears twice. Swift reports `invalid redeclaration of 'x'`
+    once per name — in this merge, twenty-odd of them across ChatViewModel and
+    ChatTranscriptView, which reads as twenty mistakes rather than one block.
+
+    The checker groups declarations by their ENCLOSING top-level type, treats a
+    property and a func of the same name as different declarations, and compares
+    funcs by their full parameter list so overloads pass. That calibration
+    matters: an earlier version grouped by indentation alone and produced 2505
+    false hits, which is a gate someone switches off.
+    """
+    print("[9/9] duplicate declarations in the same type scope")
+    script = ROOT / "scripts" / "check-duplicate-declarations.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[9/9]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -311,6 +348,7 @@ CHECKS = {
     6: check_test_lint,
     7: check_doc_references,
     8: check_swift_structural_balance,
+    9: check_duplicate_declarations,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

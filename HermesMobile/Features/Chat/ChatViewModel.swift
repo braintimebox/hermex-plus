@@ -318,19 +318,11 @@ final class ChatViewModel {
     private(set) var latestRunOutcome: TranscriptTurnRunOutcome?
     var activeStreamRecoveryState: ActiveStreamRecoveryState { streamCoordinator.recoveryState }
     var liveTokensPerSecond: Double? { streamCoordinator.liveTokensPerSecond }
-    private(set) var errorMessage: String?
-    private(set) var sendErrorMessage: String? {
-        didSet { sendErrorIsFromStreamRecovery = false }
-    }
     @ObservationIgnored private var sendErrorIsFromStreamRecovery = false
-    private(set) var messageActionErrorMessage: String?
-    private(set) var cacheErrorMessage: String?
-
     /// Set while `POST /api/session/clear` is in flight. A send or a second
     /// `/clear` refuses while it is set, so the clear response cannot wipe a
     /// message the user started inside that window (#389).
     private(set) var isClearingConversation = false
-    private(set) var lastError: Error?
     private(set) var displayTitle: String
     private(set) var listeningMessageID: String?
     private(set) var streamingScrollTrigger = 0
@@ -344,11 +336,6 @@ final class ChatViewModel {
     /// cache-first render, or the skill catalog turning sent `/slug` text into
     /// chips. A reader who was pinned to the bottom is put back there.
     private(set) var transcriptRelayoutScrollToken = 0
-    private var hasPrimedInitialCachedMessages = false
-    @ObservationIgnored private var pendingStreamingScrollTriggerTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingAssistantTokenChunks: [String] = []
-    @ObservationIgnored private var pendingReasoningChunks: [String] = []
-    @ObservationIgnored private var pendingStreamingContentFlushTask: Task<Void, Never>?
     private(set) var completedToolCallGroups: [ToolCallGroup] = []
     private var completedToolCallGroupLookup = ToolCallGroupAnchorLookup()
     private(set) var completedReasoningGroups: [ReasoningGroup] = [] {
@@ -529,12 +516,6 @@ final class ChatViewModel {
     private(set) var streamingHapticPulseTrigger = 0
     private var streamingHapticPulseThrottle = ChatHaptics.StreamingPulseThrottle()
     private(set) var responseCompletionNeedsTranscriptRefresh = false
-    private(set) var modelCatalogGroups: [ModelCatalogGroup] = []
-    private(set) var agentCommands: [AgentCommand] = []
-    private(set) var workspaceRoots: [WorkspaceRoot] = []
-    private(set) var workspaceSuggestions: [String] = []
-    private(set) var personalitySuggestions: [String] = ["none"]
-    private(set) var skillSlashSuggestions: [SkillSlashSuggestion] = []
     /// The same skills in the shape the chip tokenizer needs, kept beside the
     /// list so the transcript's `body` never rebuilds it. Always assigned
     /// through `applySkillSlashSuggestions(_:)`.
@@ -572,15 +553,6 @@ final class ChatViewModel {
     /// through every folder its candidates name, a batch at a time, so a long
     /// transcript is answered in full without one burst of requests.
     private static let fileChipDirectoryLimit = 20
-    private(set) var profileOptions: [ProfileSummary] = []
-    private(set) var isSingleProfileMode = false
-    private(set) var selectedProfileName: String?
-    private(set) var selectedReasoningEffort: String?
-    /// Model-aware effort vocabulary (`supported_efforts` from `GET /api/reasoning`).
-    /// `nil` on older servers → the composer falls back to the static list (issue #18).
-    private(set) var supportedReasoningEfforts: [String]?
-    /// `supports_reasoning_effort`; `false` hides the composer effort control.
-    private(set) var supportsReasoningEffort: Bool?
     /// Drops out-of-order `GET /api/reasoning` responses after rapid model switches
     /// so the gating never reflects a stale model (upstream #3750 class of bug).
     private var reasoningGatingFetchToken = 0
@@ -603,13 +575,6 @@ final class ChatViewModel {
     var localAttachmentPreviews: [String: [String: Data]] { attachmentCoordinator.localAttachmentPreviews }
     private(set) var pinnedLocalNotices: [String] = []
     private(set) var steeringConfirmationNotice: String?
-    var approvalPrompt: ApprovalPromptState? { pendingActionCoordinator.approvalPrompt }
-    var isRespondingToApproval: Bool { pendingActionCoordinator.isRespondingToApproval }
-    var approvalErrorMessage: String? { pendingActionCoordinator.approvalErrorMessage }
-    var isSessionApprovalBypassEnabled: Bool { pendingActionCoordinator.isSessionApprovalBypassEnabled }
-    var clarificationPrompt: ClarificationPromptState? { pendingActionCoordinator.clarificationPrompt }
-    var isRespondingToClarification: Bool { pendingActionCoordinator.isRespondingToClarification }
-    var clarificationErrorMessage: String? { pendingActionCoordinator.clarificationErrorMessage }
     private(set) var currentGoal: SubmittedGoal?
     private(set) var isSubmittingGoal = false
     private(set) var goalErrorMessage: String?
@@ -5731,7 +5696,7 @@ final class ChatViewModel {
         if isActiveStreamReplayConnection {
             let messageID = ensureStreamingAssistantMessage()
             let flushedContent = messages.first(where: { $0.messageId == messageID })?.content ?? ""
-            let effectiveContent = flushedContent + pendingAssistantTokenChunks.joined()
+            let effectiveContent = flushedContent + pendingAssistantTokenText
             remainder = deduplicatedReplayToken(token, existingContent: effectiveContent)
         } else {
             _ = ensureStreamingAssistantMessage()
