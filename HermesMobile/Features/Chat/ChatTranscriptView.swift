@@ -468,7 +468,7 @@ struct ChatTranscriptView: View {
             onRegenerate: onRegenerate,
             onEdit: onEdit,
             onFork: onFork,
-            onCopy: onCopy
+            onCopy: onCopy,
             onReply: onReply,
             onForward: onForward,
             onSave: onSave,
