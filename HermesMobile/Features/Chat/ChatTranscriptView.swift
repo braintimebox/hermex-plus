@@ -321,7 +321,7 @@ struct ChatTranscriptView: View {
             }
             .onChange(of: streamingScrollTrigger) {
                 if isFollowingLatestContent {
-                    releasingHold { onScrollToLatestContent(proxy, true) }
+                    releasingHold { onScrollToLatestContent(proxy, true, "streaming") }
                 }
             }
     }
@@ -341,7 +341,7 @@ struct ChatTranscriptView: View {
                     pinReader(proxy: proxy)
                     return
                 }
-                releasingHold { onScrollToLatestContent(proxy, false) }
+                releasingHold { onScrollToLatestContent(proxy, false, "relayout") }
             }
             .onChange(of: clarificationPromptID) {
                 // The bar above the composer just grew the bottom inset; keep
