@@ -185,135 +185,191 @@ struct ChatTranscriptView: View {
     private var transcriptScrollView: some View {
         ScrollViewReader { proxy in
             GeometryReader { viewport in
-                let viewportWidth = max(0, viewport.size.width)
-                let contentWidth = transcriptContentWidth(for: viewportWidth)
-
-                ZStack(alignment: .bottom) {
-                    ScrollView {
-                        transcriptScrollContent(
-                            proxy: proxy,
-                            viewportWidth: viewportWidth,
-                            contentWidth: contentWidth
-                        )
-                    }
-                    .defaultScrollAnchor(
-                        ChatScrollPolicy.initialTranscriptAnchor,
-                        for: .initialOffset
-                    )
-                    .defaultScrollAnchor(
-                        ChatScrollPolicy.sizeChangeAnchor(
-                            shouldFollowLatestMessage: shouldFollowLatestMessage,
-                            isDisclosureSettling: isDisclosureSettling
-                        ),
-                        for: .sizeChanges
-                    )
-                    .frame(width: viewportWidth)
-                    .refreshable {
-                        if hasOlderMessages {
-                            await loadOlderMessagesPreservingPosition(proxy: proxy)
-                        } else {
-                            await onLoadMessages()
-                        }
-                    }
-                    .scrollDismissesKeyboard(.interactively)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        Color.clear
-                            .frame(height: transcriptBottomInsetHeight)
-                            .accessibilityHidden(true)
-                    }
-                    .adaptiveSoftScrollEdges()
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            onDismissKeyboard()
-                        }
-                    )
-
-                    if showsScrollToBottomButton {
-                        ChatScrollToBottomButton(
-                            bottomPadding: scrollToBottomButtonBottomPadding,
-                            onTap: {
-                                releasingHold { onScrollToBottom(proxy) }
-                            }
-                        )
-                        .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
-                    }
-                }
-                .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsScrollToBottomButton)
-                .background(Color(.systemBackground))
-                .background {
-                    // Overscroll / bounce region below the last message is not
-                    // covered by the transcript background in dark mode — scrolling
-                    // past the tail (or the .sizeChanges anchor gluing to the bottom
-                    // during streaming) can flash a dark gap. Paint the scroll area's
-                    // backdrop explicitly so the bounce zone matches the theme.
-                    Color(.systemBackground).ignoresSafeArea()
-                }
-                .onChange(of: messages.count) {
-                    // Only follow when the APP owns the viewport. A stale
-                    // ownership (linger after a stream) must not yank the
-                    // viewport while the user reads older text.
-                    guard shouldFollowLatestMessage else { return }
-                    guard isFollowingLatestContent else { return }
-
-                    if latestTranscriptMessageRole == "user" {
-                        releasingHold { onScrollToLatestTranscriptMessage(proxy) }
-                    } else {
-                        onScrollToLatestContent(proxy, true, "newRow")
-                    }
-                }
-                .onChange(of: cacheFirstReconcileScrollToken) {
-                    // Cache-first reconcile (#289): the server transcript just replaced
-                    // the lighter cached render, so snap back to the bottom (no
-                    // animation) unless the reader owns the viewport.
-                    guard shouldFollowLatestMessage else { return }
-                    onScrollToLatestContent(proxy, false, "cacheReconcile")
-                }
-                .onChange(of: streamingScrollTrigger) {
-                    if isFollowingLatestContent {
-                        releasingHold { onScrollToLatestContent(proxy, true) }
-                    }
-                }
-                .onChange(of: transcriptRelayoutScrollToken) {
-                    // The transcript just changed height without gaining a message —
-                    // the server render replacing the cache-first one (#289), or sent
-                    // references becoming chips (#388). A reader at the live edge is
-                    // put back there (no animation); a reader up in history keeps the
-                    // offset they were reading at, the way a disclosure toggle does.
-                    guard isFollowingLatestContent else {
-                        pinReader(proxy: proxy)
-                        return
-                    }
-                    releasingHold { onScrollToLatestContent(proxy, false) }
-                }
-                .onChange(of: clarificationPromptID) {
-                    // The bar above the composer just grew the bottom inset; keep
-                    // the latest content above it for a reader who was following.
-                    guard clarificationPromptID != nil, isFollowingLatestContent else { return }
-                    releasingHold { onScrollToBottom(proxy) }
-                }
-                .onChange(of: pinnedScrollTarget) {
-                    guard let target = pinnedScrollTarget else { return }
-                    // Resolve the pinned message id → its transcript row's ForEach
-                    // identity (messageId ?? renderID), then scroll to it. The
-                    // scroll target MUST match the ForEach `.id(transcriptMessage.id)`
-                    // or `ScrollViewProxy.scrollTo` is silently ignored. A pinned id
-                    // can be stale (e.g. the message was compacted away), so scroll
-                    // only when the row still exists.
-                    let row = displayedTranscriptMessages.first { $0.message.id == target }
-                    if let row {
-                        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                            proxy.scrollTo(row.id, anchor: .top)
-                        }
-                    }
-                    onPinnedScrollConsumed()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    // Keyboard may show while the reader is up (e.g. FAB tap):
-                    guard isFollowingLatestContent, isScrolledNearBottom else { return }
-                    releasingHold { onScrollToBottom(proxy) }
-                }
+                transcriptViewport(proxy: proxy, viewport: viewport)
             }
         }
+    }
+
+    /// The viewport — the scroller, its chrome, and the follow observers — split
+    /// into separate expressions on purpose.
+    ///
+    /// It used to be one expression, and that is what the type checker gave up on
+    /// here ("unable to type-check this expression in reasonable time",
+    /// ChatTranscriptView.swift:258) — the same failure that surfaced as
+    /// `ForEach(Binding<…>)` on the transcript rows. No view gains or loses a
+    /// modifier in the split; only the solver's job gets smaller.
+    private func transcriptViewport(
+        proxy: ScrollViewProxy,
+        viewport: GeometryProxy
+    ) -> some View {
+        let viewportWidth = max(0, viewport.size.width)
+        let contentWidth = transcriptContentWidth(for: viewportWidth)
+
+        let chrome = viewportChrome(
+            proxy: proxy,
+            viewportWidth: viewportWidth,
+            contentWidth: contentWidth
+        )
+        let following = liveEdgeHandlers(chrome, proxy: proxy)
+        return readerPositionHandlers(following, proxy: proxy)
+    }
+
+    /// The scroller, the ↓ overlay, and the chrome both of them share.
+    private func viewportChrome(
+        proxy: ScrollViewProxy,
+        viewportWidth: CGFloat,
+        contentWidth: CGFloat
+    ) -> some View {
+        ZStack(alignment: .bottom) {
+            transcriptScroller(
+                proxy: proxy,
+                viewportWidth: viewportWidth,
+                contentWidth: contentWidth
+            )
+
+            if showsScrollToBottomButton {
+                ChatScrollToBottomButton(
+                    bottomPadding: scrollToBottomButtonBottomPadding,
+                    onTap: {
+                        releasingHold { onScrollToBottom(proxy) }
+                    }
+                )
+                .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
+            }
+        }
+        .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsScrollToBottomButton)
+        .background(Color(.systemBackground))
+        .background {
+            // Overscroll / bounce region below the last message is not
+            // covered by the transcript background in dark mode — scrolling
+            // past the tail (or the .sizeChanges anchor gluing to the bottom
+            // during streaming) can flash a dark gap. Paint the scroll area's
+            // backdrop explicitly so the bounce zone matches the theme.
+            Color(.systemBackground).ignoresSafeArea()
+        }
+    }
+
+    private func transcriptScroller(
+        proxy: ScrollViewProxy,
+        viewportWidth: CGFloat,
+        contentWidth: CGFloat
+    ) -> some View {
+        ScrollView {
+            transcriptScrollContent(
+                proxy: proxy,
+                viewportWidth: viewportWidth,
+                contentWidth: contentWidth
+            )
+        }
+        .defaultScrollAnchor(
+            ChatScrollPolicy.initialTranscriptAnchor,
+            for: .initialOffset
+        )
+        .defaultScrollAnchor(
+            ChatScrollPolicy.sizeChangeAnchor(
+                shouldFollowLatestMessage: shouldFollowLatestMessage,
+                isDisclosureSettling: isDisclosureSettling
+            ),
+            for: .sizeChanges
+        )
+        .frame(width: viewportWidth)
+        .refreshable {
+            if hasOlderMessages {
+                await loadOlderMessagesPreservingPosition(proxy: proxy)
+            } else {
+                await onLoadMessages()
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: transcriptBottomInsetHeight)
+                .accessibilityHidden(true)
+        }
+        .adaptiveSoftScrollEdges()
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                onDismissKeyboard()
+            }
+        )
+    }
+
+    /// Follow the live edge: a new row, a live token flush, a cache-first
+    /// reconcile. Only ever while the app owns the viewport.
+    @ViewBuilder
+    private func liveEdgeHandlers<V: View>(_ content: V, proxy: ScrollViewProxy) -> some View {
+        content
+            .onChange(of: messages.count) {
+                // Only follow when the APP owns the viewport. A stale
+                // ownership (linger after a stream) must not yank the
+                // viewport while the user reads older text.
+                guard shouldFollowLatestMessage else { return }
+                guard isFollowingLatestContent else { return }
+
+                if latestTranscriptMessageRole == "user" {
+                    releasingHold { onScrollToLatestTranscriptMessage(proxy) }
+                } else {
+                    onScrollToLatestContent(proxy, true, "newRow")
+                }
+            }
+            .onChange(of: cacheFirstReconcileScrollToken) {
+                // Cache-first reconcile (#289): the server transcript just replaced
+                // the lighter cached render, so snap back to the bottom (no
+                // animation) unless the reader owns the viewport.
+                guard shouldFollowLatestMessage else { return }
+                onScrollToLatestContent(proxy, false, "cacheReconcile")
+            }
+            .onChange(of: streamingScrollTrigger) {
+                if isFollowingLatestContent {
+                    releasingHold { onScrollToLatestContent(proxy, true) }
+                }
+            }
+    }
+
+    /// Keep the reader where they are: a height change without a new row, a
+    /// clarification bar growing the inset, a pinned message, the keyboard.
+    @ViewBuilder
+    private func readerPositionHandlers<V: View>(_ content: V, proxy: ScrollViewProxy) -> some View {
+        content
+            .onChange(of: transcriptRelayoutScrollToken) {
+                // The transcript just changed height without gaining a message —
+                // the server render replacing the cache-first one (#289), or sent
+                // references becoming chips (#388). A reader at the live edge is
+                // put back there (no animation); a reader up in history keeps the
+                // offset they were reading at, the way a disclosure toggle does.
+                guard isFollowingLatestContent else {
+                    pinReader(proxy: proxy)
+                    return
+                }
+                releasingHold { onScrollToLatestContent(proxy, false) }
+            }
+            .onChange(of: clarificationPromptID) {
+                // The bar above the composer just grew the bottom inset; keep
+                // the latest content above it for a reader who was following.
+                guard clarificationPromptID != nil, isFollowingLatestContent else { return }
+                releasingHold { onScrollToBottom(proxy) }
+            }
+            .onChange(of: pinnedScrollTarget) {
+                guard let target = pinnedScrollTarget else { return }
+                // Resolve the pinned message id → its transcript row's ForEach
+                // identity (messageId ?? renderID), then scroll to it. The
+                // scroll target MUST match the ForEach `.id(transcriptMessage.id)`
+                // or `ScrollViewProxy.scrollTo` is silently ignored. A pinned id
+                // can be stale (e.g. the message was compacted away), so scroll
+                // only when the row still exists.
+                let row = displayedTranscriptMessages.first { $0.message.id == target }
+                if let row {
+                    withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
+                        proxy.scrollTo(row.id, anchor: .top)
+                    }
+                }
+                onPinnedScrollConsumed()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                // Keyboard may show while the reader is up (e.g. FAB tap):
+                guard isFollowingLatestContent, isScrolledNearBottom else { return }
+                releasingHold { onScrollToBottom(proxy) }
+            }
     }
 
     /// Follow-driven scrolls run only while the latch is on and no disclosure
@@ -413,6 +469,12 @@ struct ChatTranscriptView: View {
             onEdit: onEdit,
             onFork: onFork,
             onCopy: onCopy
+            onReply: onReply,
+            onForward: onForward,
+            onSave: onSave,
+            onPin: onPin,
+            onSelectText: onSelectText,
+            isMessagePinned: isMessagePinned
         )
         .equatable()
         .transition(rowEntryTransition(for: transcriptMessage.message, now: now))
