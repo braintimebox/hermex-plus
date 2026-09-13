@@ -127,10 +127,13 @@ struct FileTree: Equatable {
         return (1..<parts.count).map { parts[..<$0].joined(separator: "/") }
     }
 
-    /// The top-level directories that open on first visit: every one except hidden dot-folders.
-    static func defaultExpandedPaths(in rootNodes: [FileTreeNode]) -> Set<String> {
-        Set(rootNodes.filter { $0.isDirectory && !$0.name.hasPrefix(".") }.map(\.path))
-    }
+    /// The directories that open on first visit: none.
+    ///
+    /// Upstream opened every top-level folder here. On a phone that buries the
+    /// workspace's own entries behind a wall of their children, so the tree opens
+    /// closed and the reader expands what they need — `FileTreeExpansionStore`
+    /// then remembers that choice per server and workspace.
+    static let defaultExpandedPaths: Set<String> = []
 
     /// Flattens the tree for display. Without a query, a directory's children appear only when
     /// it is expanded. With a query, every loaded directory is traversed and a node stays visible

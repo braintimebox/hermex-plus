@@ -72,6 +72,13 @@ additions were taken, and independent additions were unioned.
   no-op height-update guard are kept, so the field cannot balloon and typing
   does not relayout the transcript.
 
+### Workspace
+
+- The file tree **opens closed**. Upstream expanded every top-level folder on
+  first visit, which on a phone buries the workspace's own entries behind a wall
+  of their children. The reader now expands what they need, and that choice is
+  remembered per server and workspace.
+
 ### Sessions
 
 - Messaging-channel sessions (Telegram, Discord, Slack…) are **listed** again.

@@ -78,11 +78,11 @@ final class FileTreeTests: XCTestCase {
         XCTAssertEqual(FileTree.parentPath(of: "top.txt"), FileTree.rootPath)
     }
 
-    func testDefaultExpansionOpensTopLevelFoldersExceptHiddenOnes() {
-        var tree = FileTree()
-        tree.setChildren([dir(".git"), dir("src"), dir("docs"), file("README.md")], of: FileTree.rootPath)
-
-        XCTAssertEqual(FileTree.defaultExpandedPaths(in: tree.rootNodes), ["src", "docs"])
+    func testNoFolderOpensOnFirstVisit() {
+        // The tree opens closed so the workspace's own entries are what you see
+        // first. Upstream opened every top-level folder except hidden ones; this
+        // keeps the divergence explicit and loud if someone restores it.
+        XCTAssertTrue(FileTree.defaultExpandedPaths.isEmpty)
     }
 
     // MARK: - Flattening

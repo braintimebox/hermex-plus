@@ -116,19 +116,30 @@ final class FileBrowserViewModelTests: APIClientTestCase {
     // MARK: - Loading
 
     @MainActor
-    func testFirstLoadOpensVisibleTopLevelFoldersAndSkipsHiddenOnes() async throws {
+    func testFirstLoadOpensNoFoldersAndListsOnlyTheRoot() async throws {
         let log = RequestLog()
         let viewModel = try makeViewModel(client: makeListingClient(log: log))
 
         await viewModel.loadInitialRootIfNeeded()
 
-        XCTAssertEqual(log.listedPaths, [".", "src"])
-        XCTAssertEqual(viewModel.expandedPaths, ["src"])
-        XCTAssertEqual(viewModel.visibleNodes(matching: "").map(\.node.path), [".git", "src", "src/Chat", "README.md"])
-        XCTAssertEqual(viewModel.childCount(of: "src"), 1)
+        // The tree opens closed: the workspace root is the first thing the reader
+        // sees, not every top-level folder's children at once.
+        XCTAssertEqual(log.listedPaths, ["."])
+        XCTAssertEqual(viewModel.expandedPaths, [])
+        XCTAssertEqual(viewModel.visibleNodes(matching: "").map(\.node.path), [".git", "src", "README.md"])
+        XCTAssertNil(viewModel.childCount(of: "src"))
         XCTAssertNil(viewModel.childCount(of: ".git"))
         XCTAssertFalse(viewModel.isLoadingRoot)
         XCTAssertNil(viewModel.errorMessage)
+
+        // Expanding a folder is what lists it — hidden ones included.
+        await viewModel.toggleDirectory("src")
+
+        XCTAssertEqual(viewModel.expandedPaths, ["src"])
+        XCTAssertEqual(log.listedPaths, [".", "src"])
+        XCTAssertEqual(viewModel.visibleNodes(matching: "").map(\.node.path), [".git", "src", "src/Chat", "README.md"])
+        XCTAssertEqual(viewModel.childCount(of: "src"), 1)
+        XCTAssertNil(viewModel.childCount(of: ".git"))
     }
 
     @MainActor
@@ -155,6 +166,11 @@ final class FileBrowserViewModelTests: APIClientTestCase {
         let viewModel = try makeViewModel(client: makeListingClient(log: log))
 
         await viewModel.loadInitialRootIfNeeded()
+
+        // Nothing opens by default, so the failure appears on the gesture that
+        // asks for the folder — which is also the gesture that must retry it.
+        XCTAssertNil(viewModel.loadFailure(for: "src"))
+        await viewModel.toggleDirectory("src")
 
         XCTAssertNotNil(viewModel.loadFailure(for: "src"))
         XCTAssertTrue(viewModel.isExpanded("src"))
@@ -302,19 +318,19 @@ final class FileBrowserViewModelTests: APIClientTestCase {
         await first.loadInitialRootIfNeeded()
         await first.toggleDirectory("src")
         await first.toggleDirectory(".git")
-        XCTAssertEqual(first.expandedPaths, [".git"])
+        XCTAssertEqual(first.expandedPaths, ["src", ".git"])
 
         let sameServer = try makeViewModel(client: makeListingClient(log: log))
         await sameServer.loadInitialRootIfNeeded()
-        XCTAssertEqual(sameServer.expandedPaths, [".git"])
+        XCTAssertEqual(sameServer.expandedPaths, ["src", ".git"])
 
         let otherServer = try makeViewModel(client: makeListingClient(log: log), server: "https://other.test")
         await otherServer.loadInitialRootIfNeeded()
-        XCTAssertEqual(otherServer.expandedPaths, ["src"], "Another server starts from the default expansion")
+        XCTAssertEqual(otherServer.expandedPaths, [], "Another server starts closed")
 
         let otherWorkspace = try makeViewModel(client: makeListingClient(log: log), workspace: "/tmp/other")
         await otherWorkspace.loadInitialRootIfNeeded()
-        XCTAssertEqual(otherWorkspace.expandedPaths, ["src"], "Another workspace on the same server starts from the default expansion")
+        XCTAssertEqual(otherWorkspace.expandedPaths, [], "Another workspace on the same server starts closed")
     }
 
     // MARK: - Prefetch
