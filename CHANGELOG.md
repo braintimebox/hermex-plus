@@ -1,6 +1,6 @@
 ## 3.7.0 — Upstream 1.6.0 sync
 
-Merged `uzairansarzi/hermex` upstream `1.6.0` (105 commits since the fork point).
+Merged `uzairansaruzi/hermex` upstream `1.6.0` (105 commits since the fork point).
 Every conflict block was resolved by measurement, not by preference: our blocks
 carry a measured cause in their comments and were kept, their structural
 additions were taken, and independent additions were unioned.
@@ -12,10 +12,17 @@ additions were taken, and independent additions were unioned.
   engine can no longer yank the viewport on its own. Our own code had removed
   this anchor because the unconditional form yanked, then compensated by hand
   across 27 commits.
-- Our `ChatScrollOwner` / `ScrollOwnershipState` stay alongside their
-  `FollowLatch` / `FollowEvent`: the owner answers *who* holds the viewport,
-  the latch answers *when* follow resumes. Their event stream already carries
-  every input `resolveOwner` needs.
+- Their `FollowLatch` is the **only** owner of the viewport. `ChatScrollOwner`
+  and `ScrollOwnershipState` are gone, and the comments in `ChatView` say so:
+  two owners was the conflict, and a change of owner re-evaluated the whole
+  `ChatView` body plus its environment cascade — the shape behind the 3–14 s
+  AttributeGraph freezes. Their latch produces far fewer transitions, so the
+  container had nothing left to isolate. It is covered by 27 of their tests.
+- Kept our ↓ button behaviour. The tap cancels an in-flight deceleration before
+  the programmatic scroll, because `ScrollViewProxy.scrollTo` is silently ignored
+  while a flick is still coasting — without it the button looks dead until the
+  scroll stops. The merge kept the observer and dropped the `post`, so this is a
+  restoration, not a new feature.
 - `ChatPrependScrollPositionController` is replaced by
   `ChatScrollPositionController`, which is that class plus `Mode.hold`,
   `hasPrependCapture`, `didRevertSwiftUIOffset`, `resyncAfterHold`,
@@ -41,8 +48,10 @@ additions were taken, and independent additions were unioned.
   `MarkdownMathLayoutCache` and selectable headings. Formatting and math still
   appear when the stream settles; the hot path never pays for them.
 - Kept our measured per-token fixes: the incremental transcript fast path, the
-  reload-amplification guard, the pagination cursor, EXPERIMENT B identity, the
-  `TranscriptMessageContent` extraction and the pan-gesture metrics hook.
+  reload-amplification guard, the pagination cursor, EXPERIMENT B identity and
+  the pan-gesture metrics hook. `TranscriptMessageContent` is gone: it was our
+  3.4.8 scroll-isolation container, dead since their latch took the viewport, and
+  Swift still type-checked its 40-argument row on every build.
 - Took their terminal content fence (it survives `streamEnd`, which our flag did
   not) and `setLiveTokensPerSecondIfChanged` (no write when the value is
   unchanged).
@@ -62,6 +71,32 @@ additions were taken, and independent additions were unioned.
   and presenting a sheet never snaps it shut. Our height cap (96pt) and the
   no-op height-update guard are kept, so the field cannot balloon and typing
   does not relayout the transcript.
+
+### Sessions
+
+- Messaging-channel sessions (Telegram, Discord, Slack…) are **listed** again.
+  We hid them because the server refused to continue them; upstream #320 removed
+  that refusal and routes them through the import step, so the filter was hiding
+  rows the app can now open.
+
+### Lines the union dropped
+
+The merge could not be compiled for a day, and that hid every error behind the
+first one. Six lines had been lost to a union that took one side of a hunk, and
+they only became visible once the file compiled:
+
+- `actions.pendingActionCoordinator = pendingActionCoordinator` in
+  `ChatViewModel.init`. `ChatActionsState` holds the coordinator weakly, so the
+  approval prompt, the clarification prompt, the session approval bypass and both
+  action error messages read `nil`/`false` for the life of the view model.
+- the `didSet` that clears `sendErrorIsFromStreamRecovery`, so a later send error
+  was wiped by an earlier recovery confirmation;
+- `transcriptRevision &+= 1` in `applyReloadedMessages`, so a reload that only
+  rewrote a row's contents never re-scanned it;
+- a trailing `errorMessage = nil` that swallowed the offline timeout message;
+- two call sites still passing two arguments to `onScrollToLatestContent`.
+
+Twenty-four tests failed the moment the build first succeeded. All of them pass.
 
 ### Release mechanics
 
