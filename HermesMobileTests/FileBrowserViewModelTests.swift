@@ -192,8 +192,12 @@ final class FileBrowserViewModelTests: APIClientTestCase {
 
         await viewModel.loadInitialRootIfNeeded()
 
+        // Nothing opens by default, so opening the folder is what lists it — and
+        // what produces the error that must be handed over exactly once.
+        await viewModel.toggleDirectory("src")
+
         XCTAssertNotNil(viewModel.takeLastError())
-        XCTAssertNil(viewModel.takeLastError())
+        XCTAssertNil(viewModel.takeLastError(), "The error is handed over once, not twice")
     }
 
     @MainActor
@@ -281,14 +285,15 @@ final class FileBrowserViewModelTests: APIClientTestCase {
         let log = RequestLog()
         let viewModel = try makeViewModel(client: makeListingClient(log: log))
         await viewModel.loadInitialRootIfNeeded()
-        await viewModel.toggleDirectory("src/Chat")
         await viewModel.toggleDirectory("src")
+        await viewModel.toggleDirectory("src/Chat")
+        await viewModel.toggleDirectory("src/Chat")
 
         let before = log.listedPaths.count
         await viewModel.refresh()
 
-        XCTAssertEqual(Array(log.listedPaths.dropFirst(before)), ["."], "Collapsed folders are not re-listed")
-        XCTAssertEqual(viewModel.expandedPaths, ["src/Chat"])
+        XCTAssertEqual(Array(log.listedPaths.dropFirst(before)), [".", "src"], "Open folders are re-listed, collapsed ones are not")
+        XCTAssertEqual(viewModel.expandedPaths, ["src"])
     }
 
     // MARK: - Selection
