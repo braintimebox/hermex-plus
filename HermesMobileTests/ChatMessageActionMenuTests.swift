@@ -11,14 +11,17 @@ final class ChatMessageActionMenuTests: XCTestCase {
     func testAssistantMenuListsAssistantActionsInOrder() throws {
         let menu = try makeMenu(role: "assistant")
 
-        XCTAssertEqual(menu.items.map(\.kind), [.listen, .regenerate, .fork])
+        // Reply / Forward / Save are ours — upstream's menu stopped at Fork.
+        // Pinning the full list here is what makes a future sync that drops one
+        // of them fail loudly instead of silently shrinking the menu.
+        XCTAssertEqual(menu.items.map(\.kind), [.listen, .regenerate, .fork, .reply, .forward, .save])
         XCTAssertTrue(menu.items.allSatisfy(\.isEnabled))
     }
 
     func testUserMenuListsUserActionsInOrder() throws {
         let menu = try makeMenu(role: "user")
 
-        XCTAssertEqual(menu.items.map(\.kind), [.edit, .fork, .copy])
+        XCTAssertEqual(menu.items.map(\.kind), [.edit, .fork, .copy, .reply, .forward, .save])
     }
 
     func testMutatingActionsDisableWhileStreaming() throws {
@@ -33,7 +36,9 @@ final class ChatMessageActionMenuTests: XCTestCase {
         let disabledTitles = uiMenu.children.compactMap { $0 as? UIAction }
             .filter { $0.attributes.contains(.disabled) }
             .map(\.title)
-        XCTAssertEqual(disabledTitles, ["Regenerate Response", "Fork From Here"])
+        // Reply / Forward / Save carry the tapped message into another screen, so
+        // they are held while a stream is live and the transcript is still shifting.
+        XCTAssertEqual(disabledTitles, ["Regenerate Response", "Fork From Here", "Reply", "Forward", "Save"])
     }
 
     func testListenItemReflectsListeningState() throws {
@@ -51,7 +56,9 @@ final class ChatMessageActionMenuTests: XCTestCase {
 
     func testPendingResponseMutationsAreDisabled() throws {
         let menu = try makeMenu(role: "assistant", isMutating: true)
-        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen])
+        // Listen always, plus ours: a pending regenerate/fork does not change what
+        // the message says, so Reply / Forward / Save stay available.
+        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen, .reply, .forward, .save])
     }
 
     func testPerformRoutesToTheMatchingCallback() throws {

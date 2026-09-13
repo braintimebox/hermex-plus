@@ -3253,6 +3253,12 @@ struct ChatView: View {
         // Deliberate jump to the latest content. Snap without animation while a
         // response is streaming so the tap lands immediately instead of racing
         // the short follow animations already chasing incoming tokens.
+        //
+        // Cancel any in-flight deceleration first: while the user's flick is still
+        // coasting, `ScrollViewProxy.scrollTo` is silently ignored, so the ↓ button
+        // appeared dead until the scroll fully settled. The observer re-pins the
+        // offset in place (no jump), then the programmatic scroll below takes over.
+        NotificationCenter.default.post(name: .hermexCancelTranscriptInertia, object: nil)
         ChatHaptics.scrolledToLatest(isEnabled: isHapticsEnabled)
         scrollToLatestContent(
             proxy,
