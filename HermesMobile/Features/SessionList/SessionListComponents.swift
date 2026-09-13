@@ -20,6 +20,10 @@ enum SessionRowActionPolicy {
         !session.isSessionReadOnly
     }
 
+    static func canDuplicate(_ session: SessionSummary) -> Bool {
+        offersMutationActions(for: session) && !session.requiresExternalImport
+    }
+
     static func canExport(_ session: SessionSummary, isViewingCachedData: Bool) -> Bool {
         !isViewingCachedData && hasServerSessionID(session)
     }
@@ -38,6 +42,7 @@ enum SessionRowActionPolicy {
 
         return HermesDeepLink.sessionURL(sessionID: sessionID)
     }
+
 }
 
 enum SessionListMotion {
@@ -212,7 +217,7 @@ struct SessionSidebarUtilityRows: View {
             }
 
             if sectionVisibility.insights {
-                SidebarNavButton(title: String(localized: "Insights"), assetImage: "LucideChartColumnIncreasing") {
+                SidebarNavButton(title: String(localized: "Usage"), assetImage: "LucideChartColumnIncreasing") {
                     openDestination(.insights)
                 }
             }
@@ -418,7 +423,8 @@ struct SessionSidebarUtilityRows: View {
 
 struct SessionListRowsSection: View {
     let viewModel: SessionListViewModel
-
+    /// The sidebar's current query, forwarded to rows for match excerpts.
+    var searchText: String = ""
     let sessions: [SessionSummary]
     let emptyTitle: String
     let emptyDescription: String?
@@ -455,7 +461,8 @@ struct SessionListRowsSection: View {
                     showsMessageCount: showsMessageCount,
                     showsWorkspace: showsWorkspace,
                     selectedSessionID: selectedSessionID,
-                    actions: actions
+                    actions: actions,
+                    searchText: searchText
                 )
             }
         }
@@ -543,6 +550,9 @@ struct SessionInteractiveRow: View {
     let showsWorkspace: Bool
     let selectedSessionID: String?
     let actions: SessionListRowActions
+    /// The query of the screen showing this row, so a screen with its own search
+    /// field never shows another screen's excerpts.
+    var searchText: String = ""
 
     var body: some View {
         Button {
@@ -552,7 +562,9 @@ struct SessionInteractiveRow: View {
                 session: session,
                 showsMessageCount: showsMessageCount,
                 showsWorkspace: showsWorkspace,
-                isViewingCachedData: viewModel.isViewingCachedData
+                isViewingCachedData: viewModel.isViewingCachedData,
+                attentionState: viewModel.attentionState(for: session),
+                searchExcerpt: viewModel.searchExcerpt(for: session, searchText: searchText)
             )
         }
         .buttonStyle(.plain)
@@ -593,6 +605,8 @@ struct SessionInteractiveRow: View {
 struct ScheduledSessionsDisclosure: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let viewModel: SessionListViewModel
+    /// The sidebar's current query, forwarded to rows for match excerpts.
+    var searchText: String = ""
     let sessions: [SessionSummary]
     let totalCount: Int
     let isSearchActive: Bool
@@ -643,7 +657,8 @@ struct ScheduledSessionsDisclosure: View {
                     showsMessageCount: showsMessageCount,
                     showsWorkspace: showsWorkspace,
                     selectedSessionID: selectedSessionID,
-                    actions: actions
+                    actions: actions,
+                    searchText: searchText
                 )
                 .transition(SessionListMotion.disclosureContentTransition(reduceMotion: reduceMotion))
             }
@@ -704,7 +719,8 @@ struct ScheduledSessionsView: View {
                         showsMessageCount: showsMessageCount,
                         showsWorkspace: showsWorkspace,
                         selectedSessionID: selectedSessionID,
-                        actions: actions
+                        actions: actions,
+                        searchText: searchText
                     )
                 }
             }
@@ -725,6 +741,8 @@ struct ScheduledSessionsView: View {
 }
 
 struct SessionRowContextMenu: View {
+    @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
+
     let session: SessionSummary
     let projects: [ProjectSummary]
     let isViewingCachedData: Bool
@@ -743,6 +761,7 @@ struct SessionRowContextMenu: View {
 
             Button {
                 UIPasteboard.general.string = fullTitle
+                ChatHaptics.copied(isEnabled: isHapticsEnabled)
             } label: {
                 Label("Copy Full Title", systemImage: "doc.on.doc")
             }
@@ -763,12 +782,14 @@ struct SessionRowContextMenu: View {
             }
             .disabled(isViewingCachedData || isRenamingSession || !hasServerSessionID(session))
 
-            Button {
-                actions.duplicate(session)
-            } label: {
-                Label("Duplicate", systemImage: "doc.on.doc")
+            if SessionRowActionPolicy.canDuplicate(session) {
+                Button {
+                    actions.duplicate(session)
+                } label: {
+                    Label("Duplicate", systemImage: "doc.on.doc")
+                }
+                .disabled(isViewingCachedData || session.sessionId == nil || isMutating)
             }
-            .disabled(isViewingCachedData || session.sessionId == nil || isMutating)
 
             Menu {
                 SessionProjectMoveMenu(
@@ -807,6 +828,7 @@ struct SessionRowContextMenu: View {
             ) {
                 Button {
                     UIPasteboard.general.string = deepLinkURL.absoluteString
+                    ChatHaptics.copied(isEnabled: isHapticsEnabled)
                 } label: {
                     Label("Copy Deeplink", systemImage: "doc.on.doc")
                 }

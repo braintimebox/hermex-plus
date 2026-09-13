@@ -4,7 +4,9 @@ struct ContentView: View {
     @Bindable var authManager: AuthManager
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
-    @State private var pendingSharedImport: SharedImport?
+    @State private var pendingSharedImport: SharedImportReservation?
+    @State private var hasWaitingSharedImport = false
+    @State private var hasRoutedSharedImport = false
     @State private var pendingDeepLinkedSessionID: String?
     @State private var pendingNewChatRequest: NewChatRequest?
     @State private var didCheckInitialPendingShare = false
@@ -60,6 +62,9 @@ struct ContentView: View {
                 authManager: authManager,
                 server: server,
                 pendingSharedImport: $pendingSharedImport,
+                didRoutePendingSharedImport: consumePendingSharedImport,
+                hasWaitingSharedImport: hasWaitingSharedImport,
+                openNextSharedImport: openNextSharedImport,
                 pendingDeepLinkedSessionID: $pendingDeepLinkedSessionID,
                 requestedNewChat: $pendingNewChatRequest
             )
@@ -105,14 +110,7 @@ struct ContentView: View {
             return
         }
 
-        // Priority 1: decode draft from URL query parameter (instant, no race)
-        if let urlDraft = HermesShareDraft.draftFromURL(url) {
-            pendingSharedImport = SharedImport(draft: urlDraft, attachments: [])
-            return
-        }
-        
-        // Priority 2: fall back to pasteboard (handles attachments, may need retry)
-        importPendingSharedDraftWithRetry()
+        importPendingSharedDraftIfAvailable()
     }
 
     /// Routes a deep link queued by an App Intent through the same `handleOpenURL` parser
@@ -124,25 +122,58 @@ struct ContentView: View {
     }
 
     private func importPendingSharedDraftIfAvailable() {
-        guard let sharedImport = HermesShareDraft.loadFromPasteboard() else { return }
-        HermesShareDraft.clearPasteboard()
-        pendingSharedImport = sharedImport
+        guard pendingSharedImport == nil else {
+            return
+        }
+
+        guard let directory = HermesShareDraft.containerURL() else {
+            return
+        }
+
+        guard !hasRoutedSharedImport else {
+            refreshWaitingSharedImport(in: directory)
+            return
+        }
+
+        do {
+            pendingSharedImport = try HermesShareDraft.reserveNextPendingImport(from: directory)
+            refreshWaitingSharedImport(in: directory)
+        } catch {
+            pendingSharedImport = nil
+            hasWaitingSharedImport = false
+        }
     }
-    
-    /// Retries pasteboard import with backoff to handle IPC timing gap between
-    /// share extension write and main app read (pasted daemon flushing delay).
-    private func importPendingSharedDraftWithRetry() {
-        Task {
-            let delays: [UInt64] = [50_000_000, 150_000_000, 400_000_000] // 50ms, 150ms, 400ms
-            for delay in delays {
-                if let sharedImport = HermesShareDraft.loadFromPasteboard() {
-                    HermesShareDraft.clearPasteboard()
-                    await MainActor.run { pendingSharedImport = sharedImport }
-                    return
-                }
-                try? await Task.sleep(nanoseconds: delay)
+
+    private func consumePendingSharedImport(_ reservation: SharedImportReservation) {
+        hasRoutedSharedImport = true
+
+        defer {
+            if pendingSharedImport?.reservationID == reservation.reservationID {
+                pendingSharedImport = nil
             }
         }
+
+        guard let directory = HermesShareDraft.containerURL() else {
+            return
+        }
+
+        do {
+            try HermesShareDraft.consume(reservation, from: directory)
+        } catch {
+            // Keep the share recoverable if acknowledgement fails after routing.
+            try? HermesShareDraft.release(reservation, in: directory)
+        }
+        refreshWaitingSharedImport(in: directory)
+    }
+
+    private func openNextSharedImport() {
+        hasWaitingSharedImport = false
+        hasRoutedSharedImport = false
+        importPendingSharedDraftIfAvailable()
+    }
+
+    private func refreshWaitingSharedImport(in directory: URL) {
+        hasWaitingSharedImport = (try? HermesShareDraft.hasPendingImport(in: directory)) ?? false
     }
 }
 

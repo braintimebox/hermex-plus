@@ -18,6 +18,16 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
     5. upstream drift is known       sync-upstream --status must not error
     6. test-lint                     no assertion encodes a race as a contract
     7. doc references resolve        no document points at a deleted file
+    8. swift structural balance      a changed .swift keeps its parents' brace
+                                     balance (a merge that concatenates two
+                                     conflict sides drops the closing brace
+                                     that sat at the end of a side; Swift then
+                                     reports it as a cascade of unrelated
+                                     errors, which cost five CI runs)
+    9. duplicate declarations        no member declared twice in one type (the
+                                     same union leaves both copies of a field —
+                                     `invalid redeclaration of 'x'` × N, which
+                                     reads as N bugs but is one spliced block)
 
     Checks are fail-fast: the first BLOCKER stops the push.
 
@@ -77,7 +87,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/7] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1/9] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -96,7 +106,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/7] conflict markers in tracked files")
+    print("[2/9] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -121,39 +131,125 @@ def check_conflict_markers() -> int:
 # --- check 3: pbxproj registration ------------------------------------------
 
 def check_pbxproj_registration() -> int:
-    print("[3/7] pbxproj registration of new .swift files")
+    """Gate 3 — every Swift file is registered, and no pbxproj id is reused.
+
+    Two failures this now catches, both of which produced a green earlier today:
+
+      * a file that exists in the tree with no entry in the project at all — the
+        1.6.0 merge dropped the four lines registering our
+        `ClarificationRequestOverlay.swift`, so it silently stopped compiling and
+        `ClarificationRequestCard` was reported "cannot find in scope"
+      * one 24-hex id used for two different files. The merge left upstream's
+        `ClarificationRequestCard.swift` holding the id our overlay file also
+        used; Xcode resolves an id to one path, so the other disappears. A
+        `grep -c` said "4 refs, registered" for both — which is why counting
+        references is not the check.
+    """
+    print("[3/12] pbxproj: every .swift registered, every id unique")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
     text = pbx.read_text(errors="ignore")
 
-    new_files = [
-        f for f in git("diff", "--cached", "--name-only", "--diff-filter=A",
-                       "--", "HermesMobile/**/*.swift").splitlines() if f.strip()
-    ]
-    if not new_files:
-        print("      no new .swift files staged — nothing to register")
-        return 0
+    problems: list[str] = []
 
-    missing = []
-    for f in new_files:
-        name = Path(f).name
-        # 4 registrations: PBXBuildFile, PBXFileReference, group children, build phase
-        if text.count(name) < 2:
-            missing.append(f"{name}: found {text.count(name)} refs, expected >=2")
-    if missing:
-        return blockers([
-            "new .swift not registered in pbxproj (needs PBXBuildFile + "
-            "PBXFileReference + group + build phase):"
-        ] + [f"  {m}" for m in missing])
-    print(f"      {len(new_files)} new file(s) registered")
+    # (a) every Swift file in the tree appears in the project
+    tracked = git("ls-tree", "-r", "--name-only", "HEAD", "--", "HermesMobile/")
+    for f in tracked.splitlines():
+        if not f.strip().endswith(".swift"):
+            continue
+        if Path(f).name not in text:
+            problems.append(f"{f} is in the tree but not in project.pbxproj")
+
+    # (b) no id defined twice
+    seen: dict[str, str] = {}
+    for line in text.splitlines():
+        m = re.match(r"^\s*([0-9A-F]{24})\s+/\*\s*(.+?)\s*\*/\s*=\s*\{", line)
+        if not m:
+            continue
+        ident, label = m.group(1), m.group(2)
+        if ident in seen:
+            problems.append(f"id {ident} used twice: '{seen[ident]}' and '{label}'")
+        else:
+            seen[ident] = label
+
+    # (c) each fileRef sits in a group whose path actually leads to the file.
+    # Registering a file in the wrong group is not a build error Xcode reports
+    # clearly — it reports "did you forget to declare this file as an output of
+    # a script phase", for a file that exists. `QuoteReplyBanner.swift` landed in
+    # the Models group while living in Features/Chat.
+    problems.extend(_group_path_mismatches(text, tracked.splitlines()))
+
+    if problems:
+        return blockers(["project.pbxproj is inconsistent:"] + [f"  {p}" for p in problems[:15]])
+    print(f"      {len(seen)} ids, all unique; every tracked .swift registered "
+          f"and in a group that resolves to its directory")
     return 0
+
+
+def _group_path_mismatches(text: str, tracked: list[str]) -> list[str]:
+    """fileRefs whose PBXGroup chain does not resolve to the file's own folder."""
+    groups: dict[str, tuple[list[str], str]] = {}
+    for m in re.finditer(
+        r"([0-9A-F]{24})\s*/\*[^*]*\*/\s*=\s*\{\s*isa = PBXGroup;"
+        r"(.*?)\};",
+        text, re.S,
+    ):
+        body = m.group(2)
+        children: list[str] = []
+        cm = re.search(r"children = \((.*?)\);", body, re.S)
+        if cm:
+            children = re.findall(r"([0-9A-F]{24})", cm.group(1))
+        pm = re.search(r"\bpath = \"?([^;\"]+)\"?;", body)
+        groups[m.group(1)] = (children, pm.group(1) if pm else "")
+
+    ref_path: dict[str, str] = {}
+    for m in re.finditer(
+        r"([0-9A-F]{24})\s*/\*\s*(\S+?\.swift)\s*\*/\s*=\s*\{\s*isa = PBXFileReference;"
+        r'.*?path = "?([^;"]+)"?;',
+        text,
+    ):
+        ref_path[m.group(1)] = m.group(3)
+
+    # walk from each group down, accumulating the path prefix
+    by_name: dict[str, list[str]] = {}
+    for f in tracked:
+        if f.endswith(".swift"):
+            by_name.setdefault(Path(f).name, []).append(f)
+
+    problems: list[str] = []
+
+    def walk(gid: str, prefix: str, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        children, own = groups.get(gid, ([], ""))
+        here = f"{prefix}/{own}".strip("/") if own else prefix
+        for child in children:
+            if child in groups:
+                walk(child, here, depth + 1)
+            elif child in ref_path:
+                name = ref_path[child]
+                real = by_name.get(name)
+                if not real:
+                    continue
+                expected_dir = str(Path(real[0]).parent)
+                resolved = f"{here}/{name}".strip("/")
+                if resolved != real[0] and expected_dir.split("/")[-1] not in here.split("/")[-1:]:
+                    problems.append(
+                        f"{name} is registered under '{here or '<root>'}' "
+                        f"but lives in '{expected_dir}'"
+                    )
+
+    root_ids = [g for g in groups if not any(g in c for c, _ in groups.values())]
+    for gid in root_ids:
+        walk(gid, "")
+    return sorted(set(problems))
 
 
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/7] upstream-owned files not modified")
+    print("[4/9] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -186,7 +282,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/7] upstream drift (advisory)")
+    print("[5/9] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -214,7 +310,7 @@ def check_test_lint() -> int:
     hours later in the same session — a note asks the next person to remember and
     to judge whether it applies; a gate does not.
     """
-    print("[6/7] test-lint (race-shaped assertions)")
+    print("[6/9] test-lint (race-shaped assertions)")
     script = ROOT / "scripts" / "lint-tests.py"
     if not script.exists():
         print("      linter not found — skipped")
@@ -243,7 +339,7 @@ def check_doc_references() -> int:
     it is gone — is recognised by the absence wording on the same line, which is
     how the tools register already writes those entries.
     """
-    print("[7/7] doc references resolve")
+    print("[7/9] doc references resolve")
     script = ROOT / "scripts" / "check-doc-references.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -258,6 +354,169 @@ def check_doc_references() -> int:
     return r.returncode
 
 
+
+def check_swift_structural_balance() -> int:
+    """Reject a change that leaves a .swift file less balanced than its parents.
+
+    A merge resolved by concatenating the two conflict sides drops the closing
+    brace that sat at the end of a side. Swift then reports it as a cascade: one
+    missing `}` in ChatView surfaced as twenty-odd `attribute 'private' can only
+    be used in a non-local scope` errors at unrelated lines, and five CI runs
+    were spent chasing the cascade one brace at a time because nothing local
+    could tell "I broke the structure" from "the file always looked like this".
+
+    Line-by-line brace counting does not work here and was tried three times
+    during that merge, wrong every time: `{` occurs inside string literals,
+    multi-line strings and comments, and `(` in a function signature opens a
+    scope that carries no brace at all. The checker this calls tracks
+    string/comment state and compares against BOTH parents, so an inherited
+    imbalance is not mistaken for one this branch introduced.
+
+    Blocking, not advisory: a dropped brace is never a judgment call.
+    """
+    print("[8/12] swift structural balance vs both parents")
+    script = ROOT / "scripts" / "check-swift-structural-balance.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    # the script prints its own banner; drop it so the gate header is not doubled
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[8/8]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+
+def check_duplicate_declarations() -> int:
+    """Reject a change that declares the same member twice in one type.
+
+    The companion to gate 8. A brace can be balanced and the file still not
+    compile: when a union pastes both sides of a conflict, a whole block of
+    declarations appears twice. Swift reports `invalid redeclaration of 'x'`
+    once per name — in this merge, twenty-odd of them across ChatViewModel and
+    ChatTranscriptView, which reads as twenty mistakes rather than one block.
+
+    The checker groups declarations by their ENCLOSING top-level type, treats a
+    property and a func of the same name as different declarations, and compares
+    funcs by their full parameter list so overloads pass. That calibration
+    matters: an earlier version grouped by indentation alone and produced 2505
+    false hits, which is a gate someone switches off.
+    """
+    print("[9/12] duplicate declarations in the same type scope")
+    script = ROOT / "scripts" / "check-duplicate-declarations.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[9/9]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_initializer_completeness() -> int:
+    """Gate 10 — no stored property left unset by an init that sets others.
+
+    Gates 8 and 9 catch a union that pasted both sides of a declaration. This
+    catches the mirror-image defect: upstream ADDS a stored property and our
+    own init keeps its old assignment list, so Swift reports
+
+        return from initializer without initializing all stored properties
+
+    `SessionSummary.matchPreview` arrived exactly that way — upstream added the
+    property and its decoder, while `init(sessionId:title:)` (which upstream
+    does not have) still listed 32 of 34 fields. One line, one full CI round.
+    """
+    print("[10/12] initializer completeness (all stored properties set)")
+    script = ROOT / "scripts" / "check-initializer-completeness.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[10/12]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_duplicate_call_arguments() -> int:
+    """Gate 11 — one argument label passed twice into the same call.
+
+    The union keeps both sides of an edited call site, which parses and then
+    fails in the type checker at the OUTERMOST expression:
+
+        error: the compiler is unable to type-check this expression in
+               reasonable time; try breaking up the expression
+
+    reported at the enclosing view, hundreds of lines from the duplicate.
+    `SettingsView`'s second `title:`, `ChatView`'s second
+    `onSelectReasoningEffort:` and second `onDismissKeyboard:` all came in
+    that way in the 1.6.0 merge.
+    """
+    print("[11/12] duplicate call arguments (same label twice in one call)")
+    script = ROOT / "scripts" / "check-duplicate-call-arguments.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[11/12]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_fork_preserved() -> int:
+    """Gate 12 — our own declarations are still in the tree.
+
+    Gates 8 and 9 catch a union that broke a file or duplicated a member. This
+    catches a union that quietly took upstream's side and dropped ours: on
+    2026-09-12 the 1.6.0 merge removed `ToolCallCardView.swift` and
+    `InsightsRows.swift` outright and dropped 32 of our declarations inside
+    files that survived. No gate noticed.
+
+    `main` is the definition of ours — a type declared there and nowhere in
+    `upstream/master`. The 32 losses that predate this gate are baselined in
+    `docs/agents/fork-manifest.json` (`pending_triage`) so it is usable today;
+    a NEW disappearance blocks.
+    """
+    print("[12/12] fork-owned symbols still present")
+    script = ROOT / "scripts" / "check-fork-preserved.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[12/12]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -266,6 +525,11 @@ CHECKS = {
     5: check_upstream_drift,
     6: check_test_lint,
     7: check_doc_references,
+    8: check_swift_structural_balance,
+    9: check_duplicate_declarations,
+    10: check_initializer_completeness,
+    11: check_duplicate_call_arguments,
+    12: check_fork_preserved,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

@@ -31,6 +31,23 @@ struct ChatStreamLoadPreparation: Equatable {
     let shouldPrepareSuspendedStreamResume: Bool
 }
 
+struct ChatStreamSnapshotRestoreResult: Equatable {
+    let didRestoreSnapshot: Bool
+    let lastEventID: String?
+
+    static let notRestored = ChatStreamSnapshotRestoreResult(
+        didRestoreSnapshot: false,
+        lastEventID: nil
+    )
+}
+
+/// Span of a finished run and how it ended; the view model keys it to a turn.
+struct ChatRunEnding: Equatable {
+    let startedAt: Date
+    let endedAt: Date
+    let ending: TranscriptTurnRunOutcome.Ending
+}
+
 @MainActor
 protocol ChatStreamCoordinatorDelegate: AnyObject {
     var streamCoordinatorSessionID: String? { get }
@@ -46,7 +63,7 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: Bool)
     func streamCoordinatorSaveSnapshotIfNeeded()
     @discardableResult
-    func streamCoordinatorRestoreSnapshotIfAvailable(streamID: String) -> String?
+    func streamCoordinatorRestoreSnapshotIfAvailable(streamID: String) -> ChatStreamSnapshotRestoreResult
     func streamCoordinatorRemoveSnapshot(streamID: String?)
     func streamCoordinatorFlushPinnedLocalNoticesToTranscript()
     func streamCoordinatorDrainQueuedSlashMessageIfIdle()
@@ -58,6 +75,7 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorDidReceiveContextStatus(_ payload: ContextStatusStreamEvent)
     func streamCoordinatorDidReceiveWarning(_ payload: StreamWarningEvent)
     func streamCoordinatorDidReceiveRecoveryError(_ error: Error)
+    func streamCoordinatorDidConfirmRecovery()
     func streamCoordinatorDidStartConnection(isReplay: Bool)
     func streamCoordinatorDidResetRecoveryState()
 
@@ -95,16 +113,58 @@ final class ChatStreamCoordinator {
     /// ChatTranscriptDisplaySettings; flipped on when user enables silent mode.
     private var suppressesReasoningAndToolUpdates: Bool
 
-    private(set) var activeStreamID: String?
+    private(set) var activeStreamID: String? {
+        didSet {
+            guard activeStreamID != oldValue else { return }
+            activeRunStartedAt = activeStreamID == nil ? nil : Date()
+            if activeStreamID != nil {
+                latestRunEnding = nil
+            }
+        }
+    }
+    /// When the run behind the current stream started. Seeded by the caller from
+    /// the server's `pending_started_at` (session load and `/api/chat/start`),
+    /// then the latest user message's timestamp, and only failing both from the
+    /// local moment this coordinator discovered the stream. Keyed to stream
+    /// identity, so a same-stream reattach keeps counting from the same instant
+    /// instead of restarting "Working for" on every return to the session.
+    private(set) var activeRunStartedAt: Date?
+    /// The last run's span and how it ended, recorded the moment the run stops
+    /// counting (`done` or teardown) so the delegate can key it to a turn.
+    /// Cleared when the next run starts, so a stale ending never outlives it.
+    private(set) var latestRunEnding: ChatRunEnding?
     private(set) var recoveryState: ActiveStreamRecoveryState = .idle
     private(set) var isConnectionSuspended = false
     private(set) var hasCompletedCurrentResponse = false
-    private(set) var lastEventID: String?
-    private(set) var lastProgressDate: Date?
-    private(set) var lastTransportActivityDate: Date?
+    /// Terminal-content fence (#288 review): set when the response completes and
+    /// NOT cleared by finishStream, so content queued after `done → streamEnd`
+    /// still cannot reach the transcript. Cleared only by the next run start /
+    /// new-response preparation / session load.
+    @ObservationIgnored private var isTerminalContentFenceActive = false
+    /// Per-run one-shot teardown owner. The first caller of finishStream owns
+    /// teardown; later terminal events are ignored so delegate finish, snapshot
+    /// cleanup, queue drain, and title-refresh side effects cannot repeat.
+    /// Reset wherever the content fence disarms.
+    @ObservationIgnored private var isTransportFinished = false
+    @ObservationIgnored private(set) var lastEventID: String?
+    @ObservationIgnored private(set) var lastProgressDate: Date?
+    @ObservationIgnored private(set) var lastTransportActivityDate: Date?
     private(set) var liveTokensPerSecond: Double?
-    private var lastRecoveryStatusCheckDate: Date?
+    @ObservationIgnored private var lastRecoveryStatusCheckDate: Date?
+    @ObservationIgnored private var hasInMemorySnapshotForActiveStream = false
     private(set) var isReplayConnection = false
+    // Foreground activation and view appearance can both request recovery for the
+    // same suspended stream. Share one recovery task so callers cannot duplicate
+    // status checks or transcript loads. Identity and generation fence late work
+    // from a replacement run.
+    private var reconnectTask: (
+        id: UUID,
+        streamID: String,
+        runGeneration: Int,
+        modelContext: ModelContext?,
+        task: Task<Void, Never>
+    )?
+    private var reconnectTranscriptLoadTaskID: UUID?
     // Bumped whenever the active run starts or finalizes. Captured before an async
     // transcript load so a concurrent cancel/completion during the load can't be
     // double-finalized (PR #266 review #2).
@@ -146,19 +206,47 @@ final class ChatStreamCoordinator {
 
     func prepareForNewResponse() {
         hasCompletedCurrentResponse = false
+        isTerminalContentFenceActive = false
+        isTransportFinished = false
         isConnectionSuspended = false
-        liveTokensPerSecond = nil
+        setLiveTokensPerSecondIfChanged(nil)
+        hasInMemorySnapshotForActiveStream = false
+        invalidateReconnectTask()
     }
 
+    func isTerminalFenceActiveForTesting() -> Bool {
+        isTerminalContentFenceActive
+    }
+
+    func isTransportFinishedForTesting() -> Bool {
+        isTransportFinished
+    }
+
+    /// Test seam for the clock-skew clamp: production callers always seed with
+    /// the current instant, which tests cannot advance.
+    func seedActiveRunStartForTesting(_ startedAt: Date?, now: Date) {
+        seedActiveRunStart(startedAt, now: now)
+    }
+
+    /// `runStartedAt` is the run's real start when the caller knows it — the
+    /// server's `pending_started_at` from `/api/chat/start`, else the local send
+    /// time. Reconnects and replays pass nil: they rejoin the same stream, whose
+    /// start is already recorded.
     func start(
         streamID: String,
         replayAfterSeq: Int? = nil,
-        recoveryState: ActiveStreamRecoveryState = .idle
+        recoveryState: ActiveStreamRecoveryState = .idle,
+        runStartedAt: Date? = nil
     ) {
         hasCompletedCurrentResponse = false
-        liveTokensPerSecond = nil
+        isTerminalContentFenceActive = false
+        isTransportFinished = false
+        setLiveTokensPerSecondIfChanged(nil)
         runGeneration &+= 1
+        invalidateReconnectTask()
         activeStreamID = streamID
+        seedActiveRunStart(runStartedAt)
+        hasInMemorySnapshotForActiveStream = false
         isConnectionSuspended = false
         if replayAfterSeq == nil {
             lastEventID = nil
@@ -188,7 +276,7 @@ final class ChatStreamCoordinator {
         guard response.ok != false else { return response }
 
         liveActivityManager.end(status: .cancelled, activity: String(localized: "Response cancelled"), errorSummary: nil)
-        finishStream()
+        finishStream(ending: .cancelled)
         return response
     }
 
@@ -197,6 +285,7 @@ final class ChatStreamCoordinator {
 
         lastEventID = streamClient.lastEventID ?? lastEventID
         delegate?.streamCoordinatorSaveSnapshotIfNeeded()
+        hasInMemorySnapshotForActiveStream = true
         liveActivityManager.markStale()
         isConnectionSuspended = true
         streamClient.stop()
@@ -204,7 +293,7 @@ final class ChatStreamCoordinator {
     }
 
     func prepareForSessionLoad() -> ChatStreamLoadPreparation {
-        liveTokensPerSecond = nil
+        setLiveTokensPerSecondIfChanged(nil)
         let activeStreamIDBeforeLoad = activeStreamID
         if activeStreamIDBeforeLoad != nil, !hasCompletedCurrentResponse {
             delegate?.streamCoordinatorSaveSnapshotIfNeeded()
@@ -216,16 +305,46 @@ final class ChatStreamCoordinator {
         )
     }
 
+    func shouldPreserveLocalOptimisticMessages(
+        for preparation: ChatStreamLoadPreparation,
+        loadedActiveStreamID: String?
+    ) -> Bool {
+        guard let activeStreamIDBeforeLoad = preparation.activeStreamIDBeforeLoad else {
+            return false
+        }
+
+        // A same-stream `start()` (foreground reconnect / replay) bumps
+        // `runGeneration` without replacing the server run. Stream identity is
+        // the successor fence; generation would treat that restart as a new
+        // authority and drop the uncached optimistic row.
+        guard activeStreamID == activeStreamIDBeforeLoad else {
+            return false
+        }
+
+        let loadedActiveStreamID = loadedActiveStreamID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return loadedActiveStreamID == activeStreamIDBeforeLoad
+    }
+
+    /// `runStartedAt` is when the loaded session says its in-flight turn started
+    /// (`pending_started_at`, else the latest user message's timestamp). Adopting
+    /// a running stream counts from there instead of from this load, so returning
+    /// to a session never restarts its "Working for" counter.
     func reconcileSessionLoad(
         loadedActiveStreamID rawLoadedActiveStreamID: String?,
         preparation: ChatStreamLoadPreparation,
-        usedCacheFallback: Bool
+        usedCacheFallback: Bool,
+        runStartedAt: Date? = nil
     ) {
         hasCompletedCurrentResponse = false
-        liveTokensPerSecond = nil
+        isTerminalContentFenceActive = false
+        isTransportFinished = false
+        setLiveTokensPerSecondIfChanged(nil)
+        defer { invalidateReconnectTaskIfItDoesNotMatchCurrentStream() }
 
         if usedCacheFallback {
             activeStreamID = nil
+            hasInMemorySnapshotForActiveStream = false
             isConnectionSuspended = false
             delegate?.streamCoordinatorStreamingAssistantMessageID = nil
             resetRecoveryState()
@@ -237,11 +356,16 @@ final class ChatStreamCoordinator {
             delegate?.streamCoordinatorStreamingAssistantMessageID = nil
             if let streamID = loadedActiveStreamID, !streamID.isEmpty {
                 activeStreamID = streamID
+                seedActiveRunStart(runStartedAt)
                 delegate?.streamCoordinatorStreamingAssistantMessageID = delegate?.streamCoordinatorLatestAssistantMessageID()
                 isConnectionSuspended = true
-                restoreSnapshotIfAvailable(streamID: streamID)
+                let didRestoreSnapshot = restoreSnapshotIfAvailable(streamID: streamID)
+                if preparation.activeStreamIDBeforeLoad != streamID {
+                    hasInMemorySnapshotForActiveStream = didRestoreSnapshot
+                }
             } else {
                 activeStreamID = nil
+                hasInMemorySnapshotForActiveStream = false
                 isConnectionSuspended = false
                 resetRecoveryState()
             }
@@ -251,8 +375,12 @@ final class ChatStreamCoordinator {
                 : preparation.activeStreamIDBeforeLoad
             if let streamID {
                 activeStreamID = streamID
+                seedActiveRunStart(runStartedAt)
                 delegate?.streamCoordinatorStreamingAssistantMessageID = delegate?.streamCoordinatorLatestAssistantMessageID()
-                restoreSnapshotIfAvailable(streamID: streamID)
+                let didRestoreSnapshot = restoreSnapshotIfAvailable(streamID: streamID)
+                if preparation.activeStreamIDBeforeLoad != streamID {
+                    hasInMemorySnapshotForActiveStream = didRestoreSnapshot
+                }
                 if delegate?.streamCoordinatorStreamingAssistantMessageID == nil {
                     delegate?.streamCoordinatorStreamingAssistantMessageID = delegate?.streamCoordinatorLatestAssistantMessageID()
                 }
@@ -263,50 +391,134 @@ final class ChatStreamCoordinator {
 
     func reconnectIfNeeded(modelContext: ModelContext? = nil) async {
         guard let activeStreamID, isConnectionSuspended else { return }
-        let generation = runGeneration
+        if var reconnectTask {
+            if reconnectTask.modelContext == nil, let modelContext {
+                reconnectTask.modelContext = modelContext
+                self.reconnectTask = reconnectTask
+            }
+            await reconnectTask.task.value
+            return
+        }
+
+        let reconnectTaskID = UUID()
+        let reconnectGeneration = runGeneration
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performReconnectIfNeeded(
+                reconnectTaskID: reconnectTaskID,
+                streamID: activeStreamID,
+                runGeneration: reconnectGeneration
+            )
+            guard self.reconnectTask?.id == reconnectTaskID else { return }
+            self.reconnectTask = nil
+        }
+        reconnectTask = (
+            id: reconnectTaskID,
+            streamID: activeStreamID,
+            runGeneration: reconnectGeneration,
+            modelContext: modelContext,
+            task: task
+        )
+        await task.value
+    }
+
+    private func performReconnectIfNeeded(
+        reconnectTaskID: UUID,
+        streamID: String,
+        runGeneration: Int
+    ) async {
+        guard reconnectTaskIsCurrent(
+            reconnectTaskID: reconnectTaskID,
+            streamID: streamID,
+            runGeneration: runGeneration
+        ) else { return }
 
         do {
-            let response = try await client.chatStreamStatus(streamID: activeStreamID)
-            guard self.activeStreamID == activeStreamID, isConnectionSuspended else { return }
+            let response = try await client.chatStreamStatus(streamID: streamID)
+            guard reconnectTaskIsCurrent(
+                reconnectTaskID: reconnectTaskID,
+                streamID: streamID,
+                runGeneration: runGeneration
+            ) else { return }
+            delegate?.streamCoordinatorDidConfirmRecovery()
 
             if response.active == true {
-                await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
-                guard self.activeStreamID == activeStreamID, isConnectionSuspended else { return }
+                let completedLoad = await loadMessagesForReconnect(reconnectTaskID: reconnectTaskID)
+                guard completedLoad,
+                      reconnectTaskIsCurrent(
+                          reconnectTaskID: reconnectTaskID,
+                          streamID: streamID,
+                          runGeneration: runGeneration
+                      )
+                else { return }
 
-                let streamIDToResume = activeStreamID
                 if delegate?.streamCoordinatorStreamingAssistantMessageID == nil {
-                    restoreSnapshotIfAvailable(streamID: streamIDToResume)
+                    restoreSnapshotIfAvailable(streamID: streamID)
                 }
                 if delegate?.streamCoordinatorStreamingAssistantMessageID == nil {
                     delegate?.streamCoordinatorStreamingAssistantMessageID = delegate?.streamCoordinatorLatestAssistantMessageID()
                 }
+                // A cold process has no snapshot cursor. Ask the server journal
+                // for the run from the beginning so the loaded partial transcript
+                // can be filled in immediately instead of waiting for `done`.
+                // Existing foreground/background resumes keep their ordinary
+                // connection when this process still owns an in-memory snapshot.
+                let replayAfterSeq = response.replayAvailable == true
+                    && !hasInMemorySnapshotForActiveStream
+                    && lastEventID == nil
+                    ? 0
+                    : nil
                 isConnectionSuspended = false
-                start(streamID: streamIDToResume)
+                start(streamID: streamID, replayAfterSeq: replayAfterSeq)
             } else if response.replayAvailable == true {
+                guard reconnectTaskIsCurrent(
+                    reconnectTaskID: reconnectTaskID,
+                    streamID: streamID,
+                    runGeneration: runGeneration
+                ) else { return }
                 let replayAfterSeq = Self.runJournalReplayAfterSeq(from: lastEventID) ?? 0
-                self.activeStreamID = activeStreamID
                 isConnectionSuspended = false
-                start(streamID: activeStreamID, replayAfterSeq: replayAfterSeq)
+                start(streamID: streamID, replayAfterSeq: replayAfterSeq)
             } else {
-                await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
-                // Bail if a concurrent completion/cancel/new run finalized or
-                // replaced this run during the load (see canFinalizeRunAfterLoad).
-                guard canFinalizeRunAfterLoad(streamID: activeStreamID, capturedGeneration: generation) else { return }
+                let completedLoad = await loadMessagesForReconnect(reconnectTaskID: reconnectTaskID)
+                guard completedLoad,
+                      reconnectTaskOwnsFinalization(
+                          reconnectTaskID: reconnectTaskID,
+                          streamID: streamID,
+                          runGeneration: runGeneration
+                      ),
+                      canFinalizeRunAfterLoad(streamID: streamID, capturedGeneration: runGeneration)
+                else { return }
 
                 // #246: the server reports the run is over. Finalize it (and end
                 // the Live Activity) instead of re-arming and leaving it dangling
                 // on "running" when no assistant reply surfaced.
-                finalizeInactiveStream(streamID: activeStreamID)
+                finalizeInactiveStream(streamID: streamID)
             }
         } catch {
             if (error as? APIError)?.indicatesMissingStream == true,
-               self.activeStreamID == activeStreamID,
-               isConnectionSuspended {
-                await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
-                guard canFinalizeRunAfterLoad(streamID: activeStreamID, capturedGeneration: generation) else { return }
-                finalizeInactiveStream(streamID: activeStreamID)
+               reconnectTaskIsCurrent(
+                   reconnectTaskID: reconnectTaskID,
+                   streamID: streamID,
+                   runGeneration: runGeneration
+               ) {
+                let completedLoad = await loadMessagesForReconnect(reconnectTaskID: reconnectTaskID)
+                guard completedLoad,
+                      reconnectTaskOwnsFinalization(
+                          reconnectTaskID: reconnectTaskID,
+                          streamID: streamID,
+                          runGeneration: runGeneration
+                      ),
+                      canFinalizeRunAfterLoad(streamID: streamID, capturedGeneration: runGeneration)
+                else { return }
+                finalizeInactiveStream(streamID: streamID)
                 return
             }
+            guard reconnectTaskIsCurrent(
+                reconnectTaskID: reconnectTaskID,
+                streamID: streamID,
+                runGeneration: runGeneration
+            ) else { return }
             delegate?.streamCoordinatorDidReceiveRecoveryError(error)
         }
     }
@@ -320,6 +532,8 @@ final class ChatStreamCoordinator {
 
         do {
             let response = try await client.chatStreamStatus(streamID: expectedStreamID)
+            guard activeStreamID == expectedStreamID, !isConnectionSuspended else { return }
+            delegate?.streamCoordinatorDidConfirmRecovery()
             guard response.active == false else { return }
 
             await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
@@ -356,12 +570,12 @@ final class ChatStreamCoordinator {
               !isConnectionSuspended,
               !hasCompletedCurrentResponse
         else {
-            recoveryState = .idle
+            setRecoveryStateIfChanged(.idle)
             return
         }
 
         guard delegate?.streamCoordinatorHasPendingPrompt != true else {
-            recoveryState = .idle
+            setRecoveryStateIfChanged(.idle)
             return
         }
 
@@ -372,11 +586,11 @@ final class ChatStreamCoordinator {
             guard let lastTransportActivityDate,
                   now.timeIntervalSince(lastTransportActivityDate) >= reconnectInterval
             else {
-                recoveryState = .idle
+                setRecoveryStateIfChanged(.idle)
                 return
             }
 
-            recoveryState = .checking
+            setRecoveryStateIfChanged(.checking)
             lastRecoveryStatusCheckDate = now
             await recoverStaleStream(
                 streamID: activeStreamID,
@@ -388,7 +602,7 @@ final class ChatStreamCoordinator {
 
         let elapsed = now.timeIntervalSince(lastProgressDate)
         guard elapsed >= timing.checkingInterval else {
-            recoveryState = .idle
+            setRecoveryStateIfChanged(.idle)
             return
         }
 
@@ -398,11 +612,11 @@ final class ChatStreamCoordinator {
             // semantically quiet window (model thinking / slow tool call), so
             // stay idle and skip status polls. A genuinely silent transport
             // still escalates below once past transportFreshInterval.
-            recoveryState = .idle
+            setRecoveryStateIfChanged(.idle)
             return
         }
 
-        recoveryState = .checking
+        setRecoveryStateIfChanged(.checking)
         let shouldForceReconnect = transportElapsed >= reconnectInterval
         guard shouldForceReconnect || shouldPollStatus(now: now) else { return }
 
@@ -415,10 +629,11 @@ final class ChatStreamCoordinator {
     }
 
     func markProgress(now: Date = Date()) {
+        delegate?.streamCoordinatorDidConfirmRecovery()
         lastProgressDate = now
         lastTransportActivityDate = now
         lastRecoveryStatusCheckDate = nil
-        recoveryState = .idle
+        setRecoveryStateIfChanged(.idle)
     }
 
     func clearReplayConnection() {
@@ -447,10 +662,13 @@ final class ChatStreamCoordinator {
     }
 
     private func handle(_ event: SSEEvent) {
-        // Ignore late content after the response has already completed (#288).
-        // Title/done/stream lifecycle events must still pass so session metadata
-        // updates and stream teardown are not dropped.
-        if hasCompletedCurrentResponse {
+        // Terminal-content fence (#288): once the response has completed, late
+        // content must never reach the transcript. The fence survives streamEnd
+        // (finishStream resets hasCompletedCurrentResponse but not the fence),
+        // closing the done → streamEnd → token ordering. Title and metering are
+        // session metadata and still pass; a settled completion is never
+        // re-ended by late error/cancel (#288 review).
+        if isTerminalContentFenceActive {
             switch event {
             case .title(let payload):
                 if delegate?.streamCoordinatorUpdateTitle(payload) == true {
@@ -461,24 +679,28 @@ final class ChatStreamCoordinator {
                 guard payload.sessionId == nil || payload.sessionId == delegate?.streamCoordinatorSessionID else {
                     return
                 }
-                liveTokensPerSecond = payload.displayableTokensPerSecond
+                setLiveTokensPerSecondIfChanged(payload.displayableTokensPerSecond)
                 return
-            case .done(_):
+            case .done:
                 // Duplicate done after completion — already finalized; ignore.
                 return
-            case .streamEnd, .cancelled, .heartbeat, .ignored:
+            case .heartbeat, .ignored:
                 break
-            case .error(_), .transportError(_), .compressing(_), .contextStatus(_), .warning(_):
-                break
-            case .approvalPending(_), .clarificationPending(_):
-                // A late prompt is still a valid decision the user must answer:
-                // the gateway emits these from the same post-done background
-                // thread as the #288 title events, and dropping them left the
-                // user with nothing to confirm/answer. Stale prompts are handled
-                // by the pending-action coordinator's own expiry logic.
-                break
-            case .token(_), .interimAssistant(_), .reasoning(_), .toolStarted(_),
-                 .toolCompleted(_), .pendingSteerLeftover(_):
+            case .transportError, .cancelled, .error, .streamEnd:
+                // Settled completion wins: tear down exactly once without
+                // publishing a second Live Activity end or repeating delegate
+                // finish/drain/title-refresh side effects. transportError after
+                // done must still finish (snapshot cleanup, queued-slash drain,
+                // completed-title refresh) — it previously fell through to the
+                // pre-change handleTransportError path (PR #295 re-gate).
+                finishStream()
+                return
+            case .token, .interimAssistant, .reasoning, .toolStarted, .toolCompleted,
+                 .approvalPending, .clarificationPending, .pendingSteerLeftover,
+                 .compressing, .contextStatus, .warning:
+                // Progress-only events: they drive chrome, never transcript
+                // content, so a settled completion absorbs them without
+                // reopening the fence.
                 return
             }
         }
@@ -531,7 +753,7 @@ final class ChatStreamCoordinator {
             guard payload.sessionId == nil || payload.sessionId == delegate?.streamCoordinatorSessionID else {
                 break
             }
-            liveTokensPerSecond = payload.displayableTokensPerSecond
+            setLiveTokensPerSecondIfChanged(payload.displayableTokensPerSecond)
         case .compressing:
             delegate?.streamCoordinatorDidReceiveCompressingStart()
         case .contextStatus(let payload):
@@ -560,22 +782,23 @@ final class ChatStreamCoordinator {
             finishStream()
         case .cancelled:
             liveActivityManager.end(status: .cancelled, activity: String(localized: "Response cancelled"), errorSummary: nil)
-            finishStream()
+            finishStream(ending: .cancelled)
         case .error(let message):
             if !hasCompletedCurrentResponse {
                 delegate?.streamCoordinatorDidReceiveErrorMessage(message)
             }
             liveActivityManager.end(status: .failed, activity: String(localized: "Response failed"), errorSummary: nil)
-            finishStream()
+            finishStream(ending: .failed)
         case .transportError(let message):
             handleTransportError(message)
         case .heartbeat:
+            delegate?.streamCoordinatorDidConfirmRecovery()
             // #227: a heartbeat proves the transport is alive without carrying
             // semantic progress — drop an already-shown "Checking stream" state
             // immediately. Never demote .reconnecting; that chip is owned by
             // the reconnect flow until real progress lands.
             if recoveryState == .checking {
-                recoveryState = .idle
+                setRecoveryStateIfChanged(.idle)
             }
         case .ignored:
             break
@@ -583,12 +806,12 @@ final class ChatStreamCoordinator {
     }
 
     private func handleTransportError(_ message: String) {
-        liveTokensPerSecond = nil
+        setLiveTokensPerSecondIfChanged(nil)
         guard activeStreamID != nil, !hasCompletedCurrentResponse else {
             if !hasCompletedCurrentResponse {
                 delegate?.streamCoordinatorDidReceiveErrorMessage(message)
             }
-            finishStream()
+            finishStream(ending: hasCompletedCurrentResponse ? .completed : .failed)
             return
         }
 
@@ -596,6 +819,7 @@ final class ChatStreamCoordinator {
 
         lastEventID = streamClient.lastEventID ?? lastEventID
         delegate?.streamCoordinatorSaveSnapshotIfNeeded()
+        hasInMemorySnapshotForActiveStream = true
         liveActivityManager.markStale()
         isConnectionSuspended = true
         streamClient.stop()
@@ -623,6 +847,7 @@ final class ChatStreamCoordinator {
         do {
             let response = try await client.chatStreamStatus(streamID: expectedStreamID)
             guard activeStreamID == expectedStreamID, !isConnectionSuspended else { return }
+            delegate?.streamCoordinatorDidConfirmRecovery()
 
             if response.active == false {
                 await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
@@ -681,7 +906,7 @@ final class ChatStreamCoordinator {
         let replayAfterSeq = usesReplay ? Self.runJournalReplayAfterSeq(from: lastEventID) ?? 0 : nil
         delegate?.streamCoordinatorSaveSnapshotIfNeeded()
         liveActivityManager.markStale()
-        recoveryState = .reconnecting
+        setRecoveryStateIfChanged(.reconnecting)
         streamClient.stop()
         delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
         start(
@@ -693,14 +918,18 @@ final class ChatStreamCoordinator {
 
     private func completeCurrentResponse(needsTranscriptRefresh: Bool) {
         runGeneration &+= 1
+        invalidateReconnectTask()
         liveActivityManager.end(status: .complete, activity: String(localized: "Response complete"), errorSummary: nil)
         delegate?.streamCoordinatorRemoveSnapshot(streamID: activeStreamID)
         delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
+        recordRunEndingIfRunning(.completed)
         activeStreamID = nil
+        hasInMemorySnapshotForActiveStream = false
         lastEventID = nil
-        liveTokensPerSecond = nil
+        setLiveTokensPerSecondIfChanged(nil)
         delegate?.streamCoordinatorStreamingAssistantMessageID = nil
         hasCompletedCurrentResponse = true
+        isTerminalContentFenceActive = true
         delegate?.streamCoordinatorDidCompleteCurrentResponse(needsTranscriptRefresh: needsTranscriptRefresh)
         resetRecoveryState()
     }
@@ -738,21 +967,26 @@ final class ChatStreamCoordinator {
             completeResponseFromRefreshedTranscriptAndFinishStream(streamID: streamID)
         } else {
             liveActivityManager.end(status: .failed, activity: String(localized: "Response failed"), errorSummary: nil)
-            finishStream()
+            finishStream(ending: .failed)
         }
     }
 
-    private func finishStream() {
+    private func finishStream(ending: TranscriptTurnRunOutcome.Ending = .completed) {
+        guard !isTransportFinished else { return }
+        isTransportFinished = true
         runGeneration &+= 1
+        invalidateReconnectTask()
         let completedNormally = hasCompletedCurrentResponse
         let finishedStreamID = activeStreamID
+        recordRunEndingIfRunning(ending)
         streamClient.stop()
         delegate?.streamCoordinatorStopAuxiliaryMonitoring(clearPrompt: true)
         delegate?.streamCoordinatorFlushPinnedLocalNoticesToTranscript()
         delegate?.streamCoordinatorRemoveSnapshot(streamID: finishedStreamID)
         activeStreamID = nil
+        hasInMemorySnapshotForActiveStream = false
         lastEventID = nil
-        liveTokensPerSecond = nil
+        setLiveTokensPerSecondIfChanged(nil)
         delegate?.streamCoordinatorStreamingAssistantMessageID = nil
         hasCompletedCurrentResponse = false
         delegate?.streamCoordinatorDidFinishStream()
@@ -764,6 +998,29 @@ final class ChatStreamCoordinator {
         }
     }
 
+    /// Adopts a server-known start for the run that is now active, replacing the
+    /// local stamp `activeStreamID`'s observer laid down. Every seed a caller can
+    /// supply is stable across re-entry, so applying one on a same-stream
+    /// reattach sharpens the counter rather than restarting it; a nil seed leaves
+    /// the discovery stamp alone. A future-dated seed (clock skew between phone
+    /// and server) is clamped to `now` so the label never counts backwards, and
+    /// the earliest start known for this stream wins: a re-seed can only move the
+    /// start earlier, never forward onto a fresh `now`, which would restart
+    /// "Working for" on every reload of a session a skewed server is running.
+    private func seedActiveRunStart(_ startedAt: Date?, now: Date = Date()) {
+        guard activeStreamID != nil, let startedAt else { return }
+        let clamped = min(startedAt, now)
+        activeRunStartedAt = min(activeRunStartedAt ?? clamped, clamped)
+    }
+
+    /// Records the run's span once. `completeCurrentResponse` already cleared
+    /// the run start for a normal completion, so a later teardown event (a
+    /// `streamEnd` or `cancelled` after `done`) cannot overwrite that ending.
+    private func recordRunEndingIfRunning(_ ending: TranscriptTurnRunOutcome.Ending) {
+        guard let activeRunStartedAt else { return }
+        latestRunEnding = ChatRunEnding(startedAt: activeRunStartedAt, endedAt: Date(), ending: ending)
+    }
+
     private func markConnectionStarted(
         isReplay: Bool,
         recoveryState: ActiveStreamRecoveryState
@@ -772,13 +1029,106 @@ final class ChatStreamCoordinator {
         lastProgressDate = isReplay ? startedAt : nil
         lastTransportActivityDate = startedAt
         lastRecoveryStatusCheckDate = nil
-        self.recoveryState = recoveryState
+        setRecoveryStateIfChanged(recoveryState)
         isReplayConnection = isReplay
         delegate?.streamCoordinatorDidStartConnection(isReplay: isReplay)
     }
 
+    private func loadMessagesForReconnect(reconnectTaskID: UUID) async -> Bool {
+        while reconnectTask?.id == reconnectTaskID {
+            let modelContext = recoveryModelContext(for: reconnectTaskID)
+            reconnectTranscriptLoadTaskID = reconnectTaskID
+            await delegate?.streamCoordinatorLoadMessages(modelContext: modelContext)
+            guard reconnectTranscriptLoadTaskID == reconnectTaskID else { return false }
+
+            // The transport-error path can begin recovery without persistence
+            // access. If a foreground caller supplied it while that nil-context
+            // load was in flight, repeat the shared load once so optimistic
+            // messages and the cache participate in reconciliation.
+            if modelContext == nil, recoveryModelContext(for: reconnectTaskID) != nil {
+                continue
+            }
+
+            reconnectTranscriptLoadTaskID = nil
+            return true
+        }
+        return false
+    }
+
+    private func reconnectTaskIsCurrent(
+        reconnectTaskID: UUID,
+        streamID: String,
+        runGeneration: Int
+    ) -> Bool {
+        guard !Task.isCancelled,
+              let reconnectTask,
+              reconnectTask.id == reconnectTaskID,
+              reconnectTask.streamID == streamID,
+              reconnectTask.runGeneration == runGeneration,
+              self.runGeneration == runGeneration,
+              activeStreamID == streamID,
+              isConnectionSuspended
+        else { return false }
+        return true
+    }
+
+    private func reconnectTaskOwnsFinalization(
+        reconnectTaskID: UUID,
+        streamID: String,
+        runGeneration: Int
+    ) -> Bool {
+        guard !Task.isCancelled,
+              let reconnectTask,
+              reconnectTask.id == reconnectTaskID,
+              reconnectTask.streamID == streamID,
+              reconnectTask.runGeneration == runGeneration,
+              self.runGeneration == runGeneration
+        else { return false }
+        return activeStreamID == streamID || activeStreamID == nil
+    }
+
+    private func recoveryModelContext(for reconnectTaskID: UUID) -> ModelContext? {
+        guard reconnectTask?.id == reconnectTaskID else { return nil }
+        return reconnectTask?.modelContext
+    }
+
+    private func invalidateReconnectTask() {
+        let task = reconnectTask?.task
+        reconnectTask = nil
+        reconnectTranscriptLoadTaskID = nil
+        task?.cancel()
+    }
+
+    private func invalidateReconnectTaskIfItDoesNotMatchCurrentStream() {
+        guard let reconnectTask,
+              reconnectTask.runGeneration == runGeneration
+        else {
+            invalidateReconnectTask()
+            return
+        }
+
+        if activeStreamID == nil, reconnectTranscriptLoadTaskID == reconnectTask.id {
+            return
+        }
+
+        guard isConnectionSuspended, activeStreamID == reconnectTask.streamID else {
+            invalidateReconnectTask()
+            return
+        }
+    }
+
+    private func setRecoveryStateIfChanged(_ next: ActiveStreamRecoveryState) {
+        guard recoveryState != next else { return }
+        recoveryState = next
+    }
+
+    private func setLiveTokensPerSecondIfChanged(_ next: Double?) {
+        guard liveTokensPerSecond != next else { return }
+        liveTokensPerSecond = next
+    }
+
     private func resetRecoveryState() {
-        recoveryState = .idle
+        setRecoveryStateIfChanged(.idle)
         lastProgressDate = nil
         lastTransportActivityDate = nil
         lastRecoveryStatusCheckDate = nil
@@ -786,22 +1136,29 @@ final class ChatStreamCoordinator {
         delegate?.streamCoordinatorDidResetRecoveryState()
     }
 
+    /// Called right after `seedActiveRunStart`, so the widget's system elapsed
+    /// timer starts from the same instant as the in-app "Working for" label
+    /// rather than from the moment this process attached to the stream (#406).
     private func startLiveActivity(streamID: String) {
         guard let sessionID = delegate?.streamCoordinatorSessionID else { return }
 
         liveActivityManager.start(
             sessionID: sessionID,
             sessionTitle: delegate?.streamCoordinatorDisplayTitle ?? String(localized: "Untitled Session"),
-            streamID: streamID
+            streamID: streamID,
+            startedAt: activeRunStartedAt ?? Date()
         )
     }
 
-    private func restoreSnapshotIfAvailable(streamID: String) {
+    @discardableResult
+    private func restoreSnapshotIfAvailable(streamID: String) -> Bool {
+        let result = delegate?.streamCoordinatorRestoreSnapshotIfAvailable(streamID: streamID) ?? .notRestored
+
         guard lastEventID == nil else {
-            _ = delegate?.streamCoordinatorRestoreSnapshotIfAvailable(streamID: streamID)
-            return
+            return result.didRestoreSnapshot
         }
 
-        lastEventID = delegate?.streamCoordinatorRestoreSnapshotIfAvailable(streamID: streamID) ?? lastEventID
+        lastEventID = result.lastEventID ?? lastEventID
+        return result.didRestoreSnapshot
     }
 }

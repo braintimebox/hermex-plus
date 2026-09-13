@@ -5,47 +5,24 @@ enum MarkdownMathSegment: Equatable {
     case displayMath(String)
 }
 
-enum MarkdownMathSegmenter {
-    /// Memoized results keyed by content. `segments(in:)` is a pure function of
-    /// `content`, but it does an O(N) `Array(content)` copy plus a full
-    /// protection-mask scan on every call — and it runs inside `body` (both the
-    /// static and streaming renderers call it per token flush, ~16ms). Caching
-    /// by content removes the repeated O(N) work.
-    ///
-    /// F1 (scroll perf): a multi-entry (LRU) cache instead of a single entry so
-    /// a fast scroll back through history (A→B→A) does NOT re-miss and re-scan a
-    /// message that was already segmented. Bounded to avoid unbounded memory;
-    /// results are value-type and cheap to hold. Lock-guarded because `body`
-    /// can be evaluated off the main actor.
-    private static let cacheLock = NSLock()
-    private static var cache: [(content: String, result: [MarkdownMathSegment])] = []
-    private static let cacheLimit = 24
+/// The rendering shape of a piece of markdown, decided once.
+///
+/// `plain` is the overwhelmingly common case (an answer with no display math).
+/// Its payload has **already** been through
+/// `MarkdownMathFormatter.replacingInlineMath(in:)`, so callers must not run
+/// that pass again — doing so scans the whole string a second time for no
+/// change in output.
+enum MarkdownMathLayout: Equatable {
+    case plain(String)
+    case segmented([MarkdownMathSegment])
+}
 
+struct MarkdownMathSegmenter {
     static func segments(in content: String) -> [MarkdownMathSegment] {
-        // Fast path: read the cache, but do NOT hold the lock over the
-        // O(N) compute (that would serialize any other caller). A miss may
-        // race another thread computing the same content — harmless, both
-        // produce the same value-type result.
-        cacheLock.lock()
-        for i in cache.indices where cache[i].content == content {
-            let hit = cache[i].result
-            cacheLock.unlock()
-            return hit
+        // Skip Markdown protection and delimiter scans when no math opener is possible.
+        guard content.utf8.contains(0x24) || content.utf8.contains(0x5C) else {
+            return [.markdown(content)]
         }
-        cacheLock.unlock()
-
-        let result = computeSegments(in: content)
-
-        cacheLock.lock()
-        if cache.count >= cacheLimit {
-            cache.removeFirst()
-        }
-        cache.append((content: content, result: result))
-        cacheLock.unlock()
-        return result
-    }
-
-    private static func computeSegments(in content: String) -> [MarkdownMathSegment] {
         let characters = Array(content)
         guard characters.count >= 4 else {
             return [.markdown(MarkdownMathFormatter.replacingInlineMath(in: content))]
@@ -327,5 +304,123 @@ extension [MarkdownMathSegment] {
             if case .displayMath = $0 { return true }
             return false
         }
+    }
+}
+
+/// Memoizes the math-segmentation pass, which is pure over its input string.
+///
+/// **Why this exists.** `segments(in:)` walks the whole string twice (once to
+/// build the protection mask, once to scan) and the no-math branch then ran
+/// `replacingInlineMath` over the whole string *again*. Measured on this repo's
+/// sources with `-O`, an 8 KB assistant answer cost ~7.5 ms per call. SwiftUI
+/// re-evaluates a body for reasons unrelated to the text — a sibling fold
+/// toggling, a scroll-position flip, a `@AppStorage` write — so that cost was
+/// paid repeatedly for a string that never changed. A cache hit is ~0.0001 ms.
+///
+/// Keyed by the exact content string; unchanged text is the whole point.
+/// `NSCache` is used so the entries evict under memory pressure rather than
+/// growing with transcript length, and it is thread-safe, which matters
+/// because SwiftUI may evaluate bodies off the main thread.
+enum MarkdownMathLayoutCache {
+    /// Streaming content mutates on nearly every token, so caching it would
+    /// only churn the cache. Bodies longer than this are still segmented, just
+    /// not stored.
+    static let maxCachedCharacterCount = 100_000
+
+    private static let storage: NSCache<NSString, Box> = {
+        let cache = NSCache<NSString, Box>()
+        cache.countLimit = 240
+        return cache
+    }()
+
+    private final class Box {
+        let layout: MarkdownMathLayout
+        init(_ layout: MarkdownMathLayout) { self.layout = layout }
+    }
+
+    static func layout(for content: String) -> MarkdownMathLayout {
+        guard content.count <= maxCachedCharacterCount else {
+            return computeLayout(for: content)
+        }
+
+        let key = content as NSString
+        if let cached = storage.object(forKey: key) {
+            return cached.layout
+        }
+
+        let layout = computeLayout(for: content)
+        storage.setObject(Box(layout), forKey: key)
+        return layout
+    }
+
+    /// Layout without reading or writing the cache.
+    ///
+    /// Streaming text changes on nearly every token, so caching it would insert
+    /// a new entry per token and evict the settled answers the cache exists to
+    /// protect. Callers on the streaming path still get the single-pass benefit
+    /// (no redundant second `replacingInlineMath` walk) without the churn.
+    static func uncachedLayout(for content: String) -> MarkdownMathLayout {
+        computeLayout(for: content)
+    }
+
+    private static func computeLayout(for content: String) -> MarkdownMathLayout {
+        let segments = MarkdownMathSegmenter.segments(in: content)
+        guard segments.containsMath else {
+            // Reuse the markdown the segmenter already produced. It has been
+            // inline-math-formatted, so re-running that pass here would be a
+            // second full-string walk for an identical result.
+            //
+            // One exception: the segmenter *recognises* a display-math span but
+            // drops it when the body is empty or whitespace-only (`$$ $$`,
+            // `\[ \]`). Those produce no `.displayMath` segment, so
+            // `containsMath` is false, yet the surrounding markdown segments no
+            // longer contain the delimiters — joining them would silently
+            // swallow literal text the old single-pass renderer preserved.
+            //
+            // Checking the segment count is not enough: an empty span at the
+            // very start still leaves exactly one markdown segment. Instead,
+            // ask whether the content contains a display delimiter at all. If
+            // it does and nothing was emitted as math, the segmenter consumed
+            // delimiters that the legacy pass would have preserved, so defer to
+            // the legacy whole-string pass.
+            //
+            // This costs an extra walk only for content carrying a display
+            // delimiter that produced no math, which is rare. Content with no
+            // display delimiters at all -- the overwhelmingly common case --
+            // takes the fast path untouched.
+            guard !containsDisplayDelimiter(content) else {
+                return .plain(MarkdownMathFormatter.replacingInlineMath(in: content))
+            }
+
+            let joined = segments.compactMap { segment -> String? in
+                guard case .markdown(let markdown) = segment else { return nil }
+                return markdown
+            }.joined()
+            return .plain(joined)
+        }
+        return .segmented(segments)
+    }
+
+    /// Cheap scan for a display-math opener/closer (`$$` or `\[` / `\]`).
+    ///
+    /// Deliberately conservative: a false positive only costs one extra pass,
+    /// while a false negative would drop literal text from the transcript.
+    private static func containsDisplayDelimiter(_ content: String) -> Bool {
+        content.contains("$$") || content.contains("\\[") || content.contains("\\]")
+    }
+
+    /// Test seam: drop memoized layouts so a test can observe a cold pass.
+    static func removeAll() {
+        storage.removeAllObjects()
+    }
+
+    /// Test seam: whether `content` currently has a memoized entry.
+    ///
+    /// Exists so a test can assert the *absence* of caching on the streaming
+    /// path. Comparing two layout values cannot do that — they are equal
+    /// whether or not the cache was written — so without this probe the
+    /// non-pollution contract is untestable.
+    static func hasCachedLayout(for content: String) -> Bool {
+        storage.object(forKey: content as NSString) != nil
     }
 }

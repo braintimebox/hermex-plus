@@ -1,3 +1,116 @@
+## 3.7.0 — Upstream 1.6.0 sync
+
+Merged `uzairansaruzi/hermex` upstream `1.6.0` (105 commits since the fork point).
+Every conflict block was resolved by measurement, not by preference: our blocks
+carry a measured cause in their comments and were kept, their structural
+additions were taken, and independent additions were unioned.
+
+### Scroll — the two models now cooperate instead of competing
+
+- `sizeChangeAnchor` is **back**, conditioned on `shouldFollowLatestMessage` and
+  `isDisclosureSettling`. It returns `nil` while the reader is parked, so the
+  engine can no longer yank the viewport on its own. Our own code had removed
+  this anchor because the unconditional form yanked, then compensated by hand
+  across 27 commits.
+- Their `FollowLatch` is the **only** owner of the viewport. `ChatScrollOwner`
+  and `ScrollOwnershipState` are gone, and the comments in `ChatView` say so:
+  two owners was the conflict, and a change of owner re-evaluated the whole
+  `ChatView` body plus its environment cascade — the shape behind the 3–14 s
+  AttributeGraph freezes. Their latch produces far fewer transitions, so the
+  container had nothing left to isolate. It is covered by 27 of their tests.
+- Kept our ↓ button behaviour. The tap cancels an in-flight deceleration before
+  the programmatic scroll, because `ScrollViewProxy.scrollTo` is silently ignored
+  while a flick is still coasting — without it the button looks dead until the
+  scroll stops. The merge kept the observer and dropped the `post`, so this is a
+  restoration, not a new feature.
+- `ChatPrependScrollPositionController` is replaced by
+  `ChatScrollPositionController`, which is that class plus `Mode.hold`,
+  `hasPrependCapture`, `didRevertSwiftUIOffset`, `resyncAfterHold`,
+  `contentSizeChangedThisTurn` and `quietReleaseTask`. Position is released
+  when content settles rather than after a fixed one-second timer.
+- Their `ignoresCoastingGesture` closes a case we never modelled: a send or
+  scroll-to-bottom while the transcript is still decelerating.
+
+### Share — one transport, one visible failure path
+
+- The share extension and the app now exchange drafts through the App Group
+  container with a reservation, instead of our pasteboard channel plus a
+  URL payload. The extension also reports every failure in place
+  ("Could not save shared content.", "Shared content saved. Open Hermex
+  manually.") and tries four ways of opening the host app.
+- Destination **choice is kept**: shared content asks where it should land
+  ("New Chat" / "Choose existing…"), and the reservation is released exactly
+  once for whichever branch consumes it, cancel included.
+
+### Streaming — cheap live path, complete settled path
+
+- Kept our O(1) live renderer; the settled path takes their
+  `MarkdownMathLayoutCache` and selectable headings. Formatting and math still
+  appear when the stream settles; the hot path never pays for them.
+- Kept our measured per-token fixes: the incremental transcript fast path, the
+  reload-amplification guard, the pagination cursor, EXPERIMENT B identity and
+  the pan-gesture metrics hook. `TranscriptMessageContent` is gone: it was our
+  3.4.8 scroll-isolation container, dead since their latch took the viewport, and
+  Swift still type-checked its 40-argument row on every build.
+- Took their terminal content fence (it survives `streamEnd`, which our flag did
+  not) and `setLiveTokensPerSecondIfChanged` (no write when the value is
+  unchanged).
+
+### Chat — features
+
+- Pin, Save, Scheduled Messages, Forward and Reply are preserved. All five are
+  expressed through the upstream `ChatMessageActionItem` API so the SwiftUI
+  menu and the UIKit context menu stay in step.
+- Took `ChatDraftStore`: drafts are keyed per chat **and per server**, flushed
+  to disk, and carry quotes, attachments and settings. On-hydration text is
+  preserved instead of being overwritten.
+
+### Composer
+
+- Collapsed pill / expanded card behaviour, where a tap on the field expands it
+  and presenting a sheet never snaps it shut. Our height cap (96pt) and the
+  no-op height-update guard are kept, so the field cannot balloon and typing
+  does not relayout the transcript.
+
+### Workspace
+
+- The file tree **opens closed**. Upstream expanded every top-level folder on
+  first visit, which on a phone buries the workspace's own entries behind a wall
+  of their children. The reader now expands what they need, and that choice is
+  remembered per server and workspace.
+
+### Sessions
+
+- Messaging-channel sessions (Telegram, Discord, Slack…) are **listed** again.
+  We hid them because the server refused to continue them; upstream #320 removed
+  that refusal and routes them through the import step, so the filter was hiding
+  rows the app can now open.
+
+### Lines the union dropped
+
+The merge could not be compiled for a day, and that hid every error behind the
+first one. Six lines had been lost to a union that took one side of a hunk, and
+they only became visible once the file compiled:
+
+- `actions.pendingActionCoordinator = pendingActionCoordinator` in
+  `ChatViewModel.init`. `ChatActionsState` holds the coordinator weakly, so the
+  approval prompt, the clarification prompt, the session approval bypass and both
+  action error messages read `nil`/`false` for the life of the view model.
+- the `didSet` that clears `sendErrorIsFromStreamRecovery`, so a later send error
+  was wiped by an earlier recovery confirmation;
+- `transcriptRevision &+= 1` in `applyReloadedMessages`, so a reload that only
+  rewrote a row's contents never re-scanned it;
+- a trailing `errorMessage = nil` that swallowed the offline timeout message;
+- two call sites still passing two arguments to `onScrollToLatestContent`.
+
+Twenty-four tests failed the moment the build first succeeded. All of them pass.
+
+### Release mechanics
+
+- `VERSION`, the CHANGELOG heading and every `MARKETING_VERSION` now agree.
+
+---
+
 ## 3.6.1 — release 3.6.1
 
 ## 3.6.0 — Scroll cleanup (dead code removal + stream guard)
@@ -53,3 +166,72 @@
 - **Fix:** removed `streamingScrollTrigger` onChange handler. `onChange(of: messages.count)` is the single follow mechanism.
 
 ## 3.5.7 — Silent streaming ON by default
+
+---
+
+# Upstream history
+
+Synced from `uzairansaruzi/hermex`. Kept below our release history because
+`scripts/release-check.py` requires the top heading to equal `VERSION`.
+
+## [1.6.0] - 2026-09-05
+
+### Added
+- Redesigned chat transcript: settled tool calls, live tool activity, and
+  thinking render as compact log rows, finished turns fold behind one
+  elapsed-time row, a working-for counter sits at the transcript tail, and
+  each message carries a timestamp and copy button. Expanded rows are capped at
+  a scrollable window and new rows fade in.
+- Pill-shaped Liquid Glass composer with a toolbar row when focused, combined
+  model and effort controls with provider glyphs, and haptics for disclosures,
+  copies, and Git actions.
+- Reference workspace files from the composer with `@path` chips.
+- Slash and skill autocomplete triggers at the caret, ranks by match quality,
+  and shows a picked skill as a chip in the composer and in the sent bubble.
+- Workspace file tree that loads lazily, a syntax-coloured source viewer for
+  files, file-type icons, and chat file links that open in the viewer.
+- Git review surface that shows every changed file in one diff.
+- Markdown workspace images render inline and zoom in a full-bleed viewer;
+  Markdown files render in workspace previews.
+- Tasks list rebuilt as an agenda with filters, row actions, and recent runs
+  across all tasks; Task Detail redesigned with per-task run history and a
+  model, provider, and profile picker.
+- Insights rebuilt as a Usage screen with a window chart.
+- Session rows show Approval, Input, and Working states, and search results
+  show why they matched.
+- `/clear` clears the session's server-side history.
+- Settings > Default Model and Default Profile share the composer's model
+  picker; Providers gets matching glyphs and list chrome.
+- The clarification card pins above the composer.
+- Attachments can be sent without composer text.
+
+### Changed
+- Reasoning effort changes are scoped to the session instead of applying
+  globally.
+- The "Checking stream" chip and status polls stay hidden while transport
+  heartbeats are fresh.
+- HTTP 403 responses surface the server's reason.
+
+### Fixed
+- Partial streams survive relaunch, foreground stream recovery no longer races
+  itself, and late events after a response completes are ignored.
+- Unsent composer text, attachments, and settings persist as drafts.
+- The default model persists with its provider and the picker exposes the full
+  model catalog.
+- Trusted-header and OIDC sign-in report their real state, and stale auth
+  status is invalidated when the URL or headers change during onboarding.
+- Incoming shares are transactional and no longer leave half-staged imports.
+- "Working for" and "Worked for" count from the server's turn start.
+- Transcript scroll position survives reloads and disclosure toggles, and
+  auto-follow is an explicit latch.
+- CLI and messaging sessions can be continued from the app, and duplicating a
+  session uses the server's duplicate endpoint instead of branching.
+- Kanban restores the browsed Board per server after relaunch, and the Board
+  picker stays visible for long Board names.
+- Server First dictation runs until the user stops it, and oversized
+  transcription uploads are rejected before they fail.
+- Inline assignment math renders correctly.
+- Streaming thinking stays responsive, cached-message lookups are batched, and
+  settled Markdown math layouts are cached.
+
+## [1.5.0] - 2026-08-04

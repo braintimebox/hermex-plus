@@ -60,6 +60,7 @@ struct SettingsView: View {
     @State private var notificationStatusMessage: String?
     @AppStorage(AppTheme.storageKey) private var appThemeRawValue = AppTheme.system.rawValue
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
+    @AppStorage(AppHaptics.streamingPulseIsEnabledKey) private var isStreamingPulseEnabled = false
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
     @AppStorage(ResponseCompletionNotifications.hasRequestedPermissionKey) private var hasRequestedResponseCompletionNotificationPermission = false
     @AppStorage(AgentRunLiveActivityPrivacy.showsResponseExcerptsKey) private var showsLiveActivityResponseExcerpts = false
@@ -74,8 +75,9 @@ struct SettingsView: View {
     @AppStorage(ChatTranscriptDisplaySettings.showsThinkingAndToolCardsKey) private var showsThinkingAndToolCards = true
     @AppStorage(ChatTranscriptDisplaySettings.thinkingCardsStartExpandedKey) private var thinkingCardsStartExpanded = false
     @AppStorage(ChatTranscriptDisplaySettings.toolCardsStartExpandedKey) private var toolCardsStartExpanded = false
+    @AppStorage(ChatTranscriptDisplaySettings.foldsSettledTurnsKey) private var foldsSettledTurns = true
     @AppStorage(ChatTranscriptDisplaySettings.hidesAttachmentPathsKey) private var hidesAttachmentPaths = true
-    @AppStorage(ChatTranscriptDisplaySettings.showsAssistantTurnTimestampsKey) private var showsAssistantTurnTimestamps = false
+    @AppStorage(ChatTranscriptDisplaySettings.showsAssistantTurnTimestampsKey) private var showsAssistantTurnTimestamps = ChatTranscriptDisplaySettings.defaultShowsTimestamps
     @AppStorage(ChatTranscriptDisplaySettings.showsResponseSpeedKey) private var showsResponseSpeed = false
     @AppStorage(ChatTranscriptDisplaySettings.wrapsCodeBlockLinesKey) private var wrapsCodeBlockLines = false
     @AppStorage(ChatTranscriptDisplaySettings.suppressesReasoningAndToolUpdatesKey) private var suppressesReasoningAndToolUpdates = true
@@ -97,6 +99,7 @@ struct SettingsView: View {
     @AppStorage("sidebar_shows_saved_section") private var showsSavedSection = true
     @AppStorage(SectionVisibilitySettings.chatFilesKey) private var showsChatFilesButton = true
     @AppStorage(SectionVisibilitySettings.chatGitKey) private var showsChatGitControls = true
+    @AppStorage(BotModeGate.isEnabledKey) private var isBotModeEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -165,6 +168,18 @@ struct SettingsView: View {
                         isOn: $isHapticsEnabled
                     )
 
+                    if isHapticsEnabled {
+                        SettingsDivider()
+
+                        SettingsToggleRow(
+                            title: String(localized: "Pulse While Streaming"),
+                            systemImage: "waveform",
+                            isOn: $isStreamingPulseEnabled
+                        )
+
+                        SettingsFootnote(String(localized: "A light tick as each reply streams in."))
+                    }
+
                     SettingsDivider()
 
                     SettingsToggleRow(
@@ -232,6 +247,16 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     SettingsToggleRow(
+                        title: String(localized: "Fold Finished Turns"),
+                        systemImage: "rectangle.compress.vertical",
+                        isOn: $foldsSettledTurns
+                    )
+
+                    SettingsFootnote(String(localized: "Collapses a finished turn's thinking, tool calls, and interim replies behind one row that shows how long it took. Tap the row to expand it."))
+
+                    SettingsDivider()
+
+                    SettingsToggleRow(
                         title: String(localized: "Streamed Text Animation"),
                         systemImage: "sparkles",
                         isOn: $isStreamedTextAnimationEnabled
@@ -252,12 +277,12 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     SettingsToggleRow(
-                        title: String(localized: "Response Timestamps"),
+                        title: String(localized: "Message Timestamps"),
                         systemImage: "clock",
                         isOn: $showsAssistantTurnTimestamps
                     )
 
-                    SettingsFootnote(String(localized: "Adds a small marker and the time above each response so back-to-back replies are easier to tell apart."))
+                    SettingsFootnote(String(localized: "Shows the time under your messages and under each finished response."))
 
                     SettingsDivider()
 
@@ -323,7 +348,7 @@ struct SettingsView: View {
                         isOn: $showsChatGitControls
                     )
 
-                    SettingsFootnote(String(localized: "Covers both the git menu in the chat toolbar and the branch picker in the composer."))
+                    SettingsFootnote(String(localized: "Hides the git menu, branch picker, and commit controls."))
                 }
 
                 SettingsCard(title: String(localized: "Main Page")) {
@@ -360,7 +385,7 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     SettingsToggleRow(
-                        title: String(localized: "Insights"),
+                        title: String(localized: "Usage"),
                         systemImage: "chart.bar",
                         isOn: $showsInsightsSection
                     )
@@ -390,6 +415,16 @@ struct SettingsView: View {
                     )
 
                     SettingsFootnote(String(localized: "Turn off the entries you never use to shorten the top of the session list. Each one is the only way into its screen, so turn it back on here when you need it again."))
+                }
+
+                SettingsCard(title: String(localized: "Preview")) {
+                    SettingsToggleRow(
+                        title: String(localized: "Bot Mode (beta)"),
+                        systemImage: "cpu",
+                        isOn: $isBotModeEnabled
+                    )
+
+                    SettingsFootnote(String(localized: "Bot Mode is unfinished. It adds a Sessions/Bots switch to the session list and a Bot connection row to each server."))
                 }
 
                 SettingsCard(title: String(localized: "Sessions")) {
@@ -577,6 +612,13 @@ struct SettingsView: View {
                         StreamingLabView()
                     } label: {
                         SettingsAccessoryRow(title: String(localized: "Streaming Lab"), systemImage: "waveform.path.ecg")
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        ProviderGlyphGalleryView()
+                    } label: {
+                        SettingsAccessoryRow(title: "Provider Glyphs", systemImage: "square.grid.2x2")
                     }
                     .buttonStyle(.plain)
 
@@ -2189,6 +2231,7 @@ private struct ServerDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(BotModeGate.isEnabledKey) private var isBotModeEnabled = false
     @State private var displayName: String
     @State private var initials: String
     @State private var colorHex: String
@@ -2221,6 +2264,11 @@ private struct ServerDetailView: View {
                     SettingsValueRow(title: String(localized: "Status")) {
                         SettingsStatusPill(label: isActive ? String(localized: "Active") : String(localized: "Inactive"))
                     }
+                }
+
+                if isBotModeEnabled, let server = URL(string: account.urlString) {
+                    NavigationLink("Bot connection") { BotConnectionView(server: server) }
+                        .frame(minHeight: 44)
                 }
 
                 SettingsCard(title: String(localized: "Identity")) {
@@ -2288,6 +2336,7 @@ private struct ServerDetailView: View {
                     // #286 W2).
                     if let removedServerURL = URL(string: account.urlString) {
                         try? CacheStore.clearCache(for: removedServerURL, in: modelContext)
+                        await ChatDraftStore.shared.discardDrafts(for: removedServerURL)
                     }
                     await authManager.removeServer(account)
                     // Only a non-active removal leaves this view alive to reset its

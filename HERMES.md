@@ -202,6 +202,16 @@ vs `CachedSession.sessionID` прошёл гейт и уронил сборку.
 правило разрешения для каждого класса файлов, известные ловушки. Сначала прогнать
 `python3 scripts/upstream-rehearse.py`; план написан против его вывода.
 
+**Открытый архитектурный вопрос — `docs/agents/arch-001-extracted-state.md`:**
+три вынесенных состояния (`ChatComposerState`, `ChatActionsState`, `ChatStreamState`)
+— наши, у upstream их нет; решение upstream-модель-побеждает, реализация отдельной
+задачей. Читать перед правками `ChatViewModel`, чтобы не поддержать второй владелец.
+
+**Три слоя работы — `docs/agents/sync-layers.md`.** Читать, когда что-то упало:
+последовательность (git, структура), сборка (Swift, только CI), pipeline
+(публикация). Провал в одном слое не чинится инструментом другого — это и была
+ошибка, из-за которой один потерянный `}` искали через `gh run list` пять прогонов.
+
 ⚠ УДАЛЁН: `docs/agents/domain.md` — upstream его удалил, мы приняли удаление
 (решение зафиксировано в плане синка). Указатели, которые в нём жили, теперь здесь.
 
@@ -239,10 +249,19 @@ scripts/pipelines/release_hermesplus.py    ← ЕДИНСТВЕННЫЙ рели
 
     ⚠ без аргументов печатает help, а НЕ релиз (защита от случайного запуска)
 
-scripts/pipeline-precheck.py                ← 7 гейтов (вызывается хуком И CI)
+scripts/pipeline-precheck.py                ← 9 гейтов (вызывается хуком И CI)
 scripts/lint-tests.py                       ← гейт 6: тесты-гонки (вызывается precheck)
 scripts/check-doc-references.py             ← гейт 7: ссылки на несуществующее
+scripts/check-swift-structural-balance.py   ← гейт 8: баланс скобок против ОБОИХ родителей
+                                              (union двух сторон конфликта теряет `}` в конце
+                                               стороны; Swift показывает это лавиной
+                                               несвязанных ошибок — стоило 5 прогонов CI)
+scripts/check-duplicate-declarations.py     ← гейт 9: одно объявление дважды в одном типе
+                                              (`invalid redeclaration of 'x'` × N = один
+                                               склеенный блок; калиброван по enclosing-типу,
+                                               var vs func и сигнатуре — иначе 2505 ложных)
 scripts/tests/test_doc_references.py        ← юнит-тесты гейта 7 (10 кейсов, запускать после правки)
+docs/agents/sync-layers.md                  ← три слоя: последовательность / сборка / pipeline
 scripts/upstream-rehearse.py                ← разведка upstream-merge (рабочий репо не трогает)
     --keep  оставить клон для ручного разбора (по умолчанию клон удаляется)
 scripts/release-check.py                    ← 5 инвариантов (вызывается precheck)
@@ -309,6 +328,8 @@ scripts/check-swift-file-sizes  ← лимит 500 LOC на файл (найде
 scripts/upstream-watch          ← слежка за hermes-webui (сервер)
 scripts/webui-json              ← JSON-запросы к серверу (нужен HERMES_WEBUI_BASE_URL)
 scripts/verify_kanban_reference_server.py
+scripts/benchmark-math-formatting + scripts/benchmarks/MathFormatting.swift
+                                ← замер стоимости форматирования math в стриминге
 ```
 
 ### GitHub Actions
@@ -358,10 +379,11 @@ macOS-джобу до конца.
 
 ```
 Слой 1 — инструкции и процесс      [готов]
-  ✓ release_hermesplus.py + pipeline-precheck (6 гейтов)
+  ✓ release_hermesplus.py + pipeline-precheck (9 гейтов)
   ✓ sync-upstream (merge, не rebase)
   ✓ upstream-rehearse.py (разведка конфликтов, 0 CI-минут)
   ✓ project_snapshot (статус из git)
+  ✓ docs/agents/sync-layers.md (три слоя: последовательность / сборка / pipeline)
   ✓ HERMES.md (этот файл)
 
 Слой 2 — защита                    [готов]
@@ -392,11 +414,37 @@ python3 scripts/sync-upstream --plan     # что будет при merge
 
 База отслеживания: тег `plus/base-vX.Y.Z`. После merge — передвинуть.
 
+### Что нельзя потерять при синке
+
+Слияние молча берёт чужую сторону блока. Так уже пропали
+`ToolCallCardView.swift`, `InsightsRows.swift` и 32 наших объявления внутри
+выживших файлов.
+
+```bash
+python3 scripts/check-fork-preserved.py --list     # что наше — ДО синка
+python3 scripts/check-fork-preserved.py            # после: блок, если наше исчезло
+python3 scripts/check-fork-preserved.py --record   # новая фича попала в манифест
+```
+
+Манифест — `docs/agents/fork-manifest.json`. Список наших фич —
+`docs/agents/fork-inventory.md`. Гейт 12 в `pipeline-precheck.py` проверяет это
+на каждом push.
+
+**Правило:** новая наша фича без `--record` живёт до ближайшего синка и может
+пропасть незаметно. Убираем осознанно — вписываем имя в `removed` с причиной.
+
+⚠ **pbxproj — три вещи, которые Xcode не сообщает внятно:** файл может быть вообще
+не зарегистрирован; два файла могут делить один ID (один выпадает из сборки);
+файл может стоять в группе, чей путь ведёт не к его папке. Все три проверяет
+гейт 3.
+
 ---
 
 ## ЧЕГО ЗДЕСЬ НЕТ (не ищи)
 
-- GitHub Issues / PR-процесса — мы работаем пушем в main
+- GitHub Issues / PR-процесса для обычной работы — push в `main`.
+  Исключение: синк upstream идёт в ветке (`sync/upstream-<ver>`) + PR, чтобы
+  `main` оставался точкой отката, пока CI красный
 - Xcode, симулятора, XcodeBuildMCP — только CI
 - TestFlight, App Store Connect — нет доступа
 - Ветки `master` у upstream — только `origin/master` как зеркало для чтения
