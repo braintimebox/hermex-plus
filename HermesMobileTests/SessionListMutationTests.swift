@@ -2356,7 +2356,11 @@ final class SessionListMutationTests: XCTestCase {
         XCTAssertFalse(SessionSummary(sessionId: "normal").isClaudeCodeSession)
     }
 
-    func testMessagingSessionsAreHiddenFromSessionList() {
+    /// Messaging rows are listed like any other external session and opened
+    /// through the import step. Hiding them was our workaround for the server
+    /// refusing to continue them; upstream #320 removed the refusal, so the
+    /// filter went with it and this suite follows.
+    func testMessagingSessionsAreListedAndOpenedThroughImport() {
         XCTAssertTrue(SessionSummary(sessionId: "tg", sessionSource: "messaging").isMessagingSession)
         XCTAssertTrue(SessionSummary(sessionId: "tg2", sourceLabel: "Telegram").isMessagingSession)
         XCTAssertTrue(SessionSummary(sessionId: "disc", rawSource: "Discord").isMessagingSession)
@@ -2365,10 +2369,14 @@ final class SessionListMutationTests: XCTestCase {
         XCTAssertFalse(SessionSummary(sessionId: "normal").isMessagingSession)
         XCTAssertFalse(SessionSummary(sessionId: "sub", sourceTag: "subagent").isMessagingSession)
 
-        XCTAssertFalse(SessionSummary(sessionId: "tg3", sessionSource: "messaging").shouldAppearInSessionList)
-        XCTAssertFalse(SessionSummary(sessionId: "tg4", sourceLabel: "Telegram").shouldAppearInSessionList)
+        XCTAssertTrue(SessionSummary(sessionId: "tg3", sessionSource: "messaging").shouldAppearInSessionList)
+        XCTAssertTrue(SessionSummary(sessionId: "tg4", sourceLabel: "Telegram").shouldAppearInSessionList)
         XCTAssertTrue(SessionSummary(sessionId: "web2", sessionSource: "webui").shouldAppearInSessionList)
         XCTAssertTrue(SessionSummary(sessionId: "normal2").shouldAppearInSessionList)
+
+        // The import step is what makes them openable, so it must still fire.
+        XCTAssertTrue(SessionSummary(sessionId: "tg5", sessionSource: "messaging").requiresExternalImport)
+        XCTAssertTrue(SessionSummary(sessionId: "tg6", sourceLabel: "Telegram").requiresExternalImport)
     }
 
     /// A row with no title is NOT a placeholder.

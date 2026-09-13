@@ -692,7 +692,14 @@ final class ChatViewModel {
     }
     var sendErrorMessage: String? {
         get { actions.sendErrorMessage }
-        set { actions.sendErrorMessage = newValue }
+        set {
+            actions.sendErrorMessage = newValue
+            // Upstream clears this in a `didSet` on the stored property. Here the
+            // storage lives in `actions`, so every write funnels through this
+            // setter: a message set after a stream-recovery failure belongs to a
+            // later failure, and must not be cleared by that recovery's confirmation.
+            sendErrorIsFromStreamRecovery = false
+        }
     }
     var messageActionErrorMessage: String? {
         get { actions.messageActionErrorMessage }
@@ -871,6 +878,11 @@ final class ChatViewModel {
             clarifyStreamClient: clarifyStreamClient ?? SSEClient(),
             pollingIntervals: pollingIntervals
         )
+        // `actions` holds the coordinator weakly, so without this the approval and
+        // clarification prompts — and the session approval bypass — read as
+        // nil/false for the whole life of the view model. The merge dropped the
+        // assignment; every prompt assertion in the suite depends on it.
+        actions.pendingActionCoordinator = pendingActionCoordinator
         self.attachmentCoordinator = ChatAttachmentCoordinator(
             client: resolvedClient,
             draftAttachmentStore: draftAttachmentStore
@@ -2274,6 +2286,11 @@ final class ChatViewModel {
         // server; deletions propagate (absent ids simply drop out).
         let mergeStart = Date()
         messages = Self.identityPreservingMerge(reloaded: reloadedMessages, current: previousMessages)
+        // Upstream bumps this on every branch of the reload; the merge replaced
+        // the final `messages = reloadedMessages` with our freeze fix and lost
+        // the bump with it, so a reload that only rewrote a row's contents left
+        // the transcript revision unchanged and the edit was never re-scanned.
+        transcriptRevision &+= 1
         let mergeMs = Int(Date().timeIntervalSince(mergeStart) * 1000)
         if mergeMs > 50 {
             HermexLogger.shared.log(

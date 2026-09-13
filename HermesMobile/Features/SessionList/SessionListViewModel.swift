@@ -296,8 +296,8 @@ final class SessionListViewModel {
                 } catch {
                     cacheErrorMessage = error.localizedDescription
                     isViewingCachedData = false
+                    errorMessage = lastError?.localizedDescription
                 }
-                errorMessage = nil
                 isOffline = true
             } else {
                 // Real server error (500, 401, …): revert the cache-first placeholder

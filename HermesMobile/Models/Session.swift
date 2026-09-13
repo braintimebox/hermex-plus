@@ -564,9 +564,10 @@ extension SessionSummary {
     }
 
     /// Messaging-channel sessions (Telegram, Discord, Slack, Email, WeChat…)
-    /// are owned by the gateway channel that created them and are read-only from
-    /// WebUI — the server rejects a chat start with 403. Hide them from the
-    /// sidebar so it only lists sessions the user can actually continue here.
+    /// are created by the gateway channel that owns them. They used to be hidden
+    /// from the sidebar because the server refused to continue them (403); the
+    /// import step (`requiresExternalImport`) exists precisely so they can be
+    /// opened here instead, so they are listed like any other external session.
     var isMessagingSession: Bool {
         if (sessionSource?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) == "messaging" {
             return true
@@ -637,7 +638,7 @@ extension SessionSummary {
     }
 
     var shouldAppearInSessionList: Bool {
-        !isEmptySidebarPlaceholder && !isMessagingSession
+        !isEmptySidebarPlaceholder
     }
 
     /// Mirrors hermes-webui's visible-sidebar safety net for just-created

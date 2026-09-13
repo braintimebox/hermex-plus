@@ -4109,14 +4109,16 @@ final class ChatViewModelSendTests: XCTestCase {
 
         XCTAssertEqual(sessionLoadCount.count, 2)
         XCTAssertEqual(viewModel.messages.filter { $0.messageId == optimisticID }.count, 1)
-        XCTAssertEqual(
-            try CacheStore.cachedMessages(
+        // `cacheMessagesInBackground` writes on a utility queue, so a direct read
+        // here races the write. Every other cache assertion in this file waits.
+        try await waitUntil("the late-join reconcile to cache the optimistic message") {
+            let cached = (try? CacheStore.cachedMessages(
                 serverURL: URL(string: "https://example.test")!,
                 sessionID: "session-abc",
                 in: context
-            ).filter { $0.messageId == optimisticID }.count,
-            1
-        )
+            )) ?? []
+            return cached.filter { $0.messageId == optimisticID }.count == 1
+        }
     }
 
     @MainActor
