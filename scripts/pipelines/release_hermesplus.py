@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -232,9 +233,16 @@ def wait_build() -> str:
     if not rid or rid == "null":
         sys.exit(f"no CI run found for {head[:8]} — did the push land?")
     for _ in range(26):  # ~25s * 26 ≈ 11 min
-        st = sh(["gh", "run", "view", rid, "--repo", OUR_REPO,
-                 "--json", "status,conclusion",
-                 "--jq", r'\(.status) \(.conclusion // "")'])
+        # Read the run as JSON and format it here. The previous form passed a
+        # jq program through `--jq`, and its interpolation was written with
+        # doubled backslashes inside a raw string, so jq received a doubled
+        # backslash and died with "failed to parse jq expression" — after the
+        # version had already been committed, pushed and tagged. The build then
+        # finished unwatched and the IPA was never downloaded.
+        run = json.loads(sh(["gh", "run", "view", rid, "--repo", OUR_REPO,
+                             "--json", "status,conclusion"]))
+        st = f"{run.get('status', '')} {run.get('conclusion') or ''}".strip()
+
         print(f"  build: {st}")
         if st.startswith("completed"):
             if not st.endswith("success"):
