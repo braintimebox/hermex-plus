@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 1135277 |
-| Версия | 3.8.0 |
+| HEAD | b1317d1 |
+| Версия | 3.8.1 |
 | Обновлено | 2026-09-14 |
 
 **Последние коммиты:**
 ```
+b1317d1 fix(composer): read attached files off the main actor, and name a refusal
+07d09a6 feat(composer): offer None to turn reasoning off
+a5e306f fix(pipeline): the wait loop handed jq a doubled backslash
+fc7bc81 3.8.0: the session list self-recovers from any load failure, and the failure is now logged
 1135277 fix(sessions): every load failure self-recovers, and the failure is logged
 4abab50 Merge pull request #1 from braintimebox/sync/upstream-1.6.0
-83aae73 test(workspace): two more tests rested on the old auto-expansion
-ff2b737 feat(workspace): the file tree opens closed
-a998528 docs(changelog): the release notes described a resolution that did not happen
-4380316 docs: record the 29 superseded declarations and retire the baseline
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 193 | 286 | +93 |
-| Строк приложения | 71,094 | 99,897 | **+28,803** |
-| Строк Chat | 27,421 | 40,142 | +12,721 |
+| Строк приложения | 71,094 | 99,962 | **+28,868** |
+| Строк Chat | 27,421 | 40,207 | +12,786 |
 | ChatViewModel | 5,952 | 7,494 | +1,542 |
-| IPA | ~44 MB | 50 MB (HermesPlus-3.7.0.ipa) | +1–2 MB |
+| IPA | ~44 MB | 50 MB (HermesPlus-3.8.0.ipa) | +1–2 MB |

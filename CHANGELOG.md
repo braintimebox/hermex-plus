@@ -1,3 +1,5 @@
+## 3.8.1 — attachments are read off the main actor (an iCloud file no longer freezes the composer) and a refused attachment names its reason; the composer offers None to turn reasoning off
+
 ## 3.8.0 — the session list self-recovers from any load failure, and the failure is now logged
 
 ## 3.7.0 — Upstream 1.6.0 sync
