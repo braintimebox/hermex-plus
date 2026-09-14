@@ -357,17 +357,38 @@ struct ReasoningEffortOption: Identifiable, CaseIterable {
     /// an empty list also means `supports_reasoning_effort == false`, which hides
     /// the control before this is ever rendered). Unknown ids are kept with a
     /// capitalized title so a newer server's vocabulary still works.
+    ///
+    /// 'None' (disable reasoning) is prepended to a vocabulary that offers a real
+    /// choice — two or more levels. The server's `supported_efforts` reports the
+    /// model's reasoning LADDER and never carries the sentinel, yet every layer
+    /// under the UI accepts it: the server coerces an explicit 'none' back to
+    /// 'none' (api/config.py), the gateway preserves it, and the transport
+    /// disables thinking for it (Gemini gets `thinkingBudget: 0`). Without this,
+    /// the option the client already ships — 'none' in `allCases` — became
+    /// unreachable the moment a server sent a vocabulary, so the composer
+    /// offered no way to turn reasoning off. A one-entry vocabulary keeps its
+    /// status-label path (`singleOption`), which is why the prepend is gated on
+    /// count > 1.
     static func options(forSupportedEfforts supportedEfforts: [String]?) -> [ReasoningEffortOption] {
         guard let supportedEfforts, !supportedEfforts.isEmpty else { return allCases }
 
         var seen = Set<String>()
-        return supportedEfforts
+        let serverOptions = supportedEfforts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty && seen.insert($0).inserted }
             .map { id in
                 allCases.first(where: { $0.id == id })
                     ?? ReasoningEffortOption(id: id, title: id.capitalized)
             }
+
+        guard serverOptions.count > 1,
+              !serverOptions.contains(where: { $0.id == "none" }),
+              let none = allCases.first(where: { $0.id == "none" })
+        else {
+            return serverOptions
+        }
+
+        return [none] + serverOptions
     }
 
     /// The lone effort when the server vocabulary leaves nothing to choose, so the

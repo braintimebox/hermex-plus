@@ -285,16 +285,31 @@ final class ReasoningEffortGatingTests: XCTestCase {
         )
     }
 
-    func testOptionsFilterToServerVocabularyPreservingServerOrder() {
+    func testOptionsPrependNoneAndPreserveServerOrder() {
         let options = ReasoningEffortOption.options(forSupportedEfforts: ["high", "low"])
-        XCTAssertEqual(options.map(\.id), ["high", "low"])
-        XCTAssertEqual(options.map(\.title), ["High", "Low"])
+        XCTAssertEqual(options.map(\.id), ["none", "high", "low"])
+        XCTAssertEqual(options.map(\.title), ["None", "High", "Low"])
+    }
+
+    /// 'None' is only reachable where the vocabulary offers a real choice: a
+    /// one-entry ladder keeps its static status label (see `singleOption` in
+    /// ComposerToolbarScrollerTests), and a server that already lists the
+    /// sentinel is left alone.
+    func testOptionsPrependNoneOnlyWhenVocabularyOffersAChoice() {
+        XCTAssertEqual(
+            ReasoningEffortOption.options(forSupportedEfforts: ["high"]).map(\.id),
+            ["high"]
+        )
+        XCTAssertEqual(
+            ReasoningEffortOption.options(forSupportedEfforts: ["none", "high"]).map(\.id),
+            ["none", "high"]
+        )
     }
 
     func testOptionsNormalizeAndKeepUnknownServerEfforts() {
         let options = ReasoningEffortOption.options(forSupportedEfforts: [" Low ", "low", "", "turbo"])
-        XCTAssertEqual(options.map(\.id), ["low", "turbo"])
-        XCTAssertEqual(options.map(\.title), ["Low", "Turbo"])
+        XCTAssertEqual(options.map(\.id), ["none", "low", "turbo"])
+        XCTAssertEqual(options.map(\.title), ["None", "Low", "Turbo"])
     }
 
     func testShowsEffortControlFollowsServerFlag() {
