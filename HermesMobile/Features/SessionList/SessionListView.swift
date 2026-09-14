@@ -368,10 +368,20 @@ struct SessionListView: View {
                 }
             }
             .task {
-                // Auto-reconnect: while offline, retry the session load every 10s
-                // so the list recovers on its own without a manual Retry tap.
+                // Auto-reconnect: while the list is showing a load failure and has
+                // no rows to fall back on, retry every 10s so it recovers on its
+                // own without a manual Retry tap.
+                //
+                // This used to key on `isOffline`, which is set only when
+                // `CacheFallbackPolicy` recognises the failure as a connectivity
+                // error. Every other failure — an unrecognised network code, a
+                // 500, a malformed response — left `isOffline == false`, so the
+                // screen kept its full-page "Could not load sessions" error and
+                // nothing ever retried: the app only refreshed the chats when the
+                // user tapped Retry. Keying on the visible failure instead makes
+                // every load error self-heal.
                 while !Task.isCancelled {
-                    if viewModel.isOffline {
+                    if viewModel.sessions.isEmpty, viewModel.sessionLoadError != nil, !viewModel.isLoading {
                         await viewModel.load(modelContext: modelContext)
                     }
                     try? await Task.sleep(for: .seconds(10))

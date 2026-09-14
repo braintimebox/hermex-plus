@@ -3234,6 +3234,31 @@ final class SessionListMutationTests: XCTestCase {
         )
     }
 
+    /// The session screen used to auto-retry only while `isOffline` was true, and
+    /// `CacheFallbackPolicy` sets that flag for a short list of connectivity
+    /// codes. Any other failure left the full-page "Could not load sessions"
+    /// error with `isOffline == false`: nothing retried, and the list refreshed
+    /// only when the user tapped Retry. The screen now retries on the visible
+    /// failure (`sessionLoadError`). This pins the distinction — an unrecognised
+    /// network code must still set the retry state while leaving `isOffline`
+    /// false, which is the case a bare `isOffline` key could never recover from.
+    @MainActor
+    func testUnrecognisedNetworkFailureKeepsRetryStateWithoutOfflineFlag() async throws {
+        let context = try makeContext()
+        let viewModel = try makeViewModel { request in
+            XCTAssertEqual(request.url?.path, "/api/sessions")
+            throw URLError(.cannotLoadFromNetwork)
+        }
+
+        let loaded = await viewModel.load(modelContext: context)
+
+        XCTAssertFalse(loaded)
+        XCTAssertNotNil(viewModel.sessionLoadError)
+        XCTAssertFalse(viewModel.isOffline)
+        XCTAssertTrue(viewModel.sessions.isEmpty)
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
+
     @MainActor
     private func makeViewModel(
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)

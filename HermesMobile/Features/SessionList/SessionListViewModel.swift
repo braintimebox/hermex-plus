@@ -278,6 +278,21 @@ final class SessionListViewModel {
 
             lastError = error
             sessionLoadError = error
+            // A session-list load failure was previously invisible: the screen
+            // showed "Could not load sessions" with no event in the log, so a
+            // field report could not be traced to a code, and the auto-reconnect
+            // path below could not be told apart from a real server error. Log
+            // the privacy-safe category (never the message or URL) plus whether
+            // the list is falling back to cache.
+            HermexLogger.shared.log(
+                type: "error",
+                screen: "SessionList",
+                message: "sessions load failed",
+                extras: [
+                    "category": APIError.privacySafeLogCategory(for: error),
+                    "usedCache": CacheFallbackPolicy.shouldUseCache(for: error) && modelContext != nil,
+                ]
+            )
             if CacheFallbackPolicy.shouldUseCache(for: error), let modelContext {
                 do {
                     let cachedSessions = try CacheStore.cachedSessions(serverURL: server, in: modelContext)
