@@ -232,7 +232,12 @@ def wait_build() -> str:
               "--jq", f'[.[] | select(.headSha | startswith("{head}"))][0].databaseId'])
     if not rid or rid == "null":
         sys.exit(f"no CI run found for {head[:8]} — did the push land?")
-    for _ in range(26):  # ~25s * 26 ≈ 11 min
+    # 25s * 120 ≈ 50 min. The loop used to allow ~11 min, sized for a build-only
+    # run; the job now also runs the whole XCTest suite under a 90-minute limit,
+    # so a green build was abandoned mid-flight and its IPA never downloaded —
+    # after the version had already been committed, pushed and tagged. The budget
+    # has to cover the job being waited on, not the job this was written for.
+    for attempt in range(120):
         # Read the run as JSON and format it here. The previous form passed a
         # jq program through `--jq`, and its interpolation was written with
         # doubled backslashes inside a raw string, so jq received a doubled
@@ -243,7 +248,7 @@ def wait_build() -> str:
                              "--json", "status,conclusion"]))
         st = f"{run.get('status', '')} {run.get('conclusion') or ''}".strip()
 
-        print(f"  build: {st}")
+        print(f"  build: {st} (t+{attempt * 25}s)")
         if st.startswith("completed"):
             if not st.endswith("success"):
                 sys.exit(f"BUILD FAILED — see: https://github.com/{OUR_REPO}"
