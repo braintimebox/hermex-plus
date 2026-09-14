@@ -2927,11 +2927,38 @@ struct ChatView: View {
             return
         }
 
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ChatView",
+            message: "attachment picked",
+            extras: ["count": urls.count, "fileURLs": fileURLs.count]
+        )
+
         for url in fileURLs {
             do {
-                let file = try loadPastedFile(from: url, suggestedName: nil)
+                let file = try await loadPastedFile(from: url, suggestedName: nil)
+                HermexLogger.shared.log(
+                    type: "event",
+                    screen: "ChatView",
+                    message: "attachment read",
+                    extras: ["bytes": file.data.count, "ext": url.pathExtension.lowercased()]
+                )
                 await viewModel.uploadAttachment(data: file.data, filename: file.filename)
             } catch {
+                // This path used to fail without leaving a trace: a blocked read
+                // of an iCloud file, or a file above the upload cap, left the
+                // composer unchanged and the log silent, so the report could not
+                // be told from a dead button. Log the shape of the failure (never
+                // the path) before surfacing it.
+                HermexLogger.shared.log(
+                    type: "error",
+                    screen: "ChatView",
+                    message: "attachment read failed",
+                    extras: [
+                        "kind": String(describing: type(of: error)),
+                        "ext": url.pathExtension.lowercased(),
+                    ]
+                )
                 viewModel.setUploadAttachmentError(error.localizedDescription)
             }
         }
@@ -3008,11 +3035,13 @@ struct ChatView: View {
                     return
                 }
 
-                do {
-                    let file = try loadPastedFile(from: url, suggestedName: suggestedName)
-                    continuation.resume(returning: file)
-                } catch {
-                    continuation.resume(throwing: error)
+                Task {
+                    do {
+                        let file = try await loadPastedFile(from: url, suggestedName: suggestedName)
+                        continuation.resume(returning: file)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
         }
@@ -3028,7 +3057,7 @@ struct ChatView: View {
 
         for url in fileURLs {
             do {
-                let file = try loadPastedFile(from: url, suggestedName: nil)
+                let file = try await loadPastedFile(from: url, suggestedName: nil)
                 await viewModel.uploadAttachment(data: file.data, filename: file.filename)
             } catch {
                 viewModel.setUploadAttachmentError(error.localizedDescription)
@@ -3036,23 +3065,33 @@ struct ChatView: View {
         }
     }
 
-    private func loadPastedFile(from url: URL, suggestedName: String?) throws -> PastedFile {
-        let didStartAccessing = url.startAccessingSecurityScopedResource()
-        defer {
-            if didStartAccessing {
-                url.stopAccessingSecurityScopedResource()
+    /// Reads the file off the main actor.
+    ///
+    /// The read used to run synchronously on the main thread. For a file that
+    /// lives in iCloud Drive — the picker's usual source — `Data(contentsOf:)`
+    /// blocks until the provider materialises it, which can mean a network
+    /// round trip. The composer therefore froze with no feedback, which reads as
+    /// "the attach button does nothing". The security-scoped access has to
+    /// surround the read, so it moves with it.
+    private nonisolated func loadPastedFile(from url: URL, suggestedName: String?) async throws -> PastedFile {
+        try await Task.detached(priority: .userInitiated) {
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
-        }
 
-        try validateAttachmentSize(for: url)
-        let data = try Data(contentsOf: url)
-        let filename = url.lastPathComponent.isEmpty
-            ? suggestedName ?? "pasted-file"
-            : url.lastPathComponent
-        return PastedFile(data: data, filename: filename)
+            try Self.validateAttachmentSize(for: url)
+            let data = try Data(contentsOf: url)
+            let filename = url.lastPathComponent.isEmpty
+                ? suggestedName ?? "pasted-file"
+                : url.lastPathComponent
+            return PastedFile(data: data, filename: filename)
+        }.value
     }
 
-    private func validateAttachmentSize(for url: URL) throws {
+    private nonisolated static func validateAttachmentSize(for url: URL) throws {
         let values = try url.resourceValues(forKeys: [.fileSizeKey])
         guard let size = values.fileSize,
               size > PendingAttachment.maximumUploadBytes
@@ -4057,7 +4096,7 @@ private struct ClearConversationAlertModifier: ViewModifier {
     }
 }
 
-private struct PastedFile {
+private struct PastedFile: Sendable {
     let data: Data
     let filename: String
 }

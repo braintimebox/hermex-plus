@@ -1053,12 +1053,17 @@ struct MessageComposerView: View {
     private var composerStatus: (text: String, isError: Bool, isDismissible: Bool)? {
         if let readOnlyMessage {
             return (readOnlyMessage, false, false)
+        } else if let uploadAttachmentErrorMessage {
+            // An upload rejection answers something the user just did, so it
+            // outranks the transient progress lines below. It used to sit under
+            // them: attaching a file over the cap while a stream was winding
+            // down showed "Stopping response…" instead, and the reason nothing
+            // was attached never appeared anywhere.
+            return (uploadAttachmentErrorMessage, true, true)
         } else if isWaitingForStream && isCancellingStream {
             return (String(localized: "Stopping response..."), false, false)
         } else if isCompressingSession {
             return (String(localized: "Compressing context..."), false, false)
-        } else if let uploadAttachmentErrorMessage {
-            return (uploadAttachmentErrorMessage, true, true)
         } else if isSendingVoiceNote {
             return (String(localized: "Sending voice note..."), false, false)
         } else if isUploadingAttachment {
