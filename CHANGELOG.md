@@ -1,3 +1,5 @@
+## 3.8.0 — the session list self-recovers from any load failure, and the failure is now logged
+
 ## 3.7.0 — Upstream 1.6.0 sync
 
 Merged `uzairansaruzi/hermex` upstream `1.6.0` (105 commits since the fork point).

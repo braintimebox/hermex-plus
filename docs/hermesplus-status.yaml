@@ -1,4 +1,4 @@
-version: 3.6.1
+version: 3.8.0
 items:
 - id: 1
   priority: 🔴
@@ -41,4 +41,3 @@ items:
   status: closed
   note: 'Закрыто в 3.4.3: sizeChangeAnchor неактивен при no-streaming (isStreaming:false),
     контент не растёт — автоколебание ушло.'
-closed_note: null
