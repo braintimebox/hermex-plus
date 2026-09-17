@@ -186,7 +186,7 @@ def main() -> int:
     regressions = [n for n in missing if n not in removed and n not in pending]
     legacy = [n for n in missing if n in pending]
 
-    print("[12/12] fork-owned symbols still present")
+    print("[12/13] fork-owned symbols still present")
     if regressions:
         print(f"      BLOCKER: {len(regressions)} own declaration(s) vanished")
         for name in regressions[:20]:

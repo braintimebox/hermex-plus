@@ -145,7 +145,7 @@ def check_pbxproj_registration() -> int:
         `grep -c` said "4 refs, registered" for both — which is why counting
         references is not the check.
     """
-    print("[3/12] pbxproj: every .swift registered, every id unique")
+    print("[3/13] pbxproj: every .swift registered, every id unique")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -374,7 +374,7 @@ def check_swift_structural_balance() -> int:
 
     Blocking, not advisory: a dropped brace is never a judgment call.
     """
-    print("[8/12] swift structural balance vs both parents")
+    print("[8/13] swift structural balance vs both parents")
     script = ROOT / "scripts" / "check-swift-structural-balance.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -408,7 +408,7 @@ def check_duplicate_declarations() -> int:
     matters: an earlier version grouped by indentation alone and produced 2505
     false hits, which is a gate someone switches off.
     """
-    print("[9/12] duplicate declarations in the same type scope")
+    print("[9/13] duplicate declarations in the same type scope")
     script = ROOT / "scripts" / "check-duplicate-declarations.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -438,7 +438,7 @@ def check_initializer_completeness() -> int:
     property and its decoder, while `init(sessionId:title:)` (which upstream
     does not have) still listed 32 of 34 fields. One line, one full CI round.
     """
-    print("[10/12] initializer completeness (all stored properties set)")
+    print("[10/13] initializer completeness (all stored properties set)")
     script = ROOT / "scripts" / "check-initializer-completeness.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -447,7 +447,7 @@ def check_initializer_completeness() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[10/12]")]
+            if not ln.startswith("[10/13]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -469,7 +469,7 @@ def check_duplicate_call_arguments() -> int:
     `onSelectReasoningEffort:` and second `onDismissKeyboard:` all came in
     that way in the 1.6.0 merge.
     """
-    print("[11/12] duplicate call arguments (same label twice in one call)")
+    print("[11/13] duplicate call arguments (same label twice in one call)")
     script = ROOT / "scripts" / "check-duplicate-call-arguments.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -478,7 +478,7 @@ def check_duplicate_call_arguments() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[11/12]")]
+            if not ln.startswith("[11/13]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -500,7 +500,7 @@ def check_fork_preserved() -> int:
     `docs/agents/fork-manifest.json` (`pending_triage`) so it is usable today;
     a NEW disappearance blocks.
     """
-    print("[12/12] fork-owned symbols still present")
+    print("[12/13] fork-owned symbols still present")
     script = ROOT / "scripts" / "check-fork-preserved.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -509,7 +509,42 @@ def check_fork_preserved() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[12/12]")]
+            if not ln.startswith("[12/13]")]
+    for line in body:
+        print(f"      {line}")
+    if r.returncode != 0 and r.stderr.strip():
+        print(f"      {r.stderr.strip()[:300]}")
+    return r.returncode
+
+
+def check_sync_surface() -> int:
+    """Gate 13 — every local change is identifiable, so the next sync keeps it.
+
+    Gate 12 protects our *symbols*; it cannot see inside a function, so it never
+    noticed the six lines the 1.6.0 merge dropped from bodies — a coordinator
+    binding, a `didSet`, a revision bump, an error clear, two call arguments.
+    Twenty-four tests paid for that.
+
+    This gate protects our *lines*. Any added hunk inside a file upstream also
+    owns must carry a `HERMEX-FORK:` marker, which is the only thing in a diff
+    that tells a context-free merge resolver which side is ours. When upstream
+    itself owns the defect, the better answer is to send the change upstream:
+    it then arrives as their code and stops being a local diff at all.
+
+    The backlog that predates the gate is recorded in
+    `docs/agents/sync-surface.json`, not blocked, so the gate is usable on the
+    day it lands. A NEW unmarked hunk blocks.
+    """
+    print("[13/13] local changes are identifiable (sync surface)")
+    script = ROOT / "scripts" / "check-sync-surface.py"
+    if not script.exists():
+        print("      checker not found — skipped")
+        return 0
+    r = subprocess.run(
+        [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
+    )
+    body = [ln for ln in (r.stdout or "").strip().splitlines()
+            if not ln.startswith("[13/13]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -530,6 +565,7 @@ CHECKS = {
     10: check_initializer_completeness,
     11: check_duplicate_call_arguments,
     12: check_fork_preserved,
+    13: check_sync_surface,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not
