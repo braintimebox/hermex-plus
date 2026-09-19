@@ -141,6 +141,11 @@ final class ChatStreamCoordinator {
     /// still cannot reach the transcript. Cleared only by the next run start /
     /// new-response preparation / session load.
     @ObservationIgnored private var isTerminalContentFenceActive = false
+    // HERMEX-FORK: the fence, unlike `hasCompletedCurrentResponse`, survives `finishStream`, so it
+    // is the only marker that still says "this stream's content is final" while the transport is
+    // winding down. The typing indicator reads it to avoid showing "thinking" after the answer is
+    // already on screen (the round indicator that lingered past the end of a response).
+    var terminalContentIsFinal: Bool { isTerminalContentFenceActive }
     /// Per-run one-shot teardown owner. The first caller of finishStream owns
     /// teardown; later terminal events are ignored so delegate finish, snapshot
     /// cleanup, queue drain, and title-refresh side effects cannot repeat.

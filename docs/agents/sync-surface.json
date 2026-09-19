@@ -69,17 +69,13 @@
     "HermesMobile/Features/Chat/ChatView.swift::47671bd2b8778c73",
     "HermesMobile/Features/Chat/ChatView.swift::4cb595c8aad0fbe1",
     "HermesMobile/Features/Chat/ChatView.swift::5008442828506a42",
-    "HermesMobile/Features/Chat/ChatView.swift::530e0b11b56edd10",
     "HermesMobile/Features/Chat/ChatView.swift::54f13ff1301ce8f0",
     "HermesMobile/Features/Chat/ChatView.swift::6241019978d70340",
-    "HermesMobile/Features/Chat/ChatView.swift::677c1fce86d8e8c6",
-    "HermesMobile/Features/Chat/ChatView.swift::6c92076b469745a0",
     "HermesMobile/Features/Chat/ChatView.swift::6cbc91cfc2cd34d1",
     "HermesMobile/Features/Chat/ChatView.swift::6f38f27bde586410",
     "HermesMobile/Features/Chat/ChatView.swift::6f7e523e7743775a",
     "HermesMobile/Features/Chat/ChatView.swift::7560e96dffc30118",
     "HermesMobile/Features/Chat/ChatView.swift::8049ed9c5b90155f",
-    "HermesMobile/Features/Chat/ChatView.swift::83b77d5f66e9b92f",
     "HermesMobile/Features/Chat/ChatView.swift::8a2edf3e5e5e0645",
     "HermesMobile/Features/Chat/ChatView.swift::9e4ada5402e33af3",
     "HermesMobile/Features/Chat/ChatView.swift::a08ea9312f74c89c",
@@ -87,17 +83,17 @@
     "HermesMobile/Features/Chat/ChatView.swift::a76fd226717b26c3",
     "HermesMobile/Features/Chat/ChatView.swift::b5cc81ee3af659e6",
     "HermesMobile/Features/Chat/ChatView.swift::b601aa541ff8cff3",
+    "HermesMobile/Features/Chat/ChatView.swift::b756edd3f7edccae",
     "HermesMobile/Features/Chat/ChatView.swift::b86bb0137e73c0df",
     "HermesMobile/Features/Chat/ChatView.swift::c0aec8816ea3656e",
-    "HermesMobile/Features/Chat/ChatView.swift::c1a867dcc2ba6835",
     "HermesMobile/Features/Chat/ChatView.swift::c624300ae71bd7fa",
     "HermesMobile/Features/Chat/ChatView.swift::c8a15e15540b45c5",
     "HermesMobile/Features/Chat/ChatView.swift::cc280e835cdf1701",
-    "HermesMobile/Features/Chat/ChatView.swift::cffda34431d1996e",
     "HermesMobile/Features/Chat/ChatView.swift::d2b852e0ad131522",
-    "HermesMobile/Features/Chat/ChatView.swift::ecdbf237813d8892",
+    "HermesMobile/Features/Chat/ChatView.swift::d5a8983325bdf4d8",
     "HermesMobile/Features/Chat/ChatView.swift::ef0688c9d0ced6f0",
     "HermesMobile/Features/Chat/ChatView.swift::f01d7f861f3f55c0",
+    "HermesMobile/Features/Chat/ChatView.swift::f6f0f794398a5945",
     "HermesMobile/Features/Chat/ChatView.swift::f7068471264aeec7",
     "HermesMobile/Features/Chat/ChatView.swift::fa7c5d43fbc0ecce",
     "HermesMobile/Features/Chat/ChatView.swift::fd9664f89d46a9db",
@@ -438,43 +434,43 @@
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::bd975633291e146a",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 186,
+      "line": 191,
       "preview": "self.suppressesReasoningAndToolUpdates = suppressesReasoningAndToolUpdates"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::f2ef2b40c0a2dd60",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 202,
+      "line": 207,
       "preview": "/// Silent mode setter: cuts reasoning/tool observable updates during stream."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::e086629297e555fc",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 729,
+      "line": 734,
       "preview": "// Live Activity must always see reasoning activity for status sync,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::c08fdbd9d44a5a4b",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 732,
+      "line": 737,
       "preview": "guard !suppressesReasoningAndToolUpdates else { break }"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::c08fdbd9d44a5a4b",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 738,
+      "line": 743,
       "preview": "guard !suppressesReasoningAndToolUpdates else { break }"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::c08fdbd9d44a5a4b",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 744,
+      "line": 749,
       "preview": "guard !suppressesReasoningAndToolUpdates else { break }"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift::931e0d51542b3b68",
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
-      "line": 757,
+      "line": 762,
       "preview": "case .compressing:"
     },
     {
@@ -682,231 +678,207 @@
       "preview": "@State private var pinnedMessageIDs: [String] = []"
     },
     {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::530e0b11b56edd10",
+      "id": "HermesMobile/Features/Chat/ChatView.swift::b756edd3f7edccae",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 379,
-      "preview": "/// Full-screen reading mode: the composer is HIDDEN by default; a round"
-    },
-    {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::ecdbf237813d8892",
-      "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 457,
+      "line": 452,
       "preview": "private var scheduledMessageCount: Int {"
     },
     {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::c1a867dcc2ba6835",
+      "id": "HermesMobile/Features/Chat/ChatView.swift::f6f0f794398a5945",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 579,
+      "line": 518,
       "preview": "quotedMessage: viewModel.quotedMessage,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::8049ed9c5b90155f",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 874,
+      "line": 809,
       "preview": "}"
     },
     {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::677c1fce86d8e8c6",
+      "id": "HermesMobile/Features/Chat/ChatView.swift::d5a8983325bdf4d8",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 904,
+      "line": 839,
       "preview": ".onChange(of: viewModel.clarificationPrompt?.id) { _, newID in"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::3e0f55a036b08ea3",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 939,
+      "line": 868,
       "preview": ".onChange(of: suppressesReasoningAndToolUpdates) {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::c624300ae71bd7fa",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 948,
+      "line": 877,
       "preview": "// Preserve an unsent draft so it isn't lost when leaving the chat;"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::6cbc91cfc2cd34d1",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 963,
+      "line": 892,
       "preview": "MainThreadWatchdog.shared.setScreen(\"ChatView\")"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::1ad017ac61676f01",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1006,
+      "line": 935,
       "preview": "// Chat search — left of Files, same style."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::c0aec8816ea3656e",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1060,
+      "line": 989,
       "preview": ".fullScreenCover(item: $selectableResponseText) { selectableText in"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::c8a15e15540b45c5",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1120,
+      "line": 1049,
       "preview": ".sheet(isPresented: $showingForwardPicker) {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::3e05eafc87908cc4",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1252,
+      "line": 1181,
       "preview": "// Off the main body chain, which is at the type-checker's limit."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::6f38f27bde586410",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1661,
+      "line": 1595,
       "preview": "pinnedScrollTarget: pinnedScrollTarget,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::6f7e523e7743775a",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1679,
+      "line": 1613,
       "preview": "clarificationPrompt: viewModel.clarificationPrompt,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::24cf9e8ac9778980",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1685,
+      "line": 1619,
       "preview": "showsAssistantTypingIndicator: showsAssistantTypingIndicator,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::b5cc81ee3af659e6",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1768,
+      "line": 1702,
       "preview": "onSubmitClarification: { response in"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::4cb595c8aad0fbe1",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1795,
+      "line": 1729,
       "preview": "onReply: { viewModel.quotedMessage = ("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::47671bd2b8778c73",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 1921,
+      "line": 1855,
       "preview": ""
-    },
-    {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::83b77d5f66e9b92f",
-      "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2010,
-      "preview": "private func turnFolds(reasoningGroups: [ReasoningGroup]) -> TranscriptTurnFolds {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::b86bb0137e73c0df",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2200,
+      "line": 2137,
       "preview": "viewModel.setSuppressesReasoningAndToolUpdates(suppressesReasoningAndToolUpdates)"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::8a2edf3e5e5e0645",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2207,
+      "line": 2144,
       "preview": "// Let the navigation push animation complete before touching"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::cc280e835cdf1701",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2283,
+      "line": 2220,
       "preview": "// Load the transcript FIRST, then let it actually lay out before any"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::a08ea9312f74c89c",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2290,
+      "line": 2227,
       "preview": "await Task.yield()"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::ef0688c9d0ced6f0",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2426,
+      "line": 2363,
       "preview": "// Streaming path (submitStreamingMessage) never cleared draftMessage —"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::f7068471264aeec7",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2439,
+      "line": 2376,
       "preview": "return didStart"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::0debb5945508d7d8",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2454,
+      "line": 2391,
       "preview": "// Composer stays visible after voice note send (always-visible mode)."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::fa7c5d43fbc0ecce",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2930,
+      "line": 2867,
       "preview": "HermexLogger.shared.log("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::13d475039e07408f",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 2948,
+      "line": 2885,
       "preview": "// This path used to fail without leaving a trace: a blocked read"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::2b6a62581b495557",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3176,
+      "line": 3113,
       "preview": "await viewModel.refreshApprovalBypassState()"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::3330a5ad6511b9d7",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3295,
+      "line": 3232,
       "preview": "//"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::5008442828506a42",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3334,
+      "line": 3271,
       "preview": "// Scroll to the LAST MOUNTED message, not the `bottomAnchorID` marker."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::d2b852e0ad131522",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3379,
+      "line": 3316,
       "preview": "#if DEBUG"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::b601aa541ff8cff3",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3412,
+      "line": 3349,
       "preview": "// Streaming, snap window, or explicit ↓ tap: snap WITHOUT animation."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::7560e96dffc30118",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3423,
+      "line": 3360,
       "preview": "// Keyboard-only dismissal (two-step close): the composer SURVIVES a"
-    },
-    {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::6c92076b469745a0",
-      "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3438,
-      "preview": "/// Transcript tap gesture (outside the composer): toggle keyboard."
-    },
-    {
-      "id": "HermesMobile/Features/Chat/ChatView.swift::cffda34431d1996e",
-      "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3466,
-      "preview": "// Reading-first mode: NO auto-focus on chat open. The composer is"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::fd9664f89d46a9db",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3573,
+      "line": 3505,
       "preview": "if wasFollowing != followLatch.isFollowing {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatView.swift::33dd485520809d02",
       "path": "HermesMobile/Features/Chat/ChatView.swift",
-      "line": 3612,
+      "line": 3544,
       "preview": "// Explicit send re-pins to the tail: the new message must be visible even"
     },
     {
@@ -954,163 +926,163 @@
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::eb04918536ecebba",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 881,
+      "line": 883,
       "preview": "// `actions` holds the coordinator weakly, so without this the approval and"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::f85d0f14d825c28b",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 893,
+      "line": 895,
       "preview": "self.suppressesReasoningAndToolUpdates = userDefaults.bool("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::39892f06338e62ae",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 930,
+      "line": 932,
       "preview": "func setSuppressesReasoningAndToolUpdates(_ suppresses: Bool) {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::6330e6b95396dc2d",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1741,
+      "line": 1743,
       "preview": "HermexLogger.shared.log("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::6982d02e9e166043",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1776,
+      "line": 1778,
       "preview": "HeavyOperationTracker.begin(\"applyReloadedMessages\")"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::3139a8252a9917f8",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1783,
+      "line": 1785,
       "preview": "HeavyOperationTracker.end()"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::de2a1abc409d394d",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1808,
+      "line": 1810,
       "preview": "HeavyOperationTracker.begin(\"ToolCallGroup.groups\")"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::3139a8252a9917f8",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1814,
+      "line": 1816,
       "preview": "HeavyOperationTracker.end()"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::4ba32d6aec31acdc",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1906,
+      "line": 1908,
       "preview": "/// Fetches a session's messages, retrying transient connectivity failures a"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::cddec1f1ba15349d",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 1990,
+      "line": 1992,
       "preview": "#if DEBUG"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::eaf18fe5fecfee4c",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2037,
+      "line": 2039,
       "preview": "HeavyOperationTracker.begin(\"loadOlderMessages\")"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::773751a2c739916c",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2054,
+      "line": 2056,
       "preview": "#if DEBUG"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::68ee674cc1e30547",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2114,
+      "line": 2116,
       "preview": "HermexLogger.shared.log("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::705be4b03f1ff437",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2131,
+      "line": 2133,
       "preview": "HermexLogger.shared.log("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::0bd6af95c9393f14",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2222,
+      "line": 2224,
       "preview": "/// Stable, collision-resistant deduplication key for pagination merges."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::01063ae588f5b929",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2242,
+      "line": 2244,
       "preview": "HeavyOperationTracker.begin(\"applyReloadedMessages\")"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::53fa5bd1a1f2427e",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2294,
+      "line": 2296,
       "preview": "let mergeMs = Int(Date().timeIntervalSince(mergeStart) * 1000)"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::367cbd573b400980",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2323,
+      "line": 2325,
       "preview": "/// Fallback replace path that keeps EXISTING ChatMessage objects for rows"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::1b55413c48198f98",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2483,
+      "line": 2485,
       "preview": "let reconciledContent = reconciledActiveStreamContent("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::0505581574447129",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 2945,
+      "line": 2947,
       "preview": "/// Retries `startChat` a few times when the server is provably unreachable,"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::c6c678535ae77030",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 3227,
+      "line": 3229,
       "preview": "private func cacheCurrentMessages(sessionID: String, modelContext: ModelContext?) {"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::733491ba12cb2289",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 5409,
+      "line": 5411,
       "preview": ""
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::87f715b5011a5d51",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 6395,
+      "line": 6397,
       "preview": "isCompressingContext = false"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::fcb78e9533ac8dfb",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 6843,
+      "line": 6845,
       "preview": "// Pass 1: apply the display filters and compute the STABLE base id"
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::6431de559ca02b81",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 6864,
+      "line": 6866,
       "preview": "candidates.append(Candidate("
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::b849e94e5685fb39",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 6929,
+      "line": 6931,
       "preview": "/// Stable, position-independent base identity for a transcript row."
     },
     {
       "id": "HermesMobile/Features/Chat/ChatViewModel.swift::d61505cf8a1834a7",
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
-      "line": 7420,
+      "line": 7422,
       "preview": ""
     },
     {
@@ -2319,9 +2291,9 @@
     {
       "path": "HermesMobile/Features/Chat/ChatStreamCoordinator.swift",
       "fork_owned": false,
-      "hunks": 9,
-      "marked": 0,
-      "added_lines": 24
+      "hunks": 10,
+      "marked": 1,
+      "added_lines": 29
     },
     {
       "path": "HermesMobile/Features/Chat/ChatTranscriptSupportingViews.swift",
@@ -2340,16 +2312,16 @@
     {
       "path": "HermesMobile/Features/Chat/ChatView.swift",
       "fork_owned": false,
-      "hunks": 45,
-      "marked": 0,
-      "added_lines": 736
+      "hunks": 44,
+      "marked": 3,
+      "added_lines": 667
     },
     {
       "path": "HermesMobile/Features/Chat/ChatViewModel.swift",
       "fork_owned": false,
-      "hunks": 34,
-      "marked": 0,
-      "added_lines": 598
+      "hunks": 35,
+      "marked": 1,
+      "added_lines": 600
     },
     {
       "path": "HermesMobile/Features/Chat/ClarificationRequestOverlay.swift",
@@ -2786,11 +2758,25 @@
       "added_lines": 69
     },
     {
+      "path": "docs/agents/sync-compatibility.md",
+      "fork_owned": true,
+      "hunks": 1,
+      "marked": 1,
+      "added_lines": 113
+    },
+    {
       "path": "docs/agents/sync-layers.md",
       "fork_owned": true,
       "hunks": 1,
       "marked": 0,
       "added_lines": 163
+    },
+    {
+      "path": "docs/agents/sync-surface.json",
+      "fork_owned": true,
+      "hunks": 1,
+      "marked": 0,
+      "added_lines": 2978
     },
     {
       "path": "docs/agents/testing.md",
@@ -2896,6 +2882,13 @@
       "hunks": 1,
       "marked": 0,
       "added_lines": 195
+    },
+    {
+      "path": "scripts/check-sync-surface.py",
+      "fork_owned": true,
+      "hunks": 1,
+      "marked": 1,
+      "added_lines": 292
     },
     {
       "path": "scripts/lint-tests.py",

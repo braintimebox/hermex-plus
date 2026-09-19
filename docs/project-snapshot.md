@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | b1317d1 |
-| Версия | 3.8.1 |
-| Обновлено | 2026-09-14 |
+| HEAD | e13ee5f |
+| Версия | 3.8.2 |
+| Обновлено | 2026-09-19 |
 
 **Последние коммиты:**
 ```
+e13ee5f gate 13: a change to upstream's code must say that it is ours
+2cb74d6 fix(pipeline): size the build watch for the job it waits on
+8312b43 3.8.1: attachments are read off the main actor (an iCloud file no longer freezes the composer) and a refused attachment names its reason; the composer offers None to turn reasoning off
 b1317d1 fix(composer): read attached files off the main actor, and name a refusal
 07d09a6 feat(composer): offer None to turn reasoning off
 a5e306f fix(pipeline): the wait loop handed jq a doubled backslash
-fc7bc81 3.8.0: the session list self-recovers from any load failure, and the failure is now logged
-1135277 fix(sessions): every load failure self-recovers, and the failure is logged
-4abab50 Merge pull request #1 from braintimebox/sync/upstream-1.6.0
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -46,8 +46,8 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 ## 4. Размеры (когда важно)
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
-| Swift-файлы приложения | 193 | 286 | +93 |
-| Строк приложения | 71,094 | 99,962 | **+28,868** |
-| Строк Chat | 27,421 | 40,207 | +12,786 |
-| ChatViewModel | 5,952 | 7,494 | +1,542 |
-| IPA | ~44 MB | 50 MB (HermesPlus-3.8.0.ipa) | +1–2 MB |
+| Swift-файлы приложения | 317 | 286 | -31 |
+| Строк приложения | 101,540 | 99,901 | **-1,639** |
+| Строк Chat | 36,076 | 40,146 | +4,070 |
+| ChatViewModel | 6,650 | 7,496 | +846 |
+| IPA | ~44 MB | 50 MB (HermesPlus-3.8.1.ipa) | +1–2 MB |

@@ -376,11 +376,6 @@ struct ChatView: View {
     /// layout footprint; the expanded card overlays the transcript instead.
     @State private var clarificationBarHeight: CGFloat = 0
     @State private var composerIsFocused = false
-    /// Full-screen reading mode: the composer is HIDDEN by default; a round
-    /// compose FAB at the bottom-trailing reveals it on demand (tap → composer
-    /// slides up + keyboard). Hidden again on tap-outside, scroll, or after
-    /// sending — the chat returns to reading the response full-screen.
-    @State private var composerVisible = true
     @State private var didHydrateDraft = false
     /// Whether this chat has already asked the server for its skills on the
     /// transcript's behalf, so a request that failed does not repeat with every
@@ -462,65 +457,9 @@ struct ChatView: View {
         return (try? modelContext.fetchCount(fetch)) ?? 0
     }
 
-    /// Round compose button shown while the composer is hidden (reading mode).
-    /// Tap → composer slides up and takes focus (keyboard on demand only).
-    /// Style: the SAME Hermex glass circle as the ↓ button (adaptiveGlass) —
-    /// one design language, both buttons are "friends" in the bottom-right
-    /// column (user: "эти две кнопки подружить и сделать нормальное
-    /// оформление в стиле Hermex").
-    private var composeFAB: some View {
-        Button {
-            showComposer()
-        } label: {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 48, height: 48)
-                .adaptiveGlass(
-                    .regular,
-                    isInteractive: true,
-                    fallbackMaterial: .regularMaterial,
-                    in: Circle()
-                )
-                .chatMinimumHitTarget(in: Circle())
-        }
-        .buttonStyle(.chatTactile(
-            .icon,
-            shadow: ChatTactileButtonStyle.Shadow(
-                color: .black,
-                opacity: colorScheme == .dark ? 0.32 : 0.16,
-                radius: 8,
-                y: 4,
-                pressedOpacity: colorScheme == .dark ? 0.18 : 0.08,
-                pressedRadius: 3,
-                pressedY: 2
-            )
-        ))
-        .accessibilityLabel(String(localized: "Write a message"))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-        .padding(.trailing, 16)
-        .padding(.bottom, 20)
-    }
-
-    private func showComposer() {
-        guard viewModel.errorMessage == nil else { return }
-        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-            composerVisible = true
-        }
-        requestComposerFocusIfPossible()
-    }
-
-    private func hideComposer() {
-        withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-            composerVisible = false
-        }
-        composerIsFocused = false
-    }
-
-    /// Composer visibility + keyboard follow the same rule: the input bar is
-    /// revealed ONLY by an explicit tap (FAB or the composer field itself while
-    /// visible). No auto-focus on chat open — the keyboard must never eat the
-    /// screen while the user is simply reading.
+    /// The composer is always present, as upstream has it. There is no hidden
+    /// state and no separate reveal affordance, so no tap can ever leave the
+    /// chat with no way to type.
     private var messageComposer: some View {
         MessageComposerView(
             draftMessage: persistedDraftBinding,
@@ -585,7 +524,7 @@ struct ChatView: View {
             },
             scheduledCount: scheduledMessageCount,
             onOpenScheduledList: { showingScheduledList = true },
-            onCollapseComposer: { hideComposer() },
+            onCollapseComposer: nil,
             onCancel: {
                 Task { await cancelStream() }
             },
@@ -852,19 +791,15 @@ struct ChatView: View {
             .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: viewModel.showsListenPlaybackBar)
 
             Group {
-                if composerVisible {
-                    BottomComposerMaterialFade(composerHeight: composerHeight)
+                BottomComposerMaterialFade(composerHeight: composerHeight)
 
-                    composerAccessoryStack
+                composerAccessoryStack
 
-                    clarificationInset
+                clarificationInset
 
-                    messageComposer
+                messageComposer
 
-                    approvalOverlay
-                } else if viewModel.clarificationPrompt == nil {
-                    composeFAB
-                }
+                approvalOverlay
             }
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
         }
@@ -907,12 +842,6 @@ struct ChatView: View {
                 // keep the controls lifted. Reset it explicitly on dismissal.
                 if viewModel.clarificationPrompt == nil {
                     clarificationCardHeight = 0
-                }
-                // Auto-hide composer when clarification appears to prevent
-                // the FAB and clarification card from overlapping in the
-                // bottom-right corner.
-                if newID != nil, composerVisible {
-                    composerVisible = false
                 }
             }
             .onChange(of: viewModel.isUploadingAttachment) { _, isUploading in
@@ -1627,6 +1556,11 @@ struct ChatView: View {
 
     @ViewBuilder
     private var messageContent: some View {
+        // HERMEX-FORK: `displayedReasoningGroups` walks every message with string work per element
+        // (the hot `replacingOccurrences` path measured in the 3.7.0 device telemetry). Read it
+        // ONCE per body pass and share the value — upstream reads it a single time as well, so
+        // this is a return to their shape, not a new deviation.
+        let displayedReasoningGroups = viewModel.displayedReasoningGroups
         VStack(spacing: 0) {
             if let latestPinnedID = pinnedMessageIDs.last,
                let pinnedMsg = viewModel.messages.first(where: { $0.id == latestPinnedID }) {
@@ -1664,7 +1598,7 @@ struct ChatView: View {
             },
             displayedTranscriptMessages: displayedTranscriptMessages,
             compressionReferenceCard: viewModel.compressionReferenceCard,
-            reasoningGroups: viewModel.displayedReasoningGroups,
+            reasoningGroups: displayedReasoningGroups,
             completedToolCallGroupsForAnchor: { anchorMessageID in
                 viewModel.completedToolCallGroupsForAnchor(anchorMessageID)
             },
@@ -1741,7 +1675,7 @@ struct ChatView: View {
             onUpdateScrollMetrics: updateScrollMetrics,
             onFollowEvent: handleFollowEvent,
             onDisclosureToggle: handleDisclosureToggle,
-            turnFolds: turnFolds(reasoningGroups: viewModel.displayedReasoningGroups),
+            turnFolds: turnFolds(reasoningGroups: displayedReasoningGroups),
             terminalReplyRenderIDs: terminalReplyRenderIDs,
             expandedTurnKeys: expandedTurnKeys,
             onToggleTurnFold: toggleTurnFold,
@@ -2054,7 +1988,10 @@ struct ChatView: View {
 
     private var showsAssistantTypingIndicator: Bool {
         ChatTranscriptDisplaySettings.shouldShowAssistantTypingIndicator(
-            hasActiveStream: viewModel.activeStreamID != nil,
+            // HERMEX-FORK: "active stream" is not the same as "still waiting on content". Once the
+            // stream's content is final the indicator must stay away — the transport can outlive
+            // the answer (reconnect/replay), and that gap is what showed a spinner after the end.
+            hasActiveStream: viewModel.activeStreamID != nil && !viewModel.terminalContentIsFinal,
             isCancellingStream: viewModel.isCancellingStream,
             hasStreamingAssistantMessage: viewModel.hasStreamingAssistantMessageContent,
             hasPendingClarificationPrompt: viewModel.clarificationPrompt != nil,
@@ -3435,20 +3372,13 @@ struct ChatView: View {
         )
     }
 
-    /// Transcript tap gesture (outside the composer): toggle keyboard.
-    /// Tap with keyboard up → dismiss keyboard. Tap with keyboard down →
-    /// show composer + open keyboard. One-tap toggle, no two-step dance.
+    // HERMEX-FORK: no FAB and no hidden composer (upstream has neither), so a tap
+    // outside the composer can only mean "keyboard away" — it cannot reveal anything.
+    /// Transcript tap (outside the composer): upstream semantics — a tap only
+    /// dismisses the keyboard. The composer itself always stays, so there is
+    /// nothing to reveal and no second tap state to track.
     private func handleTranscriptTap() {
-        if composerIsFocused {
-            dismissKeyboard()
-        } else if canFocusComposer {
-            if !composerVisible {
-                withAnimation(ChatMotion.quickState(reduceMotion: reduceMotion)) {
-                    composerVisible = true
-                }
-            }
-            requestComposerFocusIfPossible()
-        }
+        dismissKeyboard()
     }
 
     private var canFocusComposer: Bool {
@@ -3463,12 +3393,14 @@ struct ChatView: View {
     }
 
     private func applyInitialComposerFocusPolicyIfNeeded() {
-        // Reading-first mode: NO auto-focus on chat open. The composer is
-        // hidden and the keyboard must never pop while the user is reading.
-        // Input is revealed only by the FAB tap (see showComposer). The old
-        // policy focused empty chats on open, which made the keyboard eat half
-        // the screen every time a chat was opened (user: "хочу весь экран для
-        // чтения, клавиатура только по требованию").
+        // HERMEX-FORK: reading-first open (no auto-focus) is ours; the composer itself is
+        // now always on screen exactly as upstream has it.
+        // Reading-first mode: NO auto-focus on chat open. The composer is always
+        // on screen (as upstream has it) but starts unfocused, so the keyboard
+        // never pops while the user is reading. The old policy focused empty
+        // chats on open, which made the keyboard eat half the screen every time
+        // a chat was opened (user: "хочу весь экран для чтения, клавиатура
+        // только по требованию").
         guard !didApplyInitialComposerFocusPolicy else { return }
         didApplyInitialComposerFocusPolicy = true
     }

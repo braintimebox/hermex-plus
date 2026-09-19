@@ -791,6 +791,8 @@ final class ChatViewModel {
     private var showsLiveActivityResponseExcerpts: Bool
     private var suppressesReasoningAndToolUpdates: Bool
     private var hasCompletedCurrentResponse: Bool { streamCoordinator.hasCompletedCurrentResponse }
+    // HERMEX-FORK: exposed for the typing indicator — see ChatStreamCoordinator.terminalContentIsFinal.
+    var terminalContentIsFinal: Bool { streamCoordinator.terminalContentIsFinal }
     private var isStreamConnectionSuspended: Bool { streamCoordinator.isConnectionSuspended }
     var isActiveStreamConnectionSuspended: Bool { streamCoordinator.isConnectionSuspended }
     private var hasLoadedPersonalitySuggestions = false
