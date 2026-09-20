@@ -552,6 +552,57 @@ def check_sync_surface() -> int:
     return r.returncode
 
 
+def check_fork_identity() -> int:
+    """Gate 14 — the fork signs under its own bundle identifier.
+
+    `Config/Shared.xcconfig` is upstream-owned and upstream signs as
+    `com.uzairansar.hermesmobile`. Sharing that string makes Hermex Plus and
+    Hermex the same app to iOS: the two cannot be installed side by side, and
+    installing beside an App Store Hermex is refused outright — which is how
+    four released builds went uninstalled while the phone stayed on an older
+    version.
+
+    The value is one line in a file nobody reads, so a merge that takes
+    upstream's side restores the collision silently. Pin it here rather than
+    trust a comment.
+    """
+    print("[14/14] the fork signs under its own bundle identifier")
+    expected = "com.braintimebox.hermexplus"
+    path = ROOT / "Config" / "Shared.xcconfig"
+    if not path.exists():
+        print("      Config/Shared.xcconfig is missing")
+        return 1
+
+    text = path.read_text(encoding="utf-8")
+    bundle = re.search(r"^APP_BUNDLE_IDENTIFIER\s*=\s*([^\n$]+)", text, re.M)
+    group = re.search(r"^APP_GROUP_IDENTIFIER\s*=\s*([^\n$]+)", text, re.M)
+
+    problems: list[str] = []
+    if not bundle:
+        problems.append("APP_BUNDLE_IDENTIFIER is not set")
+    elif bundle.group(1).strip() != expected:
+        problems.append(
+            f"APP_BUNDLE_IDENTIFIER is {bundle.group(1).strip()!r}, expected {expected!r}"
+        )
+    if not group:
+        problems.append("APP_GROUP_IDENTIFIER is not set")
+    elif group.group(1).strip() != f"group.{expected}":
+        problems.append(
+            f"APP_GROUP_IDENTIFIER is {group.group(1).strip()!r}, "
+            f"expected {'group.' + expected!r}"
+        )
+
+    if problems:
+        for problem in problems:
+            print(f"      {problem}")
+        print("      The fork's identity regressed — a merge most likely took")
+        print("      upstream's side of Config/Shared.xcconfig.")
+        return 1
+
+    print(f"      ok  bundle id {expected}, group group.{expected}")
+    return 0
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -566,6 +617,7 @@ CHECKS = {
     11: check_duplicate_call_arguments,
     12: check_fork_preserved,
     13: check_sync_surface,
+    14: check_fork_identity,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

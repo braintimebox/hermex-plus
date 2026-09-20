@@ -7,8 +7,22 @@
 
 DEVELOPMENT_TEAM = 6GYD9C9N6R
 APP_IDENTIFIER_SUFFIX =
-APP_BUNDLE_IDENTIFIER = com.uzairansar.hermesmobile$(APP_IDENTIFIER_SUFFIX)
-APP_GROUP_IDENTIFIER = group.com.uzairansar.hermesmobile$(APP_IDENTIFIER_SUFFIX)
+// HERMEX-FORK: the fork must sign under its own identifier, or iOS reads it as
+// the same app as upstream's App Store Hermex and refuses the install beside it.
+// Upstream signs as com.uzairansar.hermesmobile, and an
+// app is identified by this string alone — sharing it means iOS treats Hermex
+// Plus and Hermex as the SAME app, so the two can never be installed side by
+// side and an install can be refused as a conflict. Hermex Plus therefore signs
+// under this fork's own namespace. Everything else derives from these two
+// variables (share extension, live-activity widget, app group, keychain
+// service), so nothing else has to be kept in step by hand.
+//
+// Consequence for existing installs: a new bundle identifier is a new app. The
+// first build lands as a fresh install and the previous install keeps working
+// until it is deleted; the Keychain access group changes, so the saved server
+// URL and password must be entered once more. Server-side data is untouched.
+APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
+APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
 
 // Optional per-machine overrides. This include must stay last: later
 // assignments win, so Local.xcconfig values override the defaults above.
