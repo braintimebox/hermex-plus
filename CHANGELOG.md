@@ -1,3 +1,5 @@
+## 3.9.0 — Hermex Plus signs under its own bundle identifier (com.braintimebox.hermesplus), so it installs beside Hermex instead of colliding with it — first install lands as a fresh app and the server password is entered once. Also lands the release-pipeline fixes: the build watch no longer abandons a green build
+
 ## 3.8.2 — the composer never disappears — the reading-mode FAB and the state that could hide both it and the composer are gone, so tapping the chat only dismisses the keyboard; the reasoning list is computed once per frame instead of twice, and the typing indicator stops once a response's content is final
 
 ## 3.8.1 — attachments are read off the main actor (an iCloud file no longer freezes the composer) and a refused attachment names its reason; the composer offers None to turn reasoning off

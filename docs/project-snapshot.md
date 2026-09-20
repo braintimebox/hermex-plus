@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | e13ee5f |
-| Версия | 3.8.2 |
-| Обновлено | 2026-09-19 |
+| HEAD | ae4fc21 |
+| Версия | 3.9.0 |
+| Обновлено | 2026-09-20 |
 
 **Последние коммиты:**
 ```
+ae4fc21 3.8.2: the composer never disappears — the reading-mode FAB and the state that could hide both it and the composer are gone, so tapping the chat only dismisses the keyboard; the reasoning list is computed once per frame instead of twice, and the typing indicator stops once a response's content is final
 e13ee5f gate 13: a change to upstream's code must say that it is ours
 2cb74d6 fix(pipeline): size the build watch for the job it waits on
 8312b43 3.8.1: attachments are read off the main actor (an iCloud file no longer freezes the composer) and a refused attachment names its reason; the composer offers None to turn reasoning off
 b1317d1 fix(composer): read attached files off the main actor, and name a refusal
 07d09a6 feat(composer): offer None to turn reasoning off
-a5e306f fix(pipeline): the wait loop handed jq a doubled backslash
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
