@@ -110,15 +110,20 @@ struct ChatMessageActionMenu: View {
             isEnabled: !(isViewingCachedData || hasActiveStream || isForkingMessage),
             perform: { onFork(context) }
         ))
-        if context.role == .user {
-            items.append(ChatMessageActionItem(
-                kind: .copy,
-                title: String(localized: "Copy"),
-                systemImage: "doc.on.doc",
-                isEnabled: true,
-                perform: { onCopy(context) }
-            ))
-        }
+        // HERMEX-FORK: Copy restored for every role. Upstream 1.6.0's rework of
+        // this menu scoped the Copy item to `context.role == .user`, so assistant
+        // replies lost their only copy path: the meta-row copy button renders
+        // only in the branch where there is no action context, and assistant
+        // messages always have one. In v3.6.0 (pre-sync) Copy was unconditional —
+        // this returns it. Gate 16 could not catch this: the callback is called,
+        // the role condition is what disappeared.
+        items.append(ChatMessageActionItem(
+            kind: .copy,
+            title: String(localized: "Copy"),
+            systemImage: "doc.on.doc",
+            isEnabled: true,
+            perform: { onCopy(context) }
+        ))
 
         if let onSelectText {
             items.append(ChatMessageActionItem(

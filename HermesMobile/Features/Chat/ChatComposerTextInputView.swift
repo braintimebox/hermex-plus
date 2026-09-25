@@ -42,7 +42,13 @@ struct ComposerTextInputView: View {
     /// Text-only clients reject file/image paste and drop before invoking callbacks.
     var acceptsAttachments = true
     private let collapsedLineHeight: CGFloat = 22
-    private let expandedMinimumHeight: CGFloat = 72
+    // HERMEX-FORK: 72 → 44 (one line). The card floor was three lines tall even
+    // when empty, so focusing the field consumed chat space the user's rule
+    // ("базово одна строка, расширяется по перезаполнению", 25.09) forbids.
+    // 44pt keeps a comfortable hit target (same as the pill's minHeight) while
+    // the existing max(floor, inputHeight) growth handles multi-line drafts;
+    // the 96pt ceiling in the outer frame is unchanged.
+    private let expandedMinimumHeight: CGFloat = 44
 
     var body: some View {
         ZStack(alignment: isCollapsed ? .leading : .topLeading) {

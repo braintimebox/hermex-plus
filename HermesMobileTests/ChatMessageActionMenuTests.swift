@@ -12,9 +12,11 @@ final class ChatMessageActionMenuTests: XCTestCase {
         let menu = try makeMenu(role: "assistant")
 
         // Reply / Forward / Save are ours — upstream's menu stopped at Fork.
-        // Pinning the full list here is what makes a future sync that drops one
-        // of them fail loudly instead of silently shrinking the menu.
-        XCTAssertEqual(menu.items.map(\.kind), [.listen, .regenerate, .fork, .reply, .forward, .save])
+        // Copy is ours too: the 1.6.0 rework scoped it to user messages only,
+        // which silently removed the assistant's only copy path (v3.6.0 had it
+        // unconditional). Pinning the full list here is what makes a future sync
+        // that drops one of them fail loudly instead of silently shrinking it.
+        XCTAssertEqual(menu.items.map(\.kind), [.listen, .regenerate, .fork, .copy, .reply, .forward, .save])
         XCTAssertTrue(menu.items.allSatisfy(\.isEnabled))
     }
 
@@ -51,14 +53,15 @@ final class ChatMessageActionMenuTests: XCTestCase {
 
     func testCachedResponseRetainsListenButDisablesServerMutations() throws {
         let menu = try makeMenu(role: "assistant", isViewingCachedData: true)
-        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen])
+        // Copy never touches the server, so cached data can still be copied.
+        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen, .copy])
     }
 
     func testPendingResponseMutationsAreDisabled() throws {
         let menu = try makeMenu(role: "assistant", isMutating: true)
         // Listen always, plus ours: a pending regenerate/fork does not change what
-        // the message says, so Reply / Forward / Save stay available.
-        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen, .reply, .forward, .save])
+        // the message says, so Copy / Reply / Forward / Save stay available.
+        XCTAssertEqual(menu.items.filter(\.isEnabled).map(\.kind), [.listen, .copy, .reply, .forward, .save])
     }
 
     func testPerformRoutesToTheMatchingCallback() throws {
