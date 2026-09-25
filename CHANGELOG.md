@@ -1,3 +1,5 @@
+## 3.9.3 — composer opens as one line and stops showing the transcript through the field; Copy is back for assistant replies
+
 ## 3.9.2 — schedule wiring restored (long-press Send works again, counter badge back), opaque header bar, composer growth policy, gates 15-16
 
 ## 3.9.1 — the fork signs as com.braintimebox.hermexplus, so it installs beside the App Store Hermex instead of colliding with it; gate 14 pins the identifier so a merge cannot take upstream's side and restore the collision; includes 3.8.2's composer fix (no reading-mode FAB, no state that could hide the composer)
