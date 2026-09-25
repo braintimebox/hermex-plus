@@ -661,6 +661,17 @@ struct ChatTranscriptView: View {
             )
             .id(clarificationPrompt.id)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // HERMEX-FORK: restored. The height report is what lifts the floating
+            // controls above this card, and only this call site produced it — the
+            // 3.7.0 sync kept the consumer (`ChatView.onClarificationCardHeightChange`
+            // and its @State) and dropped the producer, so the height stayed 0 and
+            // the controls no longer avoided the card. Same merge defect class as
+            // the schedule menu: a stored callback with no caller compiles clean.
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                onClarificationCardHeightChange(height)
+            }
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
         }
     }

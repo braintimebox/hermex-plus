@@ -524,7 +524,6 @@ struct ChatView: View {
             },
             scheduledCount: scheduledMessageCount,
             onOpenScheduledList: { showingScheduledList = true },
-            onCollapseComposer: nil,
             onCancel: {
                 Task { await cancelStream() }
             },

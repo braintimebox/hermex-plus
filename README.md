@@ -32,14 +32,32 @@ Then install with SideStore / AltStore → connect to your Hermes server.
 |---------|-------------|
 | **Reply** | Long-press → Reply with quote banner |
 | **Forward** | Long-press → Forward to any session |
-| **Saved Messages** | Bookmark, reorder, jump back to chat |
+| **Save (сохранённые)** | Bookmark, reorder, jump back to chat |
 | **Scheduled Messages** | Long-press Send → pick date/time. Clock badge on Send |
 | **Chat long-press** | Hold "Chat" button → Schedule message |
 | **Share** | Message context menu → Share (system sheet) |
+| **Clarification** | The agent's questions render as an inline card and are answered without leaving the chat |
+| **Tasks** | Create, run, schedule and delete tasks against the server's task API |
+| **Skills: Personal / Built-in** | The Skills screen splits what you wrote from what ships built in |
+| **Skills: Plugins / Hooks** | Plugins and hooks listed with their live data |
+| **Skills: breadcrumb** | Origin breadcrumb in the navigation bar |
+| **Skills: поиск / фильтр, вкл-выкл** | Search, filter and per-skill enable switch |
+| **Skills: `origin`** | The server's `origin` field drives the grouping, not a client-side guess |
+| **Fade при печати** | Words fade in as a response streams (Settings → Streamed Text Animation) |
+| **Плавная печать (drain)** | Streaming text advances at a readable rate instead of jumping one token at a time |
+| **Ссылки-превью** | Links in the transcript resolve to a preview |
+| **Медиа в транскрипте** | Images and files render inline in the transcript |
+| **Модели** | Saved and scheduled messages persist on device (SwiftData) |
+| **Логирование** | Jank, scroll ownership, composer height and network timings go to `~/.hermes/hermex-logs.jsonl` |
+| **Детектор зависаний** | Real frame times via `CADisplayLink`; sustained jank is reported rather than felt |
 | **Background refresh** | BGTaskScheduler every 4h. ~0.5% battery/day |
 | **Config cache** | 24h memory cache — 0 network on repeat visits |
 | **Performance** | `async let` parallel loading. No type-check timeouts |
 | **No swipes** | Pin/archive/delete via long-press menu only |
+
+> Every row above is checked by `scripts/pipeline-precheck.py` gate 15 against
+> `docs/agents/fork-inventory.md`, so a feature cannot quietly disappear from
+> this table (or from the app) without failing the pre-push gate.
 
 ## 🔧 Key differences from upstream
 

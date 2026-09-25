@@ -167,9 +167,6 @@ struct MessageComposerView: View {
     let onScheduleTapped: (() -> Void)?
     let scheduledCount: Int
     let onOpenScheduledList: (() -> Void)?
-    /// Non-nil shows the native ⌄ collapse affordance in the action row
-    /// (reading-first mode): folds the composer back to the FAB.
-    let onCollapseComposer: (() -> Void)?
     let onCancel: () -> Void
     let onSelectModel: (ModelCatalogOption) -> Void
     let onModelPickerOpen: () async -> Void
@@ -446,9 +443,6 @@ struct MessageComposerView: View {
                             },
                             onSelectSubArg: { subArg in
                                 applyCompletion("/\(parsedSlashQuery.commandName) \(subArg)")
-                            },
-                            onDismiss: {
-                                applyCompletion("")
                             }
                         )
                         .padding(.horizontal)
@@ -758,6 +752,8 @@ struct MessageComposerView: View {
 
                     voiceControlButton
 
+                    scheduledBadge
+
                     actionButton
                 }
             }
@@ -786,11 +782,41 @@ struct MessageComposerView: View {
 
                 voiceControlButton
 
+                scheduledBadge
+
                 ContextWindowIndicatorView(snapshot: contextWindowSnapshot)
                     .padding(.horizontal, 4)
             }
 
             actionButton
+        }
+    }
+
+    /// Orange clock with the number of pending scheduled messages; tapping it
+    /// opens the scheduled list. Restored with the schedule wiring: the 3.7.0
+    /// sync kept `scheduledCount` and `onOpenScheduledList` declared and stopped
+    /// reading them, so the counter and its entry point became unreachable.
+    @ViewBuilder
+    private var scheduledBadge: some View {
+        if !showsStopButton, let onOpenScheduledList, scheduledCount > 0 {
+            Button {
+                onOpenScheduledList()
+            } label: {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 17))
+                    .foregroundStyle(.orange)
+                    .frame(width: circleSize, height: circleSize)
+                    .overlay(alignment: .topTrailing) {
+                        Text("\(scheduledCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(3)
+                            .background(Circle().fill(.orange))
+                            .offset(x: 4, y: -2)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Scheduled messages, \(scheduledCount) pending")
         }
     }
 
@@ -824,6 +850,33 @@ struct MessageComposerView: View {
         .buttonStyle(.chatTactile(.icon))
         .disabled(isActionButtonDisabled)
         .accessibilityLabel(showsStopButton ? "Stop response" : "Send")
+        // HERMEX-FORK: restored. The 3.7.0 upstream sync kept the declarations of
+        // `onSchedule`/`onScheduleTapped` and dropped the only thing that called
+        // them, so "long-press Send → Schedule Message" silently stopped working
+        // while ChatView kept passing the closures and README kept promising it.
+        // Nothing warned: an unused stored property is not a compile error.
+        // `scripts/pipeline-precheck.py` gate 16 now fails on wiring like this.
+        .contextMenu {
+            if showsStopButton {
+                Button {
+                    actionButtonTapped()
+                } label: {
+                    Label("Stop", systemImage: "stop.circle.fill")
+                }
+            } else if !isActionButtonDisabled {
+                Button {
+                    actionButtonTapped()
+                } label: {
+                    Label("Send", systemImage: "arrow.up.circle.fill")
+                }
+                Button {
+                    onScheduleTapped?()
+                    onSchedule()
+                } label: {
+                    Label("Schedule Message", systemImage: "calendar.badge.plus")
+                }
+            }
+        }
     }
 
     @ViewBuilder

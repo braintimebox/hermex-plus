@@ -28,6 +28,10 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
                                      same union leaves both copies of a field —
                                      `invalid redeclaration of 'x'` × N, which
                                      reads as N bugs but is one spliced block)
+   15. README features match        every feature docs/agents/fork-inventory.md
+                                     records as ours is named in README's
+                                     Features section (the link line maintains
+                                     itself; the prose beside it did not)
 
     Checks are fail-fast: the first BLOCKER stops the push.
 
@@ -603,6 +607,167 @@ def check_fork_identity() -> int:
     return 0
 
 
+def check_readme_feature_drift() -> int:
+    """Reject a README whose Features section no longer matches what the fork has.
+
+    Why: `docs/agents/fork-inventory.md` is the single source of truth for the
+    fork's features — it is updated on every upstream sync and carries the file
+    and call-count that prove each feature is still alive. README's Features
+    table is written by hand and nothing compared the two, so it rotted: the
+    table listed 10 items while the fork had gained Clarification, streaming
+    fade, word drain, link previews, transcript media, Personal/Built-in skill
+    buckets, `origin` and Tasks — none of which the README mentioned. The link
+    line regenerates itself on every release (it points at `/releases/latest`),
+    which is precisely why the drift went unnoticed: the part that updates
+    automatically stayed correct while the prose beside it aged.
+
+    The dead-zone list in that same inventory already recorded this ("README не
+    входит в контракт версии"). This check closes it.
+
+    Direction is deliberate and one-way: every feature the inventory lists as
+    ours must be named in README. A name is matched by any distinctive word from
+    the inventory row, so ordinary rewording stays allowed while silently
+    dropping a feature does not.
+    """
+    print("[15/15] README features match the fork inventory")
+    readme = ROOT / "README.md"
+    inventory = ROOT / "docs" / "agents" / "fork-inventory.md"
+    for path in (readme, inventory):
+        if not path.exists():
+            print(f"      {path.name} not found — skipped")
+            return 0
+
+    readme_text = readme.read_text(encoding="utf-8")
+
+    # The Features section runs from its heading to the next "## " heading.
+    match = re.search(r"^## [^\n]*Features[^\n]*\n(.*?)(?=^## )", readme_text,
+                      re.MULTILINE | re.DOTALL)
+    if not match:
+        return blockers([f"{readme.name}: no 'Features' section found "
+                         f"(the check cannot verify what it cannot locate)"])
+    features_block = match.group(1)
+
+    # Only the first section's table counts: "Наши фичи — у upstream НЕТ вообще".
+    # The section below it lists areas BOTH sides changed, which are not
+    # features the fork owns and must not be demanded from the README.
+    inv_text = inventory.read_text(encoding="utf-8")
+    own = re.search(r"^## [^\n]*Наши фичи[^\n]*\n(.*?)(?=^## )", inv_text,
+                    re.MULTILINE | re.DOTALL)
+    if not own:
+        return blockers([f"{inventory.name}: no 'Наши фичи' section found "
+                         f"(the check cannot verify what it cannot locate)"])
+    # Columns: | Feature | File | Calls |. The File cell is either a backticked
+    # path or "там же (`sym`)" — both carry a backticked token, and that token is
+    # what marks the row as an inventory entry rather than prose. Every cell
+    # class is line-bounded ([^|\n]): a bare [^|] also matches a newline, which
+    # let one match swallow several following rows and silently skip them.
+    rows = re.findall(r"^\|\s*([^|\n]+?)\s*\|\s*[^|\n]*`[^`\n]+`[^|\n]*\|",
+                      own.group(1), re.MULTILINE)
+
+    # A feature is "documented" when any distinctive word of its inventory name
+    # appears in the Features block. Keep words >= 4 chars that are not generic.
+    generic = {"skills", "прочее", "features", "with", "live", "data"}
+    missing: list[str] = []
+    for name in rows:
+        name = name.strip()
+        if not name or name.lower() in ("фича", "feature"):
+            continue
+        words = [w.strip(" ()（）`*:") for w in re.split(r"[\s/+,—–-]+", name)]
+        words = [w for w in words if len(w) >= 4 and w.lower() not in generic]
+        if not words:
+            continue
+        # `origin`/`Tasks`/`Models` style names land here; match case-insensitively.
+        # Word boundaries, not plain substrings: "Tasks" is a substring of
+        # "BGTaskScheduler", so a substring test let an undocumented Tasks row
+        # pass on the strength of an unrelated background-refresh entry.
+        haystack = features_block
+        if not any(re.search(rf"\b{re.escape(w)}\b", haystack, re.IGNORECASE) for w in words):
+            missing.append(f"README Features does not mention '{name}' "
+                           f"(inventory lists it as ours; match any of: {', '.join(words)})")
+
+    if missing:
+        print()
+        print("      The inventory is where a feature's survival is recorded —")
+        print("      a name it carries but README never shows is undocumented work.")
+        return blockers(missing)
+
+    print(f"      ok  all {len(rows)} inventory features are named in README")
+    return 0
+
+
+def check_dead_callback_wiring() -> int:
+    """Reject a stored view callback that no code path ever calls.
+
+    Why: the 3.7.0 upstream sync kept the declarations of `onSchedule`,
+    `onScheduleTapped`, `onOpenScheduledList` and `scheduledCount` in
+    `ChatComposerView` and dropped the only thing that read them — the
+    `contextMenu` on the send button. "Long-press Send → Schedule Message"
+    stopped working, `README` kept promising it, and nothing failed: an unused
+    stored property is not a compile error, so the loss was invisible until a
+    user reported it. The same merge left `onClarificationCardHeightChange`
+    without a producer, so the inline clarification card stopped lifting the
+    floating controls above itself.
+
+    This is a defect CLASS, not one bug: a merge resolves a block, keeps the
+    interface, and loses the trigger. It has now happened twice in one sync.
+
+    Scope and precision — both matter more than sensitivity here, because a
+    gate that reports false positives gets ignored and then disabled:
+      * the whole app tree is scanned, not one file: a closure property is
+        routinely assigned from a sibling view (`canvas.onRevealRow = {…}`) and
+        invoked from a third (`+Accessibility.swift`), so a per-file test
+        reports three live callbacks as dead.
+      * protocol requirements are skipped: `var onDisconnect: ((Error) -> Void)?
+        { get set }` is a declaration with no initializer, and its real
+        implementation in the concrete client does call it.
+      * an identifier must appear exactly once in the entire tree to count as
+        dead — declaration only, no reader, no caller, no assignment.
+
+    Blocking: a callback nobody calls is a feature that silently does not work.
+    """
+    print("[16/16] stored callbacks all have a caller")
+    app_root = ROOT / "HermesMobile"
+    if not app_root.is_dir():
+        print("      HermesMobile/ not found — skipped")
+        return 0
+
+    # Prefer a real parse; fall back to a text scan when swiftc is unavailable
+    # (CI on Linux), where the text rule is still exact enough to be trusted.
+    sources = sorted(app_root.rglob("*.swift"))
+    dead: list[str] = []
+    for path in sources:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for name in sorted(set(re.findall(r"^\s*(?:let|var)\s+(on[A-Z]\w*)\s*:",
+                                         text, re.MULTILINE))):
+            # Protocol requirement: declared with `{ get set }` and no body.
+            if re.search(rf"^\s*(?:let|var)\s+{re.escape(name)}\s*:[^\n]*\{{\s*get\b",
+                         text, re.MULTILINE):
+                continue
+            occurrences = 0
+            for other in sources:
+                try:
+                    other_text = other.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                occurrences += len(re.findall(rf"\b{re.escape(name)}\b", other_text))
+            if occurrences <= 1:
+                dead.append(f"{path.relative_to(ROOT)}: '{name}' is declared and never called "
+                            f"(a feature that cannot run)")
+
+    if dead:
+        print()
+        print("      A stored callback with no caller is a silently dead feature —")
+        print("      the class of loss an upstream merge produces, since it keeps")
+        print("      the interface and drops the trigger.")
+        return blockers(dead)
+
+    print(f"      ok  all stored callbacks in {len(sources)} files have a caller")
+    return 0
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -618,6 +783,8 @@ CHECKS = {
     12: check_fork_preserved,
     13: check_sync_surface,
     14: check_fork_identity,
+    15: check_readme_feature_drift,
+    16: check_dead_callback_wiring,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

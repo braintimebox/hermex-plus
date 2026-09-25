@@ -24,7 +24,6 @@ struct SlashCommandAutocompleteView: View {
     let onSelectAgentCommand: (AgentSlashCommandSuggestion) -> Void
     let onSelectSkillSubArg: (SkillSlashSuggestion) -> Void
     let onSelectSubArg: (String) -> Void
-    let onDismiss: () -> Void
 
     /// The last completed background ranking pass, or `nil` before the first one lands.
     @State private var cachedResults: SlashAutocompleteResults?

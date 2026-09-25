@@ -475,7 +475,6 @@ private struct SessionChatPresentationFixture: View {
             onSend: {}, onSendVoiceNote: { _, _ in },
             quotedMessage: nil, onDismissQuote: {}, onSchedule: {},
             onScheduleTapped: nil, scheduledCount: 0, onOpenScheduledList: nil,
-            onCollapseComposer: nil,
             onCancel: {}, onSelectModel: { _ in },
             onModelPickerOpen: {}, onSelectReasoningEffort: { _ in }, onLoadWorkspaceSuggestions: { _ in },
             onWorkspaceRegistryChanged: {}, onLoadPersonalitySuggestions: {}, onLoadSkillSuggestions: {},
