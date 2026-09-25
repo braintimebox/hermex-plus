@@ -460,6 +460,7 @@
 		D885F4C0DA3A438B8CE92635 /* BotClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B04ED8E6164A75B069773D /* BotClientTests.swift */; };
 		785784DE20094BA78F432A9A /* BotChatComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */; };
 		D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */; };
+		AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */; };
 		A4C0A37288B742B9B284A67E /* BotChatPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26C849A9CE6B47E79695E069 /* BotChatPresentationTests.swift */; };
 		9BB85D722406416798DFA518 /* BotPromptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */; };
 /* End PBXBuildFile section */
@@ -953,6 +954,7 @@
 		B0B04ED8E6164A75B069773D /* BotClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotClientTests.swift"; sourceTree = "<group>"; };
 		5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotChatComposerView.swift"; sourceTree = "<group>"; };
 		5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerPresentation.swift"; sourceTree = "<group>"; };
+		AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerGrowth.swift"; sourceTree = "<group>"; };
 		26C849A9CE6B47E79695E069 /* BotChatPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotChatPresentationTests.swift"; sourceTree = "<group>"; };
 		3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotPromptMode.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1378,6 +1380,7 @@
 			isa = PBXGroup;
 			children = (
 				5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */,
+				AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */,
 				1A2B3C4D5E6F7000000000BF /* ChatView.swift */,
 				C05100000000000000000011 /* ChatTranscriptView.swift */,
 				C05100000000000000000012 /* ChatMessageActions.swift */,
@@ -1888,6 +1891,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
+				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,
 				785784DE20094BA78F432A9A /* BotChatComposerView.swift in Sources */,
 				A990ABE1D2654992AD262B77 /* BotProtocol.swift in Sources */,
 				A27FAACA0A9243C5AD4860BB /* BotClient.swift in Sources */,

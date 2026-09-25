@@ -159,6 +159,8 @@ struct MessageComposerView: View {
     let uploadAttachmentErrorMessage: String?
     let onSend: () -> Void
     let onSendVoiceNote: (Data, String) -> Void
+    // HERMEX-FORK: Reply feature — upstream has no quote banner; the composer
+    // receives the quoted draft so the banner can render above the field.
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
@@ -707,7 +709,14 @@ struct MessageComposerView: View {
     /// Card: strip above the editor, controls move to `toolbarRow` below.
     private var composerSurface: some View {
         VStack(spacing: 0) {
-            if isExpanded {
+            // HERMEX-FORK: measured cause. The strip draws nothing when empty
+            // (`if !attachments.isEmpty` inside ComposerAttachmentStripView), but
+            // mounting it on every expanded frame kept the attachment transition
+            // alive on every focus change — the morph, not the draft, decided the
+            // composer's shape. `ChatComposerGrowth.showsAttachmentStrip` makes
+            // content the only condition, and the policy file (fork-owned, absent
+            // upstream) is where the rule lives so a sync cannot quietly revert it.
+            if ChatComposerGrowth.showsAttachmentStrip(hasAttachments: !pendingAttachments.isEmpty) {
                 ComposerAttachmentStripView(
                     attachments: pendingAttachments,
                     onRemove: onRemoveAttachment,
@@ -752,6 +761,7 @@ struct MessageComposerView: View {
 
                     voiceControlButton
 
+                    // HERMEX-FORK: schedule entry points (pill layout).
                     scheduledBadge
 
                     actionButton
@@ -782,6 +792,7 @@ struct MessageComposerView: View {
 
                 voiceControlButton
 
+                // HERMEX-FORK: schedule entry points (card layout).
                 scheduledBadge
 
                 ContextWindowIndicatorView(snapshot: contextWindowSnapshot)
@@ -792,10 +803,11 @@ struct MessageComposerView: View {
         }
     }
 
-    /// Orange clock with the number of pending scheduled messages; tapping it
-    /// opens the scheduled list. Restored with the schedule wiring: the 3.7.0
-    /// sync kept `scheduledCount` and `onOpenScheduledList` declared and stopped
-    /// reading them, so the counter and its entry point became unreachable.
+    /// HERMEX-FORK: Orange clock with the number of pending scheduled messages;
+    /// tapping it opens the scheduled list. Restored with the schedule wiring:
+    /// the 3.7.0 sync kept `scheduledCount` and `onOpenScheduledList` declared
+    /// and stopped reading them, so the counter and its entry point became
+    /// unreachable.
     @ViewBuilder
     private var scheduledBadge: some View {
         if !showsStopButton, let onOpenScheduledList, scheduledCount > 0 {

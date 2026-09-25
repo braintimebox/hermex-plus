@@ -515,6 +515,7 @@ struct ChatView: View {
             onSendVoiceNote: { data, filename in
                 Task { await sendVoiceNote(audioData: data, filename: filename) }
             },
+            // HERMEX-FORK: Reply feature — passes the quoted draft to the composer.
             quotedMessage: viewModel.quotedMessage,
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
@@ -820,6 +821,15 @@ struct ChatView: View {
         )
         .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.inline)
+        // HERMEX-FORK: measured cause. No toolbarBackground has ever been declared
+        // anywhere in the app (`grep toolbarBackground HermesMobile/` = 0 before this
+        // line), so the bar takes the system scroll-edge default: transparent. Chat
+        // text scrolling up collides with ChatToolbarTitleLabel — two `Text` with no
+        // backing of their own (ChatView.swift:3865) — and the title is read through
+        // moving body text. A solid bar background on the canvas color separates the
+        // regions; upstream owns the layout, so this is the marked-local minimum.
+        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .accessibilityIdentifier("chat-detail:\(viewModel.displayTitle)")
         .task(id: didCompleteInitialAppearance) {
             await handleInitialAppearanceTask()
