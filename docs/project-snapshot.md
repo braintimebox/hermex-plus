@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 4712bee |
-| Версия | 3.9.3 |
+| HEAD | 7a1a3ef |
+| Версия | 3.9.4 |
 | Обновлено | 2026-09-25 |
 
 **Последние коммиты:**
 ```
+7a1a3ef test: pin the one-line composer baseline instead of the old 72pt card floor
+d9c6a5b 3.9.3: composer opens as one line and stops showing the transcript through the field; Copy is back for assistant replies
 4712bee composer: one-line floor (72→44), opaque surface, and Copy back for assistant replies
 3324615 3.9.2: schedule wiring restored (long-press Send works again, counter badge back), opaque header bar, composer growth policy, gates 15-16
 9d38edb composer growth policy + opaque header bar, per the sync-compatibility rule
 dffaac9 the 3.7.0 sync dropped triggers and kept interfaces — restore them, and make the class fail a gate
-d831007 3.9.1: the fork signs as com.braintimebox.hermexplus, so it installs beside the App Store Hermex instead of colliding with it; gate 14 pins the identifier so a merge cannot take upstream's side and restore the collision; includes 3.8.2's composer fix (no reading-mode FAB, no state that could hide the composer)
-e53b852 fix(identity): the fork signs as com.braintimebox.hermexplus
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)

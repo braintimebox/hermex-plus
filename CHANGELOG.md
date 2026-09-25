@@ -1,3 +1,5 @@
+## 3.9.4 — composer opens as one line and no longer shows the transcript through the field; Copy is back for assistant replies
+
 ## 3.9.3 — composer opens as one line and stops showing the transcript through the field; Copy is back for assistant replies
 
 ## 3.9.2 — schedule wiring restored (long-press Send works again, counter badge back), opaque header bar, composer growth policy, gates 15-16
