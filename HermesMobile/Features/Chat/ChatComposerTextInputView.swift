@@ -74,9 +74,19 @@ struct ComposerTextInputView: View {
                 acceptsAttachments: acceptsAttachments,
                 accessibilityLabel: placeholder
             )
-            // The card editor is at least 72 pt of real text view, so a tap
-            // anywhere in it lands on the editor rather than dead space.
-            .frame(height: isCollapsed ? collapsedLineHeight : max(expandedMinimumHeight, inputHeight))
+            // The editor is one line of real text at rest, so a tap anywhere in it
+            // lands on the editor rather than dead space.
+            // HERMEX-FORK: the 96pt ceiling belongs HERE, on the text frame, not
+            // on the measuring side and not on the container. `reportHeight`
+            // already clamps the measured text height to [22, 96], but the
+            // vertical padding sits OUTSIDE this frame, so the editor plus its
+            // padding was taller than the ZStack that wraps it (maxHeight 96 at
+            // the bottom of this body) and SwiftUI does not clip: the draft text
+            // was drawn 12pt below the card's own bottom edge — pixel-measured on
+            // the 3.9.2 screenshot (glyph band 1506-1646 crossing the composer
+            // border at y=1637), which is what "текст наезжает на рамку" means.
+            // Clamping here keeps the text inside its own box at every length.
+            .frame(height: isCollapsed ? collapsedLineHeight : min(96, max(expandedMinimumHeight, inputHeight)))
             .padding(.vertical, isCollapsed ? 0 : verticalPadding)
             .padding(.horizontal, 16)
             .opacity(isCollapsed ? 0 : 1)
@@ -105,14 +115,12 @@ struct ComposerTextInputView: View {
                     .allowsHitTesting(false)
             }
         }
-        // minHeight 42 keeps the field tappable; maxHeight 96 caps the growth at
-        // the same ceiling `reportHeight` clamps the measured text height to.
-        // Without the maxHeight the field expanded unboundedly inside the
-        // composer VStack when the keyboard focus re-laid the chat out — each
-        // growth step (+42pt, the minHeight quantum) fed `onHeightChange` →
-        // composerHeight → bottom fade/inset → another re-layout, a runaway
-        // feedback loop that ballooned the composer to 1000+pt of empty space.
-        .frame(minHeight: 42, maxHeight: 96, alignment: .topLeading)
+        // minHeight 42 keeps the field tappable; the growth ceiling now lives on
+        // the text frame above (96pt of real text), so this container only has to
+        // admit the padding around it. Leaving the old maxHeight 96 here clipped
+        // the composed height to less than its own child: the text overflowed the
+        // card instead of scrolling inside it.
+        .frame(minHeight: 42, maxHeight: 96 + verticalPadding * 2, alignment: .topLeading)
     }
 
     private func updateMeasuredHeight(_ newHeight: CGFloat) {
