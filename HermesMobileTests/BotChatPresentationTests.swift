@@ -304,10 +304,28 @@ import XCTest
                 focus.isFocused = true
                 await renderFrames()
                 XCTAssertTrue(referenceEditor.isFirstResponder)
-                XCTAssertGreaterThan(referenceEditor.bounds.height, 44)
+                // The composer's baseline is one line (25.09): focusing must not
+                // inflate the field, and text past the first line must grow it.
+                // Both halves are pinned here — the old card floor was 72pt of
+                // empty three-line height, which is what the user rejected, and
+                // this assertion used to encode that floor by demanding > 44.
+                // `reportHeight` clamps the measured text height to [22, 96], so
+                // the frame is max(44, inputHeight) and never exceeds 96.
+                let restingHeight = referenceEditor.bounds.height
+                XCTAssertGreaterThanOrEqual(restingHeight, 44)
+                XCTAssertLessThan(restingHeight, 72, "focus alone must not open a multi-line card")
                 referenceEditor.insertText("Draft a short reply.")
                 await renderFrames()
                 _ = try screenshot(reference, name: name.replacingOccurrences(of: "bot-", with: "sessions-") + "-keyboard")
+                // HERMEX-FORK: the composer floor is fork-owned (one line, 44pt);
+                // upstream still opens the card three lines tall, so this half of
+                // the pin states the fork's rule and is expected to conflict.
+                referenceEditor.insertText("\nSecond line.\nThird line.\nFourth line.")
+                await renderFrames()
+                XCTAssertGreaterThan(referenceEditor.bounds.height, restingHeight,
+                                     "text past the first line must grow the field")
+                XCTAssertLessThanOrEqual(referenceEditor.bounds.height, 96,
+                                         "growth stops at the reported-height ceiling")
             }
         }
     }
