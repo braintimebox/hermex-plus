@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | e53b852 |
-| Версия | 3.9.1 |
-| Обновлено | 2026-09-20 |
+| HEAD | 9d38edb |
+| Версия | 3.9.2 |
+| Обновлено | 2026-09-25 |
 
 **Последние коммиты:**
 ```
+9d38edb composer growth policy + opaque header bar, per the sync-compatibility rule
+dffaac9 the 3.7.0 sync dropped triggers and kept interfaces — restore them, and make the class fail a gate
+d831007 3.9.1: the fork signs as com.braintimebox.hermexplus, so it installs beside the App Store Hermex instead of colliding with it; gate 14 pins the identifier so a merge cannot take upstream's side and restore the collision; includes 3.8.2's composer fix (no reading-mode FAB, no state that could hide the composer)
 e53b852 fix(identity): the fork signs as com.braintimebox.hermexplus
 dd983d5 3.9.0: Hermex Plus signs under its own bundle identifier (com.braintimebox.hermesplus), so it installs beside Hermex instead of colliding with it — first install lands as a fresh app and the server password is entered once. Also lands the release-pipeline fixes: the build watch no longer abandons a green build
 ae4fc21 3.8.2: the composer never disappears — the reading-mode FAB and the state that could hide both it and the composer are gone, so tapping the chat only dismisses the keyboard; the reasoning list is computed once per frame instead of twice, and the typing indicator stops once a response's content is final
-e13ee5f gate 13: a change to upstream's code must say that it is ours
-2cb74d6 fix(pipeline): size the build watch for the job it waits on
-8312b43 3.8.1: attachments are read off the main actor (an iCloud file no longer freezes the composer) and a refused attachment names its reason; the composer offers None to turn reasoning off
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -46,8 +46,8 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 ## 4. Размеры (когда важно)
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
-| Swift-файлы приложения | 317 | 286 | -31 |
-| Строк приложения | 101,540 | 99,901 | **-1,639** |
-| Строк Chat | 36,076 | 40,146 | +4,070 |
-| ChatViewModel | 6,650 | 7,496 | +846 |
-| IPA | ~44 MB | 50 MB (HermesPlus-3.8.1.ipa) | +1–2 MB |
+| Swift-файлы приложения | 332 | 287 | -45 |
+| Строк приложения | 110,058 | 100,045 | **-10,013** |
+| Строк Chat | 38,604 | 40,290 | +1,686 |
+| ChatViewModel | 6,850 | 7,496 | +646 |
+| IPA | ~44 MB | 50 MB (HermesPlus-3.9.1.ipa) | +1–2 MB |
