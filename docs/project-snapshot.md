@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | b070708 |
-| Версия | 3.9.5 |
+| HEAD | 0d1db7d |
+| Версия | 3.9.6 |
 | Обновлено | 2026-09-25 |
 
 **Последние коммиты:**
 ```
+0d1db7d composer: keep multi-line text inside the card instead of over its border
+e466662 3.9.5: composer is shorter at rest: the empty focused card loses ~50pt (field one line, tighter padding, controls row closer), glass look untouched
 b070708 revert the composer's fill, cut its height instead
 95124d4 3.9.4: composer opens as one line and no longer shows the transcript through the field; Copy is back for assistant replies
 7a1a3ef test: pin the one-line composer baseline instead of the old 72pt card floor
 d9c6a5b 3.9.3: composer opens as one line and stops showing the transcript through the field; Copy is back for assistant replies
-4712bee composer: one-line floor (72→44), opaque surface, and Copy back for assistant replies
-3324615 3.9.2: schedule wiring restored (long-press Send works again, counter badge back), opaque header bar, composer growth policy, gates 15-16
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,063 | **-9,995** |
-| Строк Chat | 38,604 | 40,308 | +1,704 |
+| Строк приложения | 110,058 | 100,071 | **-9,987** |
+| Строк Chat | 38,604 | 40,316 | +1,712 |
 | ChatViewModel | 6,850 | 7,496 | +646 |
-| IPA | ~44 MB | 50 MB (HermesPlus-3.9.4.ipa) | +1–2 MB |
+| IPA | ~44 MB | 50 MB (HermesPlus-3.9.5.ipa) | +1–2 MB |

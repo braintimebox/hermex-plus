@@ -1,3 +1,5 @@
+## 3.9.6 — multi-line drafts stay inside the composer card: the ceiling moved onto the text frame and the container admits its padding, so text scrolls inside instead of drawing over the border
+
 ## 3.9.5 — composer is shorter at rest: the empty focused card loses ~50pt (field one line, tighter padding, controls row closer), glass look untouched
 
 ## 3.9.4 — composer opens as one line and no longer shows the transcript through the field; Copy is back for assistant replies
