@@ -1,3 +1,5 @@
+## 3.9.5 — composer is shorter at rest: the empty focused card loses ~50pt (field one line, tighter padding, controls row closer), glass look untouched
+
 ## 3.9.4 — composer opens as one line and no longer shows the transcript through the field; Copy is back for assistant replies
 
 ## 3.9.3 — composer opens as one line and stops showing the transcript through the field; Copy is back for assistant replies
