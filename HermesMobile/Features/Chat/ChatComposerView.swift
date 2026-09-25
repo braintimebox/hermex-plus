@@ -460,7 +460,8 @@ struct MessageComposerView: View {
                 if isExpanded {
                     toolbarRow
                         .padding(.horizontal)
-                        .padding(.top, 8)
+                        // HERMEX-FORK: 8 → 2 — same height budget as above.
+                        .padding(.top, 2)
                         .frame(maxWidth: .infinity)
                         // Solid chat background behind the controls: the card
                         // above is glass on purpose, but transcript text
@@ -735,7 +736,13 @@ struct MessageComposerView: View {
                     isDisabled: isReadOnly,
                     isCollapsed: !isExpanded,
                     isKeyboardSendEnabled: !showsStopButton && !isActionButtonDisabled,
-                    verticalPadding: 12,
+                    // HERMEX-FORK: 12 → 6. Measured cause: the empty focused card
+                    // was 122pt tall (44 field + 24 padding + 2 + 4 surface + 52
+                    // controls row), which reads as four lines against Telegram's
+                    // one. The user asked for height only ("уменьшить базово,
+                    // расширять по мере необходимости") — the
+                    // surface's look is untouched by this change.
+                    verticalPadding: 6,
                     chipSkills: skillSuggestions,
                     chipFilePaths: chipFilePaths,
                     quotes: quotes,
@@ -770,8 +777,8 @@ struct MessageComposerView: View {
             .padding(.trailing, isExpanded ? 0 : pillInset)
             .padding(.vertical, isExpanded ? 0 : pillInset)
         }
-        .padding(.top, isExpanded ? 2 : 0)
-        .padding(.bottom, isExpanded ? 4 : 0)
+        .padding(.top, isExpanded ? 1 : 0)
+        .padding(.bottom, isExpanded ? 1 : 0)
         .modifier(ChatComposerSurfaceStyle(isExpanded: isExpanded))
     }
 
