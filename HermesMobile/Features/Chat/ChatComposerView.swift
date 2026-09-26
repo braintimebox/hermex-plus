@@ -457,7 +457,7 @@ struct MessageComposerView: View {
                 composerSurface
                     .padding(.horizontal)
 
-                if showsControlRow {
+                if isExpanded {
                     toolbarRow
                         .padding(.horizontal)
                         // HERMEX-FORK: 8 → 2 — same height budget as above.
@@ -481,9 +481,6 @@ struct MessageComposerView: View {
             // Focus flips arrive from UIKit outside any withAnimation, so the
             // morph and the row's insertion take their animation from here.
             .animation(ChatMotion.composerChrome(reduceMotion: reduceMotion), value: isExpanded)
-            // HERMEX-FORK: the control row now enters on content, not on focus,
-            // so its insertion animation needs its own trigger.
-            .animation(ChatMotion.composerChrome(reduceMotion: reduceMotion), value: showsControlRow)
         }
         .background(
             GeometryReader { proxy in
@@ -697,27 +694,6 @@ struct MessageComposerView: View {
     /// Pill while the editor is idle; card while it is focused or a composer
     /// sheet is up (so a picker never snaps it shut). `shouldRestoreFocus…`
     /// bridges the gap between a sheet dismissing and focus coming back.
-    /// Whether the composer shows the second row of controls under the field.
-    /// HERMEX-FORK: focus used to be enough (upstream `isExpanded == isFocused`),
-    /// which cost a whole 44pt control row the moment the keyboard came up — so
-    /// tapping an empty field turned a one-line composer into a two-row block.
-    /// The user's rule (Telegram as the reference): one line at rest, more screen
-    /// for the transcript, and the chrome appears only when it has something to
-    /// carry. Content and open sheets decide that; focus does not.
-    private var showsControlRow: Bool {
-        !quotes.isEmpty
-            || !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !pendingAttachments.isEmpty
-            || shouldRestoreFocusAfterPresentation
-            || showsAllModelsSheet
-            || showsWorkspaceSheet
-            || showPhotoPicker
-            || showCameraPicker
-            || showFileImporter
-    }
-
-    /// The card morph (pill → card) still follows focus: the field itself must
-    /// grow the moment it is touched. Only the extra control row waits for content.
     private var isExpanded: Bool {
         isFocused
             || !quotes.isEmpty
@@ -784,12 +760,7 @@ struct MessageComposerView: View {
                     onRemoveQuote: removeQuote
                 )
 
-                if !showsControlRow {
-                    // HERMEX-FORK: the attachment/plus entry point stays reachable
-                    // in the one-line state — a photo with no caption is a normal
-                    // thing to send, and hiding the control row must not strand it.
-                    composerPlusMenu
-
+                if !isExpanded {
                     ComposerAttachmentPillPreview(
                         attachments: pendingAttachments,
                         onPreview: onPreviewAttachment
@@ -800,17 +771,14 @@ struct MessageComposerView: View {
                     // HERMEX-FORK: schedule entry points (pill layout).
                     scheduledBadge
 
-                    // The send button lives in this row whenever the control row
-                    // is hidden, so focusing an empty field still shows a way to
-                    // send — the one-line state must not be a dead end.
                     actionButton
                 }
             }
-            .padding(.trailing, showsControlRow ? 0 : pillInset)
-            .padding(.vertical, showsControlRow ? 0 : pillInset)
+            .padding(.trailing, isExpanded ? 0 : pillInset)
+            .padding(.vertical, isExpanded ? 0 : pillInset)
         }
-        .padding(.top, showsControlRow ? 1 : 0)
-        .padding(.bottom, showsControlRow ? 1 : 0)
+        .padding(.top, isExpanded ? 1 : 0)
+        .padding(.bottom, isExpanded ? 1 : 0)
         .modifier(ChatComposerSurfaceStyle(isExpanded: isExpanded))
     }
 
