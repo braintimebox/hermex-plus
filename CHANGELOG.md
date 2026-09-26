@@ -1,3 +1,5 @@
+## 3.9.8 — composer look restored: the 3.9.7 composer change is reverted, controls and plus menu are back where they were
+
 ## 3.9.7 — composer is one line at rest like Telegram: the 44pt control row now waits for content instead of appearing on focus, so the transcript keeps that height until you type
 
 ## 3.9.6 — multi-line drafts stay inside the composer card: the ceiling moved onto the text frame and the container admits its padding, so text scrolls inside instead of drawing over the border
