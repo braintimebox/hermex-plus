@@ -814,6 +814,12 @@ final class ChatDraftStore {
         sweepOrphanedAttachmentFiles()
     }
 
+    /// HERMEX-FORK: файлы вложений, на которые ссылается что-то помимо
+    /// черновиков — сейчас это отложенные сообщения (`PendingScheduledMessage`).
+    /// Хранится здесь, потому что уборку делает этот стор, а знание о
+    /// запланированных сообщениях живёт во вьюхе.
+    var additionalReferencedAttachmentFiles: Set<String> = []
+
     /// Backstop cleanup for orphaned attachment copies — e.g. an ingest that
     /// crashed between writing the durable copy and persisting its record.
     /// Explicit deletes cover successful sends and discards; this reclaims the
@@ -821,9 +827,14 @@ final class ChatDraftStore {
     private func sweepOrphanedAttachmentFiles() {
         guard let attachmentStore else { return }
 
-        let referencedFiles = Set(drafts.values.flatMap { draft in
+        var referencedFiles = Set(drafts.values.flatMap { draft in
             draft.attachments.compactMap(\.file)
         })
+        // HERMEX-FORK: плюс всё, на что ссылается не черновик, а отложенное
+        // сообщение. Без этого sweep удалил бы вложение запланированного
+        // сообщения как осиротевшее — фича «вложение отложенного тихо
+        // пропадает через какое-то время» (уборка идёт по возрасту).
+        referencedFiles.formUnion(additionalReferencedAttachmentFiles)
         let maxAge = attachmentSweepMaxAge
         Task {
             await attachmentStore.sweep(keepingReferenced: referencedFiles, olderThan: maxAge)
