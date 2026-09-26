@@ -219,3 +219,17 @@ final class ComposerToolbarScrollerTests: XCTestCase {
         )
     }
 }
+
+/// HERMEX-FORK: эталон — свёрнутый вид композера, одна строка. Фокус сам по себе
+/// ряд селекторов не открывает: иначе клавиатура добавляет второй этаж (44pt плюс
+/// зазоры), и композер уезжает со 110pt против 54pt — так и было в 3.9.13.
+final class ComposerControlRowPolicyTests: XCTestCase {
+    func testFocusAloneDoesNotBuildASecondRow() {
+        XCTAssertFalse(ChatComposerGrowth.showsControlRow(isExpanded: true, requested: false))
+    }
+
+    func testRequestedRowAppearsOnlyWhileExpanded() {
+        XCTAssertTrue(ChatComposerGrowth.showsControlRow(isExpanded: true, requested: true))
+        XCTAssertFalse(ChatComposerGrowth.showsControlRow(isExpanded: false, requested: true))
+    }
+}

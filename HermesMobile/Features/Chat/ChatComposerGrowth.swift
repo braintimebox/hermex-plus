@@ -41,6 +41,15 @@ enum ChatComposerGrowth {
         hasAttachments
     }
 
+    /// Показывать ли ряд селекторов (модель, воркспейс, профиль, git, контекст)
+    /// под полем. Фокус его не открывает: ряд появляется только по явному запросу
+    /// пользователя из меню «＋». Телеметрия 3.9.13 с устройства: с клавиатурой
+    /// композер был 110pt против 54pt в свёрнутом виде, и вся разница приходилась
+    /// на этот ряд (44pt) плюс зазоры. Свёрнутый вид — эталон: одна строка.
+    static func showsControlRow(isExpanded: Bool, requested: Bool) -> Bool {
+        isExpanded && requested
+    }
+
     /// The composer's own height budget for the collapsed state: one row of
     /// controls, no strip, no toolbar. `ChatView` uses this only to sanity-check
     /// telemetry against a real number, so a chrome regression shows up in data

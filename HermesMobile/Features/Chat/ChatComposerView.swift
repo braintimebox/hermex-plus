@@ -199,6 +199,12 @@ struct MessageComposerView: View {
 
     @State private var textFieldHeight: CGFloat = 0
     @State private var textInputHeight: CGFloat = 22
+    /// HERMEX-FORK: панель селекторов (модель, воркспейс, профиль, git, контекст)
+    /// показывается по явному запросу из меню «＋», а не по факту фокуса. Иначе
+    /// клавиатура добавляла второй этаж под полем: телеметрия 3.9.13 давала 110pt
+    /// в фокусе против 54pt свёрнуто, и разница была ровно ряд 44 + зазоры.
+    /// По умолчанию композер — одна строка в обоих состояниях.
+    @State private var showsComposerControls = false
     /// Where the caret is in `draftMessage`, in UTF-16 units. Transient by
     /// design: a restored draft starts with the caret at its end, not wherever
     /// it was left last week.
@@ -463,7 +469,12 @@ struct MessageComposerView: View {
                             .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
                     })
 
-                if isExpanded {
+                // HERMEX-FORK: панель селекторов — только по явному запросу из «＋».
+                // Фокус сам по себе второй этаж не строит.
+                if ChatComposerGrowth.showsControlRow(
+                    isExpanded: isExpanded,
+                    requested: showsComposerControls
+                ) {
                     toolbarRow
                         .padding(.horizontal)
                         .background(GeometryReader { proxy in
@@ -796,19 +807,26 @@ struct MessageComposerView: View {
                         .onChange(of: proxy.size.height) { _, h in logComposerPart("fieldView", h) }
                 })
 
-                if !isExpanded {
-                    ComposerAttachmentPillPreview(
-                        attachments: pendingAttachments,
-                        onPreview: onPreviewAttachment
-                    )
-
-                    voiceControlButton
-
-                    // HERMEX-FORK: schedule entry points (pill layout).
-                    scheduledBadge
-
-                    actionButton
+                // HERMEX-FORK: строка ОДНА в обоих состояниях. Аксессоры видны всегда,
+                // а «＋» (вложения + переключатель панели селекторов) — только в фокусе,
+                // как и раньше. Отдельный ряд под полем больше не строится: телеметрия
+                // 3.9.13 показывала 110pt в фокусе против 54pt в свёрнутом виде, и вся
+                // разница приходилась на ряд 44pt плюс зазоры.
+                if isExpanded {
+                    composerPlusMenu
                 }
+
+                ComposerAttachmentPillPreview(
+                    attachments: pendingAttachments,
+                    onPreview: onPreviewAttachment
+                )
+
+                voiceControlButton
+
+                // HERMEX-FORK: schedule entry points (pill layout).
+                scheduledBadge
+
+                actionButton
             }
             .padding(.trailing, isExpanded ? 0 : pillInset)
             .padding(.vertical, isExpanded ? 0 : pillInset)
@@ -1044,6 +1062,27 @@ struct MessageComposerView: View {
                             showCameraPicker = true
                         }
                     }
+                ]
+            ),
+            // HERMEX-FORK: панель селекторов по запросу. Одна строка в обоих
+            // состояниях, а модель/воркспейс/профиль/git/контекст — здесь, чтобы
+            // клавиатура не отнимала у чата второй этаж (44pt + зазоры).
+            UIMenu(
+                title: String(localized: "Controls"),
+                options: [.displayInline],
+                children: [
+                    {
+                        let action = UIAction(
+                            title: String(localized: "Show model and workspace row"),
+                            image: UIImage(systemName: "slider.horizontal.3")
+                        ) { _ in
+                            Task { @MainActor in
+                                showsComposerControls.toggle()
+                            }
+                        }
+                        action.state = showsComposerControls ? .on : .off
+                        return action
+                    }()
                 ]
             )
         ])
