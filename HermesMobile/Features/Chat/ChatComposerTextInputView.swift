@@ -605,8 +605,21 @@ private struct ComposerTextView: UIViewRepresentable {
         func reportHeight(for textView: UITextView) {
             guard textView.bounds.width > 0 else { return }
 
-            let fittingSize = CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
-            let height = ceil(textView.sizeThatFits(fittingSize).height)
+            // HERMEX-FORK: источник истины — УЖЕ разложенный текст, а не
+            // `sizeThatFits` с бесконечной высотой. sizeThatFits раскладывает
+            // текст заново под предложенную ширину и на пустом поле или на
+            // узкой ширине возвращал потолок 96 — отсюда «пустое поле на пять
+            // строк» (3.9.8: 110pt при пустом draft) и качели высоты
+            // (3.9.9/3.9.10: 162…448pt в телеметрии). `usedRect` отдаёт
+            // bounding box уже свёрстанного текста: синхронно, без повторной
+            // раскладки, и на пустом поле он нулевой — то есть пол 22pt
+            // работает как задумано, а не как потолок.
+            let container = textView.textContainer
+            // Раскладка могла ещё не догнать только что вставленный текст —
+            // доводим её синхронно, иначе usedRect отдал бы предыдущую высоту.
+            textView.layoutManager.ensureLayout(for: container)
+            let used = textView.layoutManager.usedRect(for: container).height
+            let height = ceil(used + textView.textContainerInset.top + textView.textContainerInset.bottom)
             let clamped = min(96, max(22, height))
 
             // Only propagate a change when the height actually moves. A naive
