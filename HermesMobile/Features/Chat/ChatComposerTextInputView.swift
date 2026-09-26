@@ -647,6 +647,15 @@ private struct ComposerTextView: UIViewRepresentable {
             let width = ceil(textView.bounds.width)
             if width == lastReportedWidth, clamped == lastReportedHeight { return }
             lastReportedWidth = width
+            // HERMEX-FORK: телеметрия с числами. Четыре правки подряд не изменили
+            // итоговую высоту, потому что правилось слагаемое, а мерилась сумма.
+            // Пусть устройство само скажет: сколько текста в поле, что измерили,
+            // что опубликовали. Без догадок.
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ComposerField",
+                message: "field w=\(Int(width)) used=\(Int(used)) clamped=\(clamped) chars=\(textView.text.count) lines=\(textView.text.components(separatedBy: "\n").count)"
+            )
             if clamped != lastReportedHeight {
                 lastReportedHeight = clamped
                 onHeightChange(clamped)

@@ -456,10 +456,21 @@ struct MessageComposerView: View {
 
                 composerSurface
                     .padding(.horizontal)
+                    // HERMEX-FORK: слагаемое «поверхность» в телеметрию.
+                    .background(GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { logComposerPart("surface", proxy.size.height) }
+                            .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
+                    })
 
                 if isExpanded {
                     toolbarRow
                         .padding(.horizontal)
+                        .background(GeometryReader { proxy in
+                            Color.clear
+                                .onAppear { logComposerPart("row", proxy.size.height) }
+                                .onChange(of: proxy.size.height) { _, h in logComposerPart("row", h) }
+                        })
                         // HERMEX-FORK: 8 → 2 — same height budget as above.
                         .padding(.top, 2)
                         .frame(maxWidth: .infinity)
@@ -703,6 +714,18 @@ struct MessageComposerView: View {
             || showPhotoPicker
             || showCameraPicker
             || showFileImporter
+    }
+
+    /// HERMEX-FORK: телеметрия слагаемых композера. Четыре правки подряд не
+    /// сдвинули итоговую высоту, потому что правилось слагаемое, а измерялась
+    /// сумма (GeometryReader ниже меряет весь MessageComposerView). Эти строки
+    /// дают разложение по частям с самого устройства.
+    private func logComposerPart(_ part: String, _ height: CGFloat) {
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ComposerParts",
+            message: "\(part)=\(Int(height))"
+        )
     }
 
     /// The glass surface: one text view in both states so focus and the draft
