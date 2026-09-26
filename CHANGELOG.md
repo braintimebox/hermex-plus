@@ -1,3 +1,5 @@
+## 3.9.9 — composer height unstuck: the field re-measures when its width changes, so a one-line draft no longer keeps a four-line card (telemetry showed the field pinned at its 96pt ceiling)
+
 ## 3.9.8 — composer look restored: the 3.9.7 composer change is reverted, controls and plus menu are back where they were
 
 ## 3.9.7 — composer is one line at rest like Telegram: the 44pt control row now waits for content instead of appearing on focus, so the transcript keeps that height until you type
