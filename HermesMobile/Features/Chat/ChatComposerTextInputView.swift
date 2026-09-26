@@ -624,11 +624,20 @@ private struct ComposerTextView: UIViewRepresentable {
             // card stayed four lines tall with one line of text inside it — the
             // user's 3.9.8 report: "внутри хорошо, снаружи как было 4.5 строки".
             // Republish whenever the width moved, so the height can come back down.
+            // HERMEX-FORK: только переизмерение — по ширине; публикация — только по
+            // реальной смене ВЫСОТЫ. 3.9.9 публиковала и по смене ширины, и это
+            // превратилось в качели: высота композера меняет инсет транскрипта →
+            // релейаут → снова ширина → снова публикация. Телеметрия 3.9.9: разброс
+            // высоты 286pt (162…448) против 108pt на 3.9.5. Переизмерение по ширине
+            // при этом нужно: без него значение, снятое на узком поле, остаётся
+            // залипшим на потолке 96 (3.9.8: пустое поле 110pt = пять строк).
             let width = ceil(textView.bounds.width)
-            if clamped == lastReportedHeight, width == lastReportedWidth { return }
-            lastReportedHeight = clamped
+            if width == lastReportedWidth, clamped == lastReportedHeight { return }
             lastReportedWidth = width
-            onHeightChange(clamped)
+            if clamped != lastReportedHeight {
+                lastReportedHeight = clamped
+                onHeightChange(clamped)
+            }
         }
     }
 }
