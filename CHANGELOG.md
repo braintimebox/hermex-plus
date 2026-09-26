@@ -1,3 +1,5 @@
+## 3.9.12 — measurement build: the composer reports its own numbers (field width/laid-out height/clamped, plus surface and row heights) so the next fix targets the real addend instead of a guess
+
 ## 3.9.11 — composer field height comes from the laid-out text (layoutManager.usedRect) instead of sizeThatFits, which returned the 96pt ceiling for an empty field — the field stops sitting five lines tall
 
 ## 3.9.10 — composer height stops oscillating: re-measure on width change, publish only on a real height change (3.9.9 closed a feedback loop through the transcript inset)
