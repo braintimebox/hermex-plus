@@ -1,3 +1,5 @@
+## 3.9.13 — the field's container is no longer a flexible frame: it is pinned to the measured text height, so the field stops stretching to its 108pt ceiling and the surface stops reserving 110pt around an empty draft
+
 ## 3.9.12 — measurement build: the composer reports its own numbers (field width/laid-out height/clamped, plus surface and row heights) so the next fix targets the real addend instead of a guess
 
 ## 3.9.11 — composer field height comes from the laid-out text (layoutManager.usedRect) instead of sizeThatFits, which returned the 96pt ceiling for an empty field — the field stops sitting five lines tall
