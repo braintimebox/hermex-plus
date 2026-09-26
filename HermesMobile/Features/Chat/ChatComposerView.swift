@@ -747,6 +747,12 @@ struct MessageComposerView: View {
                     onPreview: onPreviewAttachment
                 )
                 .transition(.opacity)
+                // HERMEX-FORK: мерка полосы вложений — подозреваемый на 108pt.
+                .background(GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { logComposerPart("strip", proxy.size.height) }
+                        .onChange(of: proxy.size.height) { _, h in logComposerPart("strip", h) }
+                })
             }
 
             HStack(alignment: .center, spacing: 4) {
@@ -782,6 +788,13 @@ struct MessageComposerView: View {
                     onTapQuote: presentQuote,
                     onRemoveQuote: removeQuote
                 )
+                // HERMEX-FORK: мерка самого поля ввода внутри поверхности — отделяет
+                // «поле раздуто» от «рядом с полем что-то ещё занимает место».
+                .background(GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { logComposerPart("fieldView", proxy.size.height) }
+                        .onChange(of: proxy.size.height) { _, h in logComposerPart("fieldView", h) }
+                })
 
                 if !isExpanded {
                     ComposerAttachmentPillPreview(

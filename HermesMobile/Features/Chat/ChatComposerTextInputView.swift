@@ -120,7 +120,20 @@ struct ComposerTextInputView: View {
         // admit the padding around it. Leaving the old maxHeight 96 here clipped
         // the composed height to less than its own child: the text overflowed the
         // card instead of scrolling inside it.
-        .frame(minHeight: 42, maxHeight: 96 + verticalPadding * 2, alignment: .topLeading)
+        // HERMEX-FORK: ЖЁСТКАЯ высота вместо гибкой рамки. `.frame(minHeight:maxHeight:)`
+        // — гибкая: если родитель предложит больше, поле растягивается к своему
+        // потолку. Телеметрия 3.9.12 с устройства: поле измеряется как одна строка
+        // (used=20, clamped=22, chars=0), а поверхность вокруг него — 110…118pt.
+        // То есть измерение верное, а рендер раздут предложением родителя. Ровно
+        // этот класс дефекта уже ловили в 3.0.4, когда поле росло квантами при
+        // фокусе и доходило до 1018pt. Здесь высота — функция от измеренного
+        // текста плюс паддинги, без запаса на чужое предложение.
+        .frame(
+            height: isCollapsed
+                ? 44
+                : min(96, max(expandedMinimumHeight, inputHeight)) + verticalPadding * 2,
+            alignment: .topLeading
+        )
     }
 
     private func updateMeasuredHeight(_ newHeight: CGFloat) {
