@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | a3bf046 |
-| Версия | 3.9.13 |
-| Обновлено | 2026-09-26 |
+| HEAD | 27180f1 |
+| Версия | 3.9.14 |
+| Обновлено | 2026-09-27 |
 
 **Последние коммиты:**
 ```
+27180f1 composer: one row in both states — the collapsed look, with the keyboard up
+f3fe933 3.9.13: the field's container is no longer a flexible frame: it is pinned to the measured text height, so the field stops stretching to its 108pt ceiling and the surface stops reserving 110pt around an empty draft
 a3bf046 composer: pin the field's height instead of letting the parent stretch it
 4a2f110 3.9.12: measurement build: the composer reports its own numbers (field width/laid-out height/clamped, plus surface and row heights) so the next fix targets the real addend instead of a guess
 a40c13a composer: measure the numbers on the device instead of guessing at them
 cbac21c scheduled attachments (1/3): the message can carry them, and the sweep spares them
-c628d62 3.9.11: composer field height comes from the laid-out text (layoutManager.usedRect) instead of sizeThatFits, which returned the 96pt ceiling for an empty field — the field stops sitting five lines tall
-eb66d81 composer: the field's height comes from the laid-out text, not from a re-measure
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,252 | **-9,806** |
-| Строк Chat | 38,604 | 40,433 | +1,829 |
+| Строк приложения | 110,058 | 100,300 | **-9,758** |
+| Строк Chat | 38,604 | 40,481 | +1,877 |
 | ChatViewModel | 6,850 | 7,496 | +646 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
