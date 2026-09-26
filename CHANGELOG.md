@@ -1,3 +1,5 @@
+## 3.9.11 — composer field height comes from the laid-out text (layoutManager.usedRect) instead of sizeThatFits, which returned the 96pt ceiling for an empty field — the field stops sitting five lines tall
+
 ## 3.9.10 — composer height stops oscillating: re-measure on width change, publish only on a real height change (3.9.9 closed a feedback loop through the transcript inset)
 
 ## 3.9.9 — composer height unstuck: the field re-measures when its width changes, so a one-line draft no longer keeps a four-line card (telemetry showed the field pinned at its 96pt ceiling)
