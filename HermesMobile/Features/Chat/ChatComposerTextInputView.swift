@@ -247,6 +247,10 @@ private struct ComposerTextView: UIViewRepresentable {
         textView.onTapChip = onTapChip
         textView.onTapQuote = onTapQuote
         textView.onRemoveQuote = onRemoveQuote
+        // HERMEX-FORK: re-measure the field whenever its width settles, so a
+        // height taken at a narrower width cannot stay pinned at the 96pt cap.
+        let heightCoordinator = context.coordinator
+        textView.onWidthChange = { view in heightCoordinator.reportHeight(for: view) }
         context.coordinator.reportHeight(for: textView)
         return textView
     }
@@ -309,6 +313,10 @@ private struct ComposerTextView: UIViewRepresentable {
         var onDropImageProviders: ([NSItemProvider]) -> Void = { _ in }
         private var pendingFocusTarget: Bool?
         private var lastReportedHeight: CGFloat = 0
+        /// HERMEX-FORK: width the last height was measured at — the height guard
+        /// in `reportHeight` compares both, so a stale narrow-width measurement
+        /// can be replaced when the field grows back.
+        private var lastReportedWidth: CGFloat = 0
         /// Set while we push a bound value into the editor, so the delegate
         /// callbacks it provokes do not write the bindings back mid-update.
         private var isApplyingBoundValue = false
@@ -607,8 +615,19 @@ private struct ComposerTextView: UIViewRepresentable {
             // transcript for every typed character — the "typing lags" bug. The
             // clamped value is stable while a line doesn't wrap, so skip the
             // no-op update entirely.
-            if clamped == lastReportedHeight { return }
+            //
+            // HERMEX-FORK: the width has to be part of that check. A measurement
+            // taken while the field was narrow (accessory buttons in the row, or
+            // a mirrored layout pass) wraps the same text into ~4 lines and pins
+            // `lastReportedHeight` to the 96pt maximum. When the field then grows,
+            // the text fits one line again, but the guard saw "no change" and the
+            // card stayed four lines tall with one line of text inside it — the
+            // user's 3.9.8 report: "внутри хорошо, снаружи как было 4.5 строки".
+            // Republish whenever the width moved, so the height can come back down.
+            let width = ceil(textView.bounds.width)
+            if clamped == lastReportedHeight, width == lastReportedWidth { return }
             lastReportedHeight = clamped
+            lastReportedWidth = width
             onHeightChange(clamped)
         }
     }

@@ -6,6 +6,24 @@ import UniformTypeIdentifiers
 final class ComposerChipTextView: UITextView, UIGestureRecognizerDelegate {
     var acceptsAttachments = true
     var isKeyboardSendEnabled = false
+    // HERMEX-FORK: the composer's height is measured from the live width, so a
+    // width change has to re-trigger that measurement. Without it a height taken
+    // while the field was narrow stays pinned at the 96pt maximum and the card
+    // keeps ~4 lines of height around a one-line draft — the 3.9.8 report
+    // ("внутри хорошо, снаружи как было 4.5 строки"). Dispatched outside the
+    // layout pass so the resulting state change cannot re-enter it.
+    var onWidthChange: ((ComposerChipTextView) -> Void)?
+    private var lastLayoutWidth: CGFloat = 0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width
+        guard width > 0, abs(width - lastLayoutWidth) > 0.5 else { return }
+        lastLayoutWidth = width
+        let view = self
+        DispatchQueue.main.async { view.onWidthChange?(view) }
+    }
+
     var onKeyboardSend: () -> Void = {}
     var onPasteFileProviders: ([NSItemProvider]) -> Void = { _ in }
     var onPasteFileURLs: ([URL]) -> Void = { _ in }
