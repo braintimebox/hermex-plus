@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | d86b6dc |
-| Версия | 3.9.9 |
+| HEAD | 3f9aa7e |
+| Версия | 3.9.10 |
 | Обновлено | 2026-09-26 |
 
 **Последние коммиты:**
 ```
+3f9aa7e composer: stop the height oscillation 3.9.9 introduced
+964e06f 3.9.9: composer height unstuck: the field re-measures when its width changes, so a one-line draft no longer keeps a four-line card (telemetry showed the field pinned at its 96pt ceiling)
 d86b6dc composer: the field's height can come back down when it widens
 e404379 3.9.8: composer look restored: the 3.9.7 composer change is reverted, controls and plus menu are back where they were
 9ad0844 revert 3.9.7's composer change — it looked wrong and missed the point
 15f885c 3.9.7: composer is one line at rest like Telegram: the 44pt control row now waits for content instead of appearing on focus, so the transcript keeps that height until you type
-f42ce2e composer: one line at rest — the control row waits for content, like Telegram
-34ec586 3.9.6: multi-line drafts stay inside the composer card: the ceiling moved onto the text frame and the container admits its padding, so text scrolls inside instead of drawing over the border
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,108 | **-9,950** |
-| Строк Chat | 38,604 | 40,353 | +1,749 |
+| Строк приложения | 110,058 | 100,117 | **-9,941** |
+| Строк Chat | 38,604 | 40,362 | +1,758 |
 | ChatViewModel | 6,850 | 7,496 | +646 |
-| IPA | ~44 MB | 50 MB (HermesPlus-3.9.8.ipa) | +1–2 MB |
+| IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
