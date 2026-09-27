@@ -1300,6 +1300,63 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.first?.content, "Goal is active.")
     }
 
+    /// HERMEX-FORK: цель, поставленная раньше, должна возвращать кнопку в шапке при
+    /// повторном входе в чат — и молча: состояние читается, но в ленту не пишется.
+    /// Раньше флаг жил только в памяти сессии, и кнопка пропадала при переоткрытии
+    /// чата, хотя цель на сервере была жива.
+    func testGoalStateIsRestoredOnChatEntryWithoutTouchingTheTranscript() async throws {
+        let viewModel = try makeViewModel { request in
+            XCTAssertEqual(request.url?.path, "/api/goal")
+
+            let body = try XCTUnwrap(apiTestJSONBody(from: request))
+            XCTAssertEqual(body["args"] as? String, "status")
+
+            return apiTestJSONResponse("""
+            {
+              "ok": true,
+              "action": "status",
+              "message": "Goal is active.",
+              "goal": {
+                "goal": "Ship the TestFlight build",
+                "status": "active",
+                "turns_used": 3,
+                "max_turns": 20
+              }
+            }
+            """, for: request)
+        }
+
+        XCTAssertFalse(viewModel.hasActivatedGoalCommand)
+        XCTAssertTrue(viewModel.messages.isEmpty)
+
+        await viewModel.restoreGoalStateIfNeeded()
+
+        XCTAssertTrue(
+            viewModel.hasActivatedGoalCommand,
+            "кнопка цели должна вернуться после повторного входа в чат"
+        )
+        XCTAssertEqual(viewModel.currentGoal?.goal, "Ship the TestFlight build")
+        XCTAssertEqual(viewModel.currentGoal?.status, "active")
+        XCTAssertTrue(
+            viewModel.messages.isEmpty,
+            "восстановление читает состояние молча и не пишет в ленту"
+        )
+    }
+
+    /// Если на сервере цели нет, кнопка не появляется и лента остаётся нетронутой.
+    func testRestoreGoalStateLeavesControlsHiddenWhenServerHasNoGoal() async throws {
+        let viewModel = try makeViewModel { request in
+            apiTestJSONResponse("""
+            { "ok": true, "action": "status", "message": "No active goal." }
+            """, for: request)
+        }
+
+        await viewModel.restoreGoalStateIfNeeded()
+
+        XCTAssertFalse(viewModel.hasActivatedGoalCommand)
+        XCTAssertTrue(viewModel.messages.isEmpty)
+    }
+
     @MainActor
     func testBareResumeSlashCommandFallsThroughToNormalSendPath() async throws {
         var requestedPaths: [String] = []

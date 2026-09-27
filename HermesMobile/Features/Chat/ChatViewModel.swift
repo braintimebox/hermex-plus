@@ -3082,6 +3082,44 @@ final class ChatViewModel {
         }
     }
 
+    /// HERMEX-FORK: тихое восстановление состояния цели при входе в чат.
+    ///
+    /// Кнопка цели в шапке держится на `hasActivatedGoalCommand` — флаге в памяти,
+    /// который ставится только когда команду подают в этой же сессии. Выйти из чата
+    /// и войти снова достаточно, чтобы управление целью пропало, хотя цель на сервере
+    /// жива: сообщение-блок в ленте остаётся (оно сохранено в истории), а кнопка — нет.
+    /// Поэтому при загрузке чата спрашиваем состояние у сервера и восстанавливаем флаг.
+    ///
+    /// Путь намеренно молчаливый: никаких notice-сообщений в ленту, только чтение
+    /// состояния. Ошибка сети не портит то, что уже показано.
+    func restoreGoalStateIfNeeded() async {
+        guard !hasActivatedGoalCommand, !isViewingCachedData, let sessionID else { return }
+
+        do {
+            let response = try await client.submitGoal(
+                sessionID: sessionID,
+                args: "status",
+                workspace: currentWorkspace,
+                model: currentModel,
+                modelProvider: requestModelProvider,
+                profile: requestProfileName
+            )
+
+            guard response.ok != false, response.action?.lowercased() != "error" else { return }
+            guard let goal = response.goal else { return }
+
+            // Кнопка уместна, пока цель живёт: active, paused или только что done.
+            let status = (goal.status ?? "").lowercased()
+            guard status == "active" || status == "paused" || status == "done" else { return }
+
+            currentGoal = goal
+            hasActivatedGoalCommand = true
+        } catch {
+            // Молча: не восстановили — хуже, чем было, не стало.
+            return
+        }
+    }
+
     func submitGoal(args rawArgs: String, modelContext: ModelContext? = nil) async -> Bool {
         guard !isViewingCachedData else {
             goalErrorMessage = String(localized: "Reconnect to the server to manage goals.")

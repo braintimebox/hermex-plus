@@ -935,7 +935,11 @@ struct ChatView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     ChatToolbarActionCluster {
-                        if viewModel.hasActivatedGoalCommand {
+                        // HERMEX-FORK: кнопка цели показывается, пока цель живёт, а не
+                        // только в той сессии, где её поставили. Флаг в памяти терялся
+                        // при повторном входе в чат, и управление целью исчезало, хотя
+                        // её блок в ленте оставался.
+                        if viewModel.hasActivatedGoalCommand || viewModel.currentGoal != nil {
                             ChatToolbarActionSlot {
                                 goalControlMenu
                             }
@@ -2189,6 +2193,12 @@ struct ChatView: View {
         guard !Task.isCancelled else { return }
 
         await viewModel.refreshApprovalBypassState()
+        guard !Task.isCancelled else { return }
+
+        // HERMEX-FORK: состояние цели восстанавливается при входе в чат, иначе
+        // кнопка в шапке исчезает просто от повторного открытия чата, хотя цель
+        // на сервере жива, а её блок в ленте остаётся.
+        await viewModel.restoreGoalStateIfNeeded()
         guard !Task.isCancelled else { return }
 
         await uploadInitialAttachmentsIfNeeded()
