@@ -94,20 +94,8 @@ struct MessageComposerView: View {
 
     /// t3code sizing: every circle in the composer is 44 pt, which is also the
     /// minimum hit target, so no invisible hit padding is needed.
-    /// HERMEX-FORK: элементы строки следуют состоянию. Свёрнутый вид — эталон (44pt),
-    /// в развёрнутом строка компактнее: телеметрия 3.9.14 показала поле шириной 194pt
-    /// против 338 — четыре круга по 44pt занимали больше места, чем сам ввод.
-    private var circleSize: CGFloat {
-        isExpanded ? ChatComposerMetrics.compactActionSize : ChatComposerMetrics.actionSize
-    }
+    private let circleSize = ChatComposerMetrics.actionSize
     private let pillInset = ChatComposerMetrics.pillInset
-
-    /// HERMEX-FORK: есть ли что отправлять — текст или вложения. В развёрнутом
-    /// состоянии от этого зависит, микрофон в слоте или Send.
-    private var hasComposerContent: Bool {
-        !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !pendingAttachments.isEmpty
-    }
 
     @Binding var draftMessage: String
     @Binding var quotes: [ComposerQuote]
@@ -211,12 +199,6 @@ struct MessageComposerView: View {
 
     @State private var textFieldHeight: CGFloat = 0
     @State private var textInputHeight: CGFloat = 22
-    /// HERMEX-FORK: панель селекторов (модель, воркспейс, профиль, git, контекст)
-    /// показывается по явному запросу из меню «＋», а не по факту фокуса. Иначе
-    /// клавиатура добавляла второй этаж под полем: телеметрия 3.9.13 давала 110pt
-    /// в фокусе против 54pt свёрнуто, и разница была ровно ряд 44 + зазоры.
-    /// По умолчанию композер — одна строка в обоих состояниях.
-    @State private var showsComposerControls = false
     /// Where the caret is in `draftMessage`, in UTF-16 units. Transient by
     /// design: a restored draft starts with the caret at its end, not wherever
     /// it was left last week.
@@ -481,12 +463,7 @@ struct MessageComposerView: View {
                             .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
                     })
 
-                // HERMEX-FORK: панель селекторов — только по явному запросу из «＋».
-                // Фокус сам по себе второй этаж не строит.
-                if ChatComposerGrowth.showsControlRow(
-                    isExpanded: isExpanded,
-                    requested: showsComposerControls
-                ) {
+                if isExpanded {
                     toolbarRow
                         .padding(.horizontal)
                         .background(GeometryReader { proxy in
@@ -778,20 +755,7 @@ struct MessageComposerView: View {
                 })
             }
 
-            // HERMEX-FORK: адаптивная раскладка композера. Выбор делает layout, а не
-            // две разные вёрстки:
-            //   • свёрнутый вид — эталон: одна строка [поле][микрофон][Send];
-            //   • развёрнутый — две зоны в той же карточке: строка поля на всю ширину
-            //     и строка инструментов под ней.
-            // Телеметрия 3.9.14 показала цену однострочного варианта: поле сжималось
-            // до 194pt против 338 в свёрнутом виде, а элементы вставали по центру
-            // карточки. Адаптивная раскладка возвращает полю ширину и держит
-            // инструменты ровной полосой.
-            let composerLayout = ChatComposerGrowth.usesStackedComposerLayout(isExpanded: isExpanded)
-                ? AnyLayout(VStackLayout(alignment: .center, spacing: 6))
-                : AnyLayout(HStackLayout(alignment: .center, spacing: 4))
-
-            composerLayout {
+            HStack(alignment: .center, spacing: 4) {
                 ComposerTextInputView(
                     text: $draftMessage,
                     selection: $composerSelection,
@@ -832,37 +796,7 @@ struct MessageComposerView: View {
                         .onChange(of: proxy.size.height) { _, h in logComposerPart("fieldView", h) }
                 })
 
-                if isExpanded {
-                    // Зона инструментов: отдельная полоса под полем, в той же карточке.
-                    // «＋» слева, действия справа — поле при этом занимает всю ширину,
-                    // и элементы больше не встают по центру на длинном черновике.
-                    HStack(spacing: 6) {
-                        composerPlusMenu
-
-                        Spacer(minLength: 0)
-
-                        // HERMEX-FORK: schedule entry points.
-                        scheduledBadge
-
-                        if ChatComposerGrowth.showsVoiceControl(
-                            isExpanded: isExpanded,
-                            hasContent: hasComposerContent,
-                            isStreaming: showsStopButton
-                        ) {
-                            voiceControlButton
-                        }
-
-                        if ChatComposerGrowth.showsSendControl(
-                            isExpanded: isExpanded,
-                            hasContent: hasComposerContent,
-                            isStreaming: showsStopButton
-                        ) {
-                            actionButton
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    // Свёрнутый вид — эталон, он остаётся одной строкой с полем.
+                if !isExpanded {
                     ComposerAttachmentPillPreview(
                         attachments: pendingAttachments,
                         onPreview: onPreviewAttachment
@@ -876,10 +810,6 @@ struct MessageComposerView: View {
                     actionButton
                 }
             }
-            // HERMEX-FORK: в развёрнутом виде сохраняется тот же боковой отступ, что и
-            // у свёрнутой пилюли, — иначе «＋» прилипает к краю карточки, и строка
-            // читается как отдельная деталь, прикрученная к другой.
-            .padding(.leading, isExpanded ? pillInset : 0)
             .padding(.trailing, isExpanded ? 0 : pillInset)
             .padding(.vertical, isExpanded ? 0 : pillInset)
         }
@@ -958,8 +888,7 @@ struct MessageComposerView: View {
             },
             onRecordingEnd: { height in
                 finishVoiceNote(translationHeight: height)
-            },
-            size: circleSize
+            }
         )
     }
 
@@ -1115,27 +1044,6 @@ struct MessageComposerView: View {
                             showCameraPicker = true
                         }
                     }
-                ]
-            ),
-            // HERMEX-FORK: панель селекторов по запросу. Одна строка в обоих
-            // состояниях, а модель/воркспейс/профиль/git/контекст — здесь, чтобы
-            // клавиатура не отнимала у чата второй этаж (44pt + зазоры).
-            UIMenu(
-                title: String(localized: "Controls"),
-                options: [.displayInline],
-                children: [
-                    {
-                        let action = UIAction(
-                            title: String(localized: "Show model and workspace row"),
-                            image: UIImage(systemName: "slider.horizontal.3")
-                        ) { _ in
-                            Task { @MainActor in
-                                showsComposerControls.toggle()
-                            }
-                        }
-                        action.state = showsComposerControls ? .on : .off
-                        return action
-                    }()
                 ]
             )
         ])

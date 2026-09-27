@@ -34,10 +34,6 @@ struct ComposerVoiceControlButton: View {
     let onRecordingDragChanged: (CGFloat) -> Void
     let onRecordingEnd: (CGFloat) -> Void
 
-    /// HERMEX-FORK: размер круга. По умолчанию 44pt (свёрнутый вид — эталон), в
-    /// развёрнутом состоянии строка компактнее, чтобы поле не сжималось.
-    var size: CGFloat = 44
-
     @State private var isPressing = false
     @State private var didTriggerRecording = false
     @State private var holdWorkItem: DispatchWorkItem?
@@ -45,7 +41,7 @@ struct ComposerVoiceControlButton: View {
     var body: some View {
         Image(systemName: symbolName)
             .font(.system(size: 18, weight: .regular))
-            .frame(width: size, height: size)
+            .frame(width: 44, height: 44)
             .foregroundStyle(isListening || isRecordingVoiceNote ? Color.red : color)
             .scaleEffect(isRecordingVoiceNote ? 1.3 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isRecordingVoiceNote)

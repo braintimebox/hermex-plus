@@ -41,37 +41,6 @@ enum ChatComposerGrowth {
         hasAttachments
     }
 
-    /// Показывать ли ряд селекторов (модель, воркспейс, профиль, git, контекст)
-    /// под полем. Фокус его не открывает: ряд появляется только по явному запросу
-    /// пользователя из меню «＋». Телеметрия 3.9.13 с устройства: с клавиатурой
-    /// композер был 110pt против 54pt в свёрнутом виде, и вся разница приходилась
-    /// на этот ряд (44pt) плюс зазоры. Свёрнутый вид — эталон: одна строка.
-    static func showsControlRow(isExpanded: Bool, requested: Bool) -> Bool {
-        isExpanded && requested
-    }
-
-    /// HERMEX-FORK: микрофон и Send делят один слот в развёрнутом состоянии, как в
-    /// Telegram: пустое поле показывает микрофон, текст или вложения — Send. Раньше
-    /// они стояли рядом с «＋» и съедали поле: телеметрия 3.9.14 показала `field w=194`
-    /// против 338 в свёрнутом виде. Свёрнутый вид — эталон — держит оба элемента.
-    static func showsVoiceControl(isExpanded: Bool, hasContent: Bool, isStreaming: Bool) -> Bool {
-        guard isExpanded else { return true }
-        return !hasContent && !isStreaming
-    }
-
-    static func showsSendControl(isExpanded: Bool, hasContent: Bool, isStreaming: Bool) -> Bool {
-        guard isExpanded else { return true }
-        return hasContent || isStreaming
-    }
-
-    /// HERMEX-FORK: адаптивная раскладка. Свёрнутый вид — одна строка с полем;
-    /// развёрнутый — две зоны в той же карточке (поле на всю ширину + полоса
-    /// инструментов). Решение вынесено сюда, чтобы его можно было закрепить тестом:
-    /// однострочный вариант сжимал поле до 194pt против 338 (телеметрия 3.9.14).
-    static func usesStackedComposerLayout(isExpanded: Bool) -> Bool {
-        isExpanded
-    }
-
     /// The composer's own height budget for the collapsed state: one row of
     /// controls, no strip, no toolbar. `ChatView` uses this only to sanity-check
     /// telemetry against a real number, so a chrome regression shows up in data
