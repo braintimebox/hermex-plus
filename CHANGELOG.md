@@ -1,3 +1,5 @@
+## 3.9.16 — composer: adaptive layout — the collapsed row stays the reference, the expanded state becomes two zones inside the same card (full-width field + a compact tools band), so the field gets its width back and the controls stop drifting to the middle
+
 ## 3.9.15 — the goal button in the header comes back after re-entering the chat: the state is restored from the server on entry, silently. The goal block itself is left as it was
 
 ## 3.9.14 — the composer keeps one row with the keyboard up: focus no longer inserts the selector row (it moved behind the plus menu), so the expanded state matches the collapsed look he liked

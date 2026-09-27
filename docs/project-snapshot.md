@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 8612985 |
-| Версия | 3.9.15 |
+| HEAD | 02aa373 |
+| Версия | 3.9.16 |
 | Обновлено | 2026-09-27 |
 
 **Последние коммиты:**
 ```
+02aa373 composer: adaptive layout — one row collapsed, two zones expanded
+870f1f0 composer: give the field its width back, align the row to the bottom
+7f163ab test: pin the goal-restore tests to the main actor
+860aea5 3.9.15: the goal button in the header comes back after re-entering the chat: the state is restored from the server on entry, silently. The goal block itself is left as it was
 8612985 goal: the header button survives re-entering the chat
 113be04 3.9.14: the composer keeps one row with the keyboard up: focus no longer inserts the selector row (it moved behind the plus menu), so the expanded state matches the collapsed look he liked
-27180f1 composer: one row in both states — the collapsed look, with the keyboard up
-f3fe933 3.9.13: the field's container is no longer a flexible frame: it is pinned to the measured text height, so the field stops stretching to its 108pt ceiling and the surface stops reserving 110pt around an empty draft
-a3bf046 composer: pin the field's height instead of letting the parent stretch it
-4a2f110 3.9.12: measurement build: the composer reports its own numbers (field width/laid-out height/clamped, plus surface and row heights) so the next fix targets the real addend instead of a guess
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,348 | **-9,710** |
-| Строк Chat | 38,604 | 40,529 | +1,925 |
+| Строк приложения | 110,058 | 100,432 | **-9,626** |
+| Строк Chat | 38,604 | 40,613 | +2,009 |
 | ChatViewModel | 6,850 | 7,534 | +684 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
