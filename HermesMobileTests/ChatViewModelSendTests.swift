@@ -1304,6 +1304,7 @@ final class ChatViewModelSendTests: XCTestCase {
     /// повторном входе в чат — и молча: состояние читается, но в ленту не пишется.
     /// Раньше флаг жил только в памяти сессии, и кнопка пропадала при переоткрытии
     /// чата, хотя цель на сервере была жива.
+    @MainActor
     func testGoalStateIsRestoredOnChatEntryWithoutTouchingTheTranscript() async throws {
         let viewModel = try makeViewModel { request in
             XCTAssertEqual(request.url?.path, "/api/goal")
@@ -1344,6 +1345,7 @@ final class ChatViewModelSendTests: XCTestCase {
     }
 
     /// Если на сервере цели нет, кнопка не появляется и лента остаётся нетронутой.
+    @MainActor
     func testRestoreGoalStateLeavesControlsHiddenWhenServerHasNoGoal() async throws {
         let viewModel = try makeViewModel { request in
             apiTestJSONResponse("""
