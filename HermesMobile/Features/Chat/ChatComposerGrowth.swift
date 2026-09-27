@@ -50,6 +50,20 @@ enum ChatComposerGrowth {
         isExpanded && requested
     }
 
+    /// HERMEX-FORK: микрофон и Send делят один слот в развёрнутом состоянии, как в
+    /// Telegram: пустое поле показывает микрофон, текст или вложения — Send. Раньше
+    /// они стояли рядом с «＋» и съедали поле: телеметрия 3.9.14 показала `field w=194`
+    /// против 338 в свёрнутом виде. Свёрнутый вид — эталон — держит оба элемента.
+    static func showsVoiceControl(isExpanded: Bool, hasContent: Bool, isStreaming: Bool) -> Bool {
+        guard isExpanded else { return true }
+        return !hasContent && !isStreaming
+    }
+
+    static func showsSendControl(isExpanded: Bool, hasContent: Bool, isStreaming: Bool) -> Bool {
+        guard isExpanded else { return true }
+        return hasContent || isStreaming
+    }
+
     /// The composer's own height budget for the collapsed state: one row of
     /// controls, no strip, no toolbar. `ChatView` uses this only to sanity-check
     /// telemetry against a real number, so a chrome regression shows up in data

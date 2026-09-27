@@ -94,8 +94,20 @@ struct MessageComposerView: View {
 
     /// t3code sizing: every circle in the composer is 44 pt, which is also the
     /// minimum hit target, so no invisible hit padding is needed.
-    private let circleSize = ChatComposerMetrics.actionSize
+    /// HERMEX-FORK: элементы строки следуют состоянию. Свёрнутый вид — эталон (44pt),
+    /// в развёрнутом строка компактнее: телеметрия 3.9.14 показала поле шириной 194pt
+    /// против 338 — четыре круга по 44pt занимали больше места, чем сам ввод.
+    private var circleSize: CGFloat {
+        isExpanded ? ChatComposerMetrics.compactActionSize : ChatComposerMetrics.actionSize
+    }
     private let pillInset = ChatComposerMetrics.pillInset
+
+    /// HERMEX-FORK: есть ли что отправлять — текст или вложения. В развёрнутом
+    /// состоянии от этого зависит, микрофон в слоте или Send.
+    private var hasComposerContent: Bool {
+        !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !pendingAttachments.isEmpty
+    }
 
     @Binding var draftMessage: String
     @Binding var quotes: [ComposerQuote]
@@ -766,7 +778,11 @@ struct MessageComposerView: View {
                 })
             }
 
-            HStack(alignment: .center, spacing: 4) {
+            // HERMEX-FORK: при длинном тексте элементы строки идут по НИЗУ, как в
+            // Telegram, а не по центру: поле растёт вверх, кнопка остаётся внизу
+            // рядом с последней строкой. Центрирование на длинном черновике читалось
+            // как «собрано из двух частей».
+            HStack(alignment: isExpanded ? .bottom : .center, spacing: 4) {
                 ComposerTextInputView(
                     text: $draftMessage,
                     selection: $composerSelection,
@@ -821,13 +837,34 @@ struct MessageComposerView: View {
                     onPreview: onPreviewAttachment
                 )
 
-                voiceControlButton
+                // HERMEX-FORK: как в Telegram — в развёрнутом состоянии микрофон и Send
+                // делят один слот: пустое поле показывает микрофон, текст — Send. Так
+                // строка перестаёт быть пультом управления, а поле получает ширину
+                // обратно (телеметрия 3.9.14: поле 194pt против 338 в свёрнутом виде).
+                // Свёрнутый вид — эталон — остаётся с обоими элементами.
+                if ChatComposerGrowth.showsVoiceControl(
+                    isExpanded: isExpanded,
+                    hasContent: hasComposerContent,
+                    isStreaming: showsStopButton
+                ) {
+                    voiceControlButton
+                }
 
                 // HERMEX-FORK: schedule entry points (pill layout).
                 scheduledBadge
 
-                actionButton
+                if ChatComposerGrowth.showsSendControl(
+                    isExpanded: isExpanded,
+                    hasContent: hasComposerContent,
+                    isStreaming: showsStopButton
+                ) {
+                    actionButton
+                }
             }
+            // HERMEX-FORK: в развёрнутом виде сохраняется тот же боковой отступ, что и
+            // у свёрнутой пилюли, — иначе «＋» прилипает к краю карточки, и строка
+            // читается как отдельная деталь, прикрученная к другой.
+            .padding(.leading, isExpanded ? pillInset : 0)
             .padding(.trailing, isExpanded ? 0 : pillInset)
             .padding(.vertical, isExpanded ? 0 : pillInset)
         }
@@ -906,7 +943,8 @@ struct MessageComposerView: View {
             },
             onRecordingEnd: { height in
                 finishVoiceNote(translationHeight: height)
-            }
+            },
+            size: circleSize
         )
     }
 

@@ -4,6 +4,11 @@ import SwiftUI
 enum ChatComposerMetrics {
     static let cardCornerRadius: CGFloat = 26
     static let actionSize: CGFloat = 44
+    /// HERMEX-FORK: размер элементов строки в развёрнутом состоянии. Четыре круга по
+    /// 44pt съедали поле ввода: телеметрия 3.9.14 показала `field w=194` против 338
+    /// в свёрнутом виде, и строка выглядела перегруженной. Свёрнутый вид остаётся
+    /// эталонным — 44pt там не меняются.
+    static let compactActionSize: CGFloat = 34
     static let pillInset: CGFloat = 5
 }
 

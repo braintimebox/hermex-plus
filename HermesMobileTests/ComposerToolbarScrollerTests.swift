@@ -233,3 +233,28 @@ final class ComposerControlRowPolicyTests: XCTestCase {
         XCTAssertFalse(ChatComposerGrowth.showsControlRow(isExpanded: false, requested: true))
     }
 }
+
+/// HERMEX-FORK: в развёрнутом состоянии микрофон и Send делят один слот, как в
+/// Telegram. Иначе четыре круга съедают поле — телеметрия 3.9.14: `field w=194`
+/// против 338 в свёрнутом виде.
+final class ComposerRowSlotPolicyTests: XCTestCase {
+    func testExpandedEmptyFieldShowsMicrophoneInsteadOfSend() {
+        XCTAssertTrue(ChatComposerGrowth.showsVoiceControl(isExpanded: true, hasContent: false, isStreaming: false))
+        XCTAssertFalse(ChatComposerGrowth.showsSendControl(isExpanded: true, hasContent: false, isStreaming: false))
+    }
+
+    func testExpandedFieldWithContentShowsSendInsteadOfMicrophone() {
+        XCTAssertFalse(ChatComposerGrowth.showsVoiceControl(isExpanded: true, hasContent: true, isStreaming: false))
+        XCTAssertTrue(ChatComposerGrowth.showsSendControl(isExpanded: true, hasContent: true, isStreaming: false))
+    }
+
+    func testStopStaysReachableWhileStreaming() {
+        XCTAssertTrue(ChatComposerGrowth.showsSendControl(isExpanded: true, hasContent: false, isStreaming: true))
+    }
+
+    /// Свёрнутый вид — эталон: там оба элемента остаются на месте.
+    func testCollapsedRowKeepsBothControls() {
+        XCTAssertTrue(ChatComposerGrowth.showsVoiceControl(isExpanded: false, hasContent: false, isStreaming: false))
+        XCTAssertTrue(ChatComposerGrowth.showsSendControl(isExpanded: false, hasContent: false, isStreaming: false))
+    }
+}
