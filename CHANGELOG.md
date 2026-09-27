@@ -1,3 +1,5 @@
+## 3.9.15 — the goal button in the header comes back after re-entering the chat: the state is restored from the server on entry, silently. The goal block itself is left as it was
+
 ## 3.9.14 — the composer keeps one row with the keyboard up: focus no longer inserts the selector row (it moved behind the plus menu), so the expanded state matches the collapsed look he liked
 
 ## 3.9.13 — the field's container is no longer a flexible frame: it is pinned to the measured text height, so the field stops stretching to its 108pt ceiling and the surface stops reserving 110pt around an empty draft
