@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 7123c3f |
-| Версия | 3.9.17 |
+| HEAD | da7b081 |
+| Версия | 3.9.18 |
 | Обновлено | 2026-09-27 |
 
 **Последние коммиты:**
 ```
+da7b081 composer: mic and scheduled messages leave the horizontal scroller
+5de3690 3.9.17: revert: the composer is back to the 3.9.13 view — my last three changes lost the mic while typing, hid Send on an empty field and pushed the model/workspace row behind a menu. The measured field-height fix and the telemetry stay
 7123c3f revert: composer back to the 3.9.13 state — my last three changes made it worse
 a763dcf 3.9.16: composer: adaptive layout — the collapsed row stays the reference, the expanded state becomes two zones inside the same card (full-width field + a compact tools band), so the field gets its width back and the controls stop drifting to the middle
 02aa373 composer: adaptive layout — one row collapsed, two zones expanded
 870f1f0 composer: give the field its width back, align the row to the bottom
-7f163ab test: pin the goal-restore tests to the main actor
-860aea5 3.9.15: the goal button in the header comes back after re-entering the chat: the state is restored from the server on entry, silently. The goal block itself is left as it was
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,300 | **-9,758** |
-| Строк Chat | 38,604 | 40,481 | +1,877 |
+| Строк приложения | 110,058 | 100,316 | **-9,742** |
+| Строк Chat | 38,604 | 40,497 | +1,893 |
 | ChatViewModel | 6,850 | 7,534 | +684 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |

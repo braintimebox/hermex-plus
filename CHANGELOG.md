@@ -1,3 +1,5 @@
+## 3.9.18 — composer: the mic and the scheduled-messages badge leave the horizontal scroller and join the fixed part of the row (with Send), so they are always on screen; the scroller keeps the selectors
+
 ## 3.9.17 — revert: the composer is back to the 3.9.13 view — my last three changes lost the mic while typing, hid Send on an empty field and pushed the model/workspace row behind a menu. The measured field-height fix and the telemetry stay
 
 ## 3.9.16 — composer: adaptive layout — the collapsed row stays the reference, the expanded state becomes two zones inside the same card (full-width field + a compact tools band), so the field gets its width back and the controls stop drifting to the middle
