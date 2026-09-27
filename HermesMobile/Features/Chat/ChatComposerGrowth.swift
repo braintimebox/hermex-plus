@@ -64,6 +64,14 @@ enum ChatComposerGrowth {
         return hasContent || isStreaming
     }
 
+    /// HERMEX-FORK: адаптивная раскладка. Свёрнутый вид — одна строка с полем;
+    /// развёрнутый — две зоны в той же карточке (поле на всю ширину + полоса
+    /// инструментов). Решение вынесено сюда, чтобы его можно было закрепить тестом:
+    /// однострочный вариант сжимал поле до 194pt против 338 (телеметрия 3.9.14).
+    static func usesStackedComposerLayout(isExpanded: Bool) -> Bool {
+        isExpanded
+    }
+
     /// The composer's own height budget for the collapsed state: one row of
     /// controls, no strip, no toolbar. `ChatView` uses this only to sanity-check
     /// telemetry against a real number, so a chrome regression shows up in data

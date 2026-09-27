@@ -257,4 +257,11 @@ final class ComposerRowSlotPolicyTests: XCTestCase {
         XCTAssertTrue(ChatComposerGrowth.showsVoiceControl(isExpanded: false, hasContent: false, isStreaming: false))
         XCTAssertTrue(ChatComposerGrowth.showsSendControl(isExpanded: false, hasContent: false, isStreaming: false))
     }
+
+    /// HERMEX-FORK: адаптивная раскладка. Свёрнуто — одна строка (эталон), развёрнуто —
+    /// две зоны в той же карточке: поле на всю ширину и полоса инструментов под ним.
+    func testExpandedComposerUsesStackedLayout() {
+        XCTAssertTrue(ChatComposerGrowth.usesStackedComposerLayout(isExpanded: true))
+        XCTAssertFalse(ChatComposerGrowth.usesStackedComposerLayout(isExpanded: false))
+    }
 }

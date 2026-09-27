@@ -778,11 +778,20 @@ struct MessageComposerView: View {
                 })
             }
 
-            // HERMEX-FORK: при длинном тексте элементы строки идут по НИЗУ, как в
-            // Telegram, а не по центру: поле растёт вверх, кнопка остаётся внизу
-            // рядом с последней строкой. Центрирование на длинном черновике читалось
-            // как «собрано из двух частей».
-            HStack(alignment: isExpanded ? .bottom : .center, spacing: 4) {
+            // HERMEX-FORK: адаптивная раскладка композера. Выбор делает layout, а не
+            // две разные вёрстки:
+            //   • свёрнутый вид — эталон: одна строка [поле][микрофон][Send];
+            //   • развёрнутый — две зоны в той же карточке: строка поля на всю ширину
+            //     и строка инструментов под ней.
+            // Телеметрия 3.9.14 показала цену однострочного варианта: поле сжималось
+            // до 194pt против 338 в свёрнутом виде, а элементы вставали по центру
+            // карточки. Адаптивная раскладка возвращает полю ширину и держит
+            // инструменты ровной полосой.
+            let composerLayout = ChatComposerGrowth.usesStackedComposerLayout(isExpanded: isExpanded)
+                ? AnyLayout(VStackLayout(alignment: .center, spacing: 6))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 4))
+
+            composerLayout {
                 ComposerTextInputView(
                     text: $draftMessage,
                     selection: $composerSelection,
@@ -823,41 +832,47 @@ struct MessageComposerView: View {
                         .onChange(of: proxy.size.height) { _, h in logComposerPart("fieldView", h) }
                 })
 
-                // HERMEX-FORK: строка ОДНА в обоих состояниях. Аксессоры видны всегда,
-                // а «＋» (вложения + переключатель панели селекторов) — только в фокусе,
-                // как и раньше. Отдельный ряд под полем больше не строится: телеметрия
-                // 3.9.13 показывала 110pt в фокусе против 54pt в свёрнутом виде, и вся
-                // разница приходилась на ряд 44pt плюс зазоры.
                 if isExpanded {
-                    composerPlusMenu
-                }
+                    // Зона инструментов: отдельная полоса под полем, в той же карточке.
+                    // «＋» слева, действия справа — поле при этом занимает всю ширину,
+                    // и элементы больше не встают по центру на длинном черновике.
+                    HStack(spacing: 6) {
+                        composerPlusMenu
 
-                ComposerAttachmentPillPreview(
-                    attachments: pendingAttachments,
-                    onPreview: onPreviewAttachment
-                )
+                        Spacer(minLength: 0)
 
-                // HERMEX-FORK: как в Telegram — в развёрнутом состоянии микрофон и Send
-                // делят один слот: пустое поле показывает микрофон, текст — Send. Так
-                // строка перестаёт быть пультом управления, а поле получает ширину
-                // обратно (телеметрия 3.9.14: поле 194pt против 338 в свёрнутом виде).
-                // Свёрнутый вид — эталон — остаётся с обоими элементами.
-                if ChatComposerGrowth.showsVoiceControl(
-                    isExpanded: isExpanded,
-                    hasContent: hasComposerContent,
-                    isStreaming: showsStopButton
-                ) {
+                        // HERMEX-FORK: schedule entry points.
+                        scheduledBadge
+
+                        if ChatComposerGrowth.showsVoiceControl(
+                            isExpanded: isExpanded,
+                            hasContent: hasComposerContent,
+                            isStreaming: showsStopButton
+                        ) {
+                            voiceControlButton
+                        }
+
+                        if ChatComposerGrowth.showsSendControl(
+                            isExpanded: isExpanded,
+                            hasContent: hasComposerContent,
+                            isStreaming: showsStopButton
+                        ) {
+                            actionButton
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    // Свёрнутый вид — эталон, он остаётся одной строкой с полем.
+                    ComposerAttachmentPillPreview(
+                        attachments: pendingAttachments,
+                        onPreview: onPreviewAttachment
+                    )
+
                     voiceControlButton
-                }
 
-                // HERMEX-FORK: schedule entry points (pill layout).
-                scheduledBadge
+                    // HERMEX-FORK: schedule entry points (pill layout).
+                    scheduledBadge
 
-                if ChatComposerGrowth.showsSendControl(
-                    isExpanded: isExpanded,
-                    hasContent: hasComposerContent,
-                    isStreaming: showsStopButton
-                ) {
                     actionButton
                 }
             }
