@@ -833,16 +833,32 @@ struct MessageComposerView: View {
 
                 gitBranchPicker
 
-                voiceControlButton
-
-                // HERMEX-FORK: schedule entry points (card layout).
-                scheduledBadge
-
                 ContextWindowIndicatorView(snapshot: contextWindowSnapshot)
                     .padding(.horizontal, 4)
             }
 
-            actionButton
+            // HERMEX-FORK: микрофон и отложенные вынуты из горизонтальной прокрутки.
+            // Раньше они лежали внутри `ComposerToolbarScroller` вместе с шестью
+            // другими элементами, и на телефонной ширине до них нужно было тянуть
+            // ряд вбок — жест, который в чате ничего не значит и конфликтует с
+            // вертикальным скроллом ленты. Микрофон и вход в отложенные должны быть
+            // на виду всегда; прокрутка остаётся для селекторов.
+            // HERMEX-FORK: микрофон, отложенные и Send — фиксированная часть ряда,
+            // они не прокручиваются. Мерка `toolbarFixed` показывает, сколько ширины
+            // они занимают и сколько остаётся прокрутке селекторов: если фиксированная
+            // часть съест весь ряд, это будет видно в логе, а не на глаз.
+            HStack(alignment: .center, spacing: 8) {
+                voiceControlButton
+
+                scheduledBadge
+
+                actionButton
+            }
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { logComposerPart("toolbarFixed", proxy.size.width) }
+                    .onChange(of: proxy.size.width) { _, w in logComposerPart("toolbarFixed", w) }
+            })
         }
     }
 
