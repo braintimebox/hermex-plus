@@ -1,3 +1,5 @@
+## 3.9.19 — composer: unified solid card block enclosing the input field and toolbar row, no transparency, mic and scheduled badge in place
+
 ## 3.9.18 — composer: the mic and the scheduled-messages badge leave the horizontal scroller and join the fixed part of the row (with Send), so they are always on screen; the scroller keeps the selectors
 
 ## 3.9.17 — revert: the composer is back to the 3.9.13 view — my last three changes lost the mic while typing, hid Send on an empty field and pushed the model/workspace row behind a menu. The measured field-height fix and the telemetry stay

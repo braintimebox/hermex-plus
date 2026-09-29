@@ -462,32 +462,6 @@ struct MessageComposerView: View {
                             .onAppear { logComposerPart("surface", proxy.size.height) }
                             .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
                     })
-
-                if isExpanded {
-                    toolbarRow
-                        .padding(.horizontal)
-                        .background(GeometryReader { proxy in
-                            Color.clear
-                                .onAppear { logComposerPart("row", proxy.size.height) }
-                                .onChange(of: proxy.size.height) { _, h in logComposerPart("row", h) }
-                        })
-                        // HERMEX-FORK: 8 → 2 — same height budget as above.
-                        .padding(.top, 2)
-                        .frame(maxWidth: .infinity)
-                        // Solid chat background behind the controls: the card
-                        // above is glass on purpose, but transcript text
-                        // scrolling under the row made the pills unreadable.
-                        // Bleeds up into the gap under the card and down past
-                        // the keyboard gap and the bottom safe area, so no strip
-                        // of transcript shows around the row.
-                        .background(
-                            Color(.systemBackground)
-                                .padding(.top, -10)
-                                .padding(.bottom, -12)
-                                .ignoresSafeArea(edges: .bottom)
-                        )
-                        .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
-                }
             }
             // Focus flips arrive from UIKit outside any withAnimation, so the
             // morph and the row's insertion take their animation from here.
@@ -812,6 +786,14 @@ struct MessageComposerView: View {
             }
             .padding(.trailing, isExpanded ? 0 : pillInset)
             .padding(.vertical, isExpanded ? 0 : pillInset)
+
+            // HERMEX-FORK: move toolbar row inside composer surface card for unified solid background and clean geometry
+            if isExpanded {
+                toolbarRow
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .padding(.top, 2)
+            }
         }
         .padding(.top, isExpanded ? 1 : 0)
         .padding(.bottom, isExpanded ? 1 : 0)

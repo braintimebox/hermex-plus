@@ -21,9 +21,14 @@ struct ChatComposerSurfaceStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .adaptiveGlass(.regular, isInteractive: true, fallbackMaterial: .ultraThinMaterial, in: shape)
+            .background(
+                shape.fill(colorScheme == .dark ? Color(.systemGray6) : Color(.systemBackground))
+            )
+            .overlay(
+                shape.stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
+            )
             .clipShape(shape)
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 14, y: 6)
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 8, y: 3)
     }
 }
 
