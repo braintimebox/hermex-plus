@@ -1,6 +1,10 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+// HERMEX-FORK: `UTType.item` for the document picker. The fork presents
+// `UIDocumentPickerViewController` directly instead of SwiftUI's `.fileImporter`,
+// which never returned a picked file on device.
+import UniformTypeIdentifiers
 
 private struct ComposerStatusView: View {
     let text: String
@@ -589,28 +593,15 @@ struct MessageComposerView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case let .success(urls):
-                if !urls.isEmpty {
-                    deferFocusRestoreUntilUploadCompletes()
-                }
-                onFileURLsSelected(urls)
-            case let .failure(error):
-                if isFileImporterCancellation(error) {
-                    restoreFocusAfterPresentationDismissalSettles()
-                    return
-                }
-
-                shouldRestoreFocusAfterPresentation = false
-                deferredUploadFocusPhase = .none
-                noticeMessage = error.localizedDescription
-            }
-        }
+        // HERMEX-FORK: the SwiftUI `.fileImporter` modifier stood here and never
+        // delivered a result on device. Measured 30.09.2026: across 29 784 logged
+        // events (12.08 → 30.09) the string "attachment" appears ZERO times — no
+        // "attachment picked" (success), no "attachment read failed" (refusal).
+        // Both log lines exist in the shipped build (added 14.09), so the
+        // completion handler was not called at all: the picker's "Open" was inert.
+        // A size/format refusal would have logged and alerted; neither happened.
+        // Fixed by presenting UIDocumentPickerViewController directly — see
+        // `ComposerDocumentPicker` at the bottom of this file.
         .alert(
             "Composer Option",
             isPresented: Binding(
@@ -1019,8 +1010,9 @@ struct MessageComposerView: View {
                         image: UIImage(systemName: "paperclip")
                     ) { _ in
                         Task { @MainActor in
-                            prepareForComposerPresentation()
-                            showFileImporter = true
+                            // HERMEX-FORK: UIKit picker; SwiftUI's `.fileImporter`
+                            // never returned a result on device (see presentFilePicker).
+                            presentFilePicker()
                         }
                     },
                     UIAction(
@@ -1482,9 +1474,203 @@ struct MessageComposerView: View {
         }
     }
 
-    private func isFileImporterCancellation(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        return nsError.domain == NSCocoaErrorDomain
-            && nsError.code == CocoaError.Code.userCancelled.rawValue
+    /// HERMEX-FORK: presents the document picker through UIKit instead of the
+    /// SwiftUI `.fileImporter` modifier (see the note at the declaration site).
+    /// `asCopy: true` makes the system hand back a copy inside our sandbox, so
+    /// reading needs no security-scoped access — one whole class of silent
+    /// failures (blocked iCloud materialisation) disappears with it.
+    private func presentFilePicker() {
+        prepareForComposerPresentation()
+        showFileImporter = true
+
+        ComposerDocumentPicker.shared.present(
+            onPick: { urls in
+                if !urls.isEmpty {
+                    deferFocusRestoreUntilUploadCompletes()
+                }
+                onFileURLsSelected(urls)
+            },
+            onCancel: {
+                restoreFocusAfterPresentationDismissalSettles()
+            },
+            onPresentationChange: { isPresented in
+                showFileImporter = isPresented
+            }
+        )
+    }
+}
+
+/// HERMEX-FORK: the fork's document picker (file attachments).
+///
+/// WHY NOT `.fileImporter`
+///     The SwiftUI modifier was here since the initial commit and never delivered
+///     a picked file on device. Measured 30.09.2026: across 29 784 logged events
+///     (12.08 → 30.09) the string "attachment" appears ZERO times, while both the
+///     success branch ("attachment picked") and the refusal branch ("attachment
+///     read failed") log — and both lines ship in that build. So the completion
+///     handler was never called: the picker's "Open" button was inert. A size or
+///     format refusal cannot look like this, because it would log and alert.
+///     Presenting UIKit's picker directly takes the SwiftUI presentation state
+///     machine out of the path.
+///
+/// WHY `asCopy: true`
+///     The system copies the chosen file into the app container, so the returned
+///     URL is readable without `startAccessingSecurityScopedResource()`. Reading
+///     a not-yet-materialised iCloud placeholder was one of the silent failures
+///     this path used to have.
+///
+/// WHY AN INSTANCE THAT OUTLIVES THE MENU
+///     The picker is triggered from a `UIAction`, which is an ephemeral object.
+///     A delegate owned by it would be deallocated with it; one long-lived
+///     instance keeps the delegate alive for the whole presentation.
+@MainActor
+final class ComposerDocumentPicker: NSObject, UIDocumentPickerDelegate {
+    static let shared = ComposerDocumentPicker()
+
+    private var onPick: (([URL]) -> Void)?
+    private var onCancel: (() -> Void)?
+    private var onPresentationChange: ((Bool) -> Void)?
+
+    /// True while a picker is on screen. Exposed so the composer can keep its
+    /// "a presentation is in flight" state honest, and so tests can assert it.
+    private(set) var isPresenting = false
+
+    func present(
+        onPick: @escaping ([URL]) -> Void,
+        onCancel: @escaping () -> Void,
+        onPresentationChange: @escaping (Bool) -> Void
+    ) {
+        guard !isPresenting else {
+            HermexLogger.shared.log(
+                type: "event", screen: "ComposerPicker", message: "picker already presenting"
+            )
+            return
+        }
+
+        guard let host = Self.topViewController() else {
+            HermexLogger.shared.log(
+                type: "error", screen: "ComposerPicker", message: "picker unavailable"
+            )
+            onPresentationChange(false)
+            return
+        }
+
+        installCallbacks(
+            onPick: onPick,
+            onCancel: onCancel,
+            onPresentationChange: onPresentationChange
+        )
+        isPresenting = true
+        onPresentationChange(true)
+
+        let picker = Self.makePicker()
+        picker.delegate = self
+
+        HermexLogger.shared.log(
+            type: "event", screen: "ComposerPicker", message: "picker presented"
+        )
+
+        host.present(picker, animated: true)
+    }
+
+    /// HERMEX-FORK: test seam. Unit tests have no foreground window scene, so the
+    /// callbacks are installed directly and the delegate methods are exercised
+    /// without a picker ever reaching the screen.
+    func installForTesting(
+        onPick: @escaping ([URL]) -> Void,
+        onCancel: @escaping () -> Void,
+        onPresentationChange: @escaping (Bool) -> Void
+    ) {
+        installCallbacks(
+            onPick: onPick,
+            onCancel: onCancel,
+            onPresentationChange: onPresentationChange
+        )
+        isPresenting = true
+    }
+
+    static func makePicker() -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(
+            forOpeningContentTypes: [UTType.item],
+            asCopy: true
+        )
+        // Multi-select is what the composer expects: one trip for several files.
+        picker.allowsMultipleSelection = true
+        return picker
+    }
+
+    // MARK: - UIDocumentPickerDelegate
+
+    func documentPicker(
+        _ controller: UIDocumentPickerViewController,
+        didPickDocumentsAt urls: [URL]
+    ) {
+        // Consume before calling back: the composer's handler starts a Task and
+        // presents nothing, but a second delivery must never double-attach.
+        let callbacks = consumeCallbacks()
+
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ComposerPicker",
+            message: "picker returned file",
+            extras: ["count": urls.count]
+        )
+
+        callbacks.onPick?(urls)
+        callbacks.onPresentationChange?(false)
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        let callbacks = consumeCallbacks()
+
+        HermexLogger.shared.log(
+            type: "event", screen: "ComposerPicker", message: "picker cancelled"
+        )
+
+        callbacks.onCancel?()
+        callbacks.onPresentationChange?(false)
+    }
+
+    // MARK: - Internals
+
+    private func installCallbacks(
+        onPick: @escaping ([URL]) -> Void,
+        onCancel: @escaping () -> Void,
+        onPresentationChange: @escaping (Bool) -> Void
+    ) {
+        self.onPick = onPick
+        self.onCancel = onCancel
+        self.onPresentationChange = onPresentationChange
+    }
+
+    private func consumeCallbacks() -> (
+        onPick: (([URL]) -> Void)?,
+        onCancel: (() -> Void)?,
+        onPresentationChange: ((Bool) -> Void)?
+    ) {
+        let callbacks = (onPick, onCancel, onPresentationChange)
+        onPick = nil
+        onCancel = nil
+        onPresentationChange = nil
+        isPresenting = false
+        return callbacks
+    }
+
+    /// The controller a system picker can actually be presented from: the
+    /// top-most one of the active window scene, so a picker is never pushed onto
+    /// a controller that is already covered by a sheet.
+    private static func topViewController() -> UIViewController? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap(\.windows)
+
+        var top = windows.first(where: \.isKeyWindow)?.rootViewController
+            ?? windows.first?.rootViewController
+
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 }

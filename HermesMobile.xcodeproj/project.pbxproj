@@ -289,6 +289,7 @@
 		C03250000000000000B104 /* ComposerVoiceNoteRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03250000000000000F104 /* ComposerVoiceNoteRecorder.swift */; };
 		C03250000000000000B105 /* APIClientTranscribeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03250000000000000F105 /* APIClientTranscribeTests.swift */; };
 		C03250000000000000B106 /* ComposerVoiceNoteRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03250000000000000F106 /* ComposerVoiceNoteRecorderTests.swift */; };
+		C03250000000000000B107 /* ComposerDocumentPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03250000000000000F107 /* ComposerDocumentPickerTests.swift */; };
 		C03251000000000000B106 /* ComposerVoiceInputServerRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03251000000000000F106 /* ComposerVoiceInputServerRecordingTests.swift */; };
 		C03260000000000000B101 /* APIClient+TTS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03260000000000000F101 /* APIClient+TTS.swift */; };
 		C03270000000000000B101 /* APIClient+SessionExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03270000000000000F101 /* APIClient+SessionExport.swift */; };
@@ -778,6 +779,7 @@
 		C03250000000000000F104 /* ComposerVoiceNoteRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerVoiceNoteRecorder.swift; sourceTree = "<group>"; };
 		C03250000000000000F105 /* APIClientTranscribeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTranscribeTests.swift; sourceTree = "<group>"; };
 		C03250000000000000F106 /* ComposerVoiceNoteRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerVoiceNoteRecorderTests.swift; sourceTree = "<group>"; };
+		C03250000000000000F107 /* ComposerDocumentPickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerDocumentPickerTests.swift; sourceTree = "<group>"; };
 		C03251000000000000F106 /* ComposerVoiceInputServerRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerVoiceInputServerRecordingTests.swift; sourceTree = "<group>"; };
 		C03260000000000000F101 /* APIClient+TTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIClient+TTS.swift"; sourceTree = "<group>"; };
 		C03270000000000000F101 /* APIClient+SessionExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIClient+SessionExport.swift"; sourceTree = "<group>"; };
@@ -1094,6 +1096,7 @@
 				C03260000000000000F102 /* APIClientTTSTests.swift */,
 				C03270000000000000F102 /* APIClientSessionExportTests.swift */,
 				C03250000000000000F106 /* ComposerVoiceNoteRecorderTests.swift */,
+				C03250000000000000F107 /* ComposerDocumentPickerTests.swift */,
 				C03251000000000000F106 /* ComposerVoiceInputServerRecordingTests.swift */,
 					C04100000000000000000004 /* ChatComposerConfigLoaderTests.swift */,
 					C04600000000000000000004 /* ChatStreamCoordinatorTests.swift */,
@@ -2219,6 +2222,7 @@
 				C03260000000000000B102 /* APIClientTTSTests.swift in Sources */,
 				C03270000000000000B102 /* APIClientSessionExportTests.swift in Sources */,
 				C03250000000000000B106 /* ComposerVoiceNoteRecorderTests.swift in Sources */,
+				C03250000000000000B107 /* ComposerDocumentPickerTests.swift in Sources */,
 				C03251000000000000B106 /* ComposerVoiceInputServerRecordingTests.swift in Sources */,
 					C04100000000000000000003 /* ChatComposerConfigLoaderTests.swift in Sources */,
 					C04600000000000000000003 /* ChatStreamCoordinatorTests.swift in Sources */,
