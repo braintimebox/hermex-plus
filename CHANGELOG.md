@@ -1,3 +1,5 @@
+## 3.9.20 — composer: attach files through a UIKit document picker (asCopy, multi-select) — the SwiftUI .fileImporter never delivered a picked file, so the picker's Open button did nothing
+
 ## 3.9.19 — composer: unified solid card block enclosing the input field and toolbar row, no transparency, mic and scheduled badge in place
 
 ## 3.9.18 — composer: the mic and the scheduled-messages badge leave the horizontal scroller and join the fixed part of the row (with Send), so they are always on screen; the scroller keeps the selectors
