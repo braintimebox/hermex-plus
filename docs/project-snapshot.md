@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | a4e8d6c |
-| Версия | 3.9.20 |
-| Обновлено | 2026-09-30 |
+| HEAD | 1f6d314 |
+| Версия | 3.9.21 |
+| Обновлено | 2026-10-01 |
 
 **Последние коммиты:**
 ```
+1f6d314 3.9.20: composer: attach files through a UIKit document picker (asCopy, multi-select) — the SwiftUI .fileImporter never delivered a picked file, so the picker's Open button did nothing
 a4e8d6c fix(composer): attach files through UIDocumentPickerViewController
 ba9100a 3.9.19: composer: unified solid card block enclosing the input field and toolbar row, no transparency, mic and scheduled badge in place
 1d0706d 3.9.18: composer: the mic and the scheduled-messages badge leave the horizontal scroller and join the fixed part of the row (with Send), so they are always on screen; the scroller keeps the selectors
 da7b081 composer: mic and scheduled messages leave the horizontal scroller
 5de3690 3.9.17: revert: the composer is back to the 3.9.13 view — my last three changes lost the mic while typing, hid Send on an empty field and pushed the model/workspace row behind a menu. The measured field-height fix and the telemetry stay
-7123c3f revert: composer back to the 3.9.13 state — my last three changes made it worse
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)

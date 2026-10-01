@@ -1,3 +1,5 @@
+## 3.9.21 — composer: widen layout to 8 pt horizontal margin (closer to edges while keeping safe clearance from hardware rounded corners)
+
 ## 3.9.20 — composer: attach files through a UIKit document picker (asCopy, multi-select) — the SwiftUI .fileImporter never delivered a picked file, so the picker's Open button did nothing
 
 ## 3.9.19 — composer: unified solid card block enclosing the input field and toolbar row, no transparency, mic and scheduled badge in place
