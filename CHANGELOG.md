@@ -1,3 +1,5 @@
+## 3.9.22 — share: fallback to a named pasteboard when the app group container is unreachable (sideloaded builds lose the entitlement), with the transport logged; composer: 8pt horizontal margin
+
 ## 3.9.21 — composer: widen layout to 8 pt horizontal margin (closer to edges while keeping safe clearance from hardware rounded corners)
 
 ## 3.9.20 — composer: attach files through a UIKit document picker (asCopy, multi-select) — the SwiftUI .fileImporter never delivered a picked file, so the picker's Open button did nothing
