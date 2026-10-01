@@ -53,11 +53,54 @@ struct SharedImport: Equatable {
     }
 }
 
+/// HERMEX-FORK: what actually carried the shared payload into the app.
+///
+/// The fork used to have two transports and now needs both, so the one that
+/// worked is recorded instead of assumed. `appGroup` is the primary path (no
+/// size limit, attachments survive); `pasteboard` is the fallback that needs no
+/// entitlement. `unavailable` means the best remaining transport failed and is
+/// the signature to look for when a share silently produces nothing.
+enum ShareDeliverySource: String {
+    case appGroup
+    case pasteboard
+    case unavailable
+
+    /// Human-readable cause for the diagnostics line, so the log says *why*
+    /// rather than only *what*.
+    var diagnosticsDetail: String {
+        switch self {
+        case .appGroup:
+            return "app group container"
+        case .pasteboard:
+            return "named pasteboard (app group unavailable)"
+        case .unavailable:
+            return "no transport: app group container nil and pasteboard empty"
+        }
+    }
+}
+
 struct SharedImportReservation: Equatable, Identifiable {
     let itemID: String
     let reservationID: String
     let createdAt: Date
     let sharedImport: SharedImport
+    /// HERMEX-FORK: which transport delivered this payload. Adds one field so
+    /// the app can report the path a share took; nothing else consumes it.
+    let source: ShareDeliverySource
+
+    init(
+        itemID: String,
+        reservationID: String,
+        createdAt: Date,
+        sharedImport: SharedImport,
+        source: ShareDeliverySource = .appGroup
+    ) {
+        self.itemID = itemID
+        self.reservationID = reservationID
+        self.createdAt = createdAt
+        self.sharedImport = sharedImport
+        self.source = source
+    }
 
     var id: String { reservationID }
 }
@@ -92,6 +135,134 @@ enum HermesShareDraft {
     static let shareURLHost = "share"
     static let maximumSharedAttachmentBytes = 20 * 1_024 * 1_024
     static let maximumSharedAttachmentCount = 10
+
+    // MARK: - Pasteboard transport (no App Groups entitlement required)
+
+    /// HERMEX-FORK: the fallback transport for builds where the App Group
+    /// container is not reachable.
+    ///
+    /// WHY THIS EXISTS
+    ///     The share extension used to hand the payload over through a named
+    ///     pasteboard, and the upstream 1.6.0 sync removed that path, leaving the
+    ///     App Group as the only transport (`fix(share): openURL is payload-free
+    ///     again`, 12.09.2026). Upstream ships from the App Store with a real
+    ///     provisioning profile; a sideloaded build does not. CI builds this fork
+    ///     with `CODE_SIGNING_ALLOWED=NO` and SideStore re-signs it, and a
+    ///     re-signed extension does not reliably keep the App Group entitlement —
+    ///     the known SideStore failure "App Groups entitlements for extensions
+    ///     does not work" (SideStore#1437). When that happens
+    ///     `containerURL(forSecurityApplicationGroupIdentifier:)` returns nil and
+    ///     the share disappears with no error at all, which is exactly the
+    ///     "after 3.6.0 it degraded" report.
+    ///
+    /// WHY A NAMED PASTEBOARD
+    ///     A pasteboard needs no entitlement, so it works on any signature. The
+    ///     `UIPasteboard.general` board raises the iOS paste-permission banner;
+    ///     a named one does not, so the user is never asked to allow a paste.
+    ///
+    /// WHY THE NAME IS DERIVED
+    ///     The name is built from the app group identifier, so it is namespaced
+    ///     per identity and cannot collide with the App Store Hermex installed
+    ///     beside this fork. Both processes read the same Info.plist key, so the
+    ///     two sides can never disagree.
+    static var sharePasteboardName: String {
+        "\(appGroupIdentifier).share.inbox"
+    }
+
+    /// Writes the payload to the named pasteboard. Returns false when the
+    /// pasteboard is unavailable or there is nothing to carry, so the caller can
+    /// report a real failure instead of a silent one.
+    @discardableResult
+    static func saveToPasteboard(
+        draft: String,
+        attachments: [SharedAttachmentImport]
+    ) -> Bool {
+        guard let pasteboard = UIPasteboard(name: .init(sharePasteboardName), create: true) else {
+            return false
+        }
+
+        let normalized = normalizedImport(draft: draft, attachments: attachments)
+        guard !normalized.isEmpty else { return false }
+
+        var items: [[String: Any]] = []
+
+        if !normalized.draft.isEmpty {
+            items.append([plainTextPasteboardType: normalized.draft])
+        }
+
+        for attachment in normalized.attachments {
+            items.append([
+                dataPasteboardType: attachment.data,
+                filenamePasteboardType: attachment.filename
+            ])
+        }
+
+        guard !items.isEmpty else { return false }
+        pasteboard.setItems(items, options: [:])
+        return true
+    }
+
+    /// Reads a fallback payload. Returns nil when the pasteboard is absent or
+    /// holds nothing usable.
+    static func loadFromPasteboard() -> SharedImport? {
+        guard
+            let pasteboard = UIPasteboard(name: .init(sharePasteboardName), create: false),
+            let items = pasteboard.items,
+            !items.isEmpty
+        else {
+            return nil
+        }
+
+        var draft = ""
+        var attachments: [SharedAttachmentImport] = []
+
+        for item in items {
+            if draft.isEmpty, let text = item[plainTextPasteboardType] as? String {
+                draft = text
+            } else if let data = item[dataPasteboardType] as? Data {
+                let filename = item[filenamePasteboardType] as? String ?? "shared-file"
+                attachments.append(
+                    SharedAttachmentImport(
+                        filename: sanitizedFilename(filename),
+                        typeIdentifier: nil,
+                        data: data
+                    )
+                )
+            }
+        }
+
+        let sharedImport = SharedImport(draft: draft, attachments: attachments)
+        return sharedImport.isEmpty ? nil : sharedImport
+    }
+
+    /// Clears the fallback pasteboard once its payload has been claimed, so a
+    /// second launch cannot re-import the same share.
+    static func clearPasteboard() {
+        guard let pasteboard = UIPasteboard(name: .init(sharePasteboardName), create: false) else {
+            return
+        }
+        pasteboard.items = []
+    }
+
+    /// HERMEX-FORK: claims a fallback payload as a reservation so the app has one
+    /// import path for both transports. The pasteboard is cleared on read, which
+    /// is what makes it consume-once — the App Group path uses a reservation file
+    /// for the same guarantee.
+    static func reserveNextPasteboardImport() -> SharedImportReservation? {
+        guard let sharedImport = loadFromPasteboard() else { return nil }
+        clearPasteboard()
+        return SharedImportReservation(
+            itemID: "pasteboard-\(UUID().uuidString)",
+            reservationID: UUID().uuidString,
+            createdAt: Date(),
+            sharedImport: sharedImport,
+            source: .pasteboard
+        )
+    }
+
+    private static let plainTextPasteboardType = "public.utf8-plain-text"
+    private static let dataPasteboardType = "public.data"
+    private static let filenamePasteboardType = "public.filename"
 
     // MARK: - Sharing
 
@@ -233,7 +404,8 @@ enum HermesShareDraft {
                 itemID: itemID,
                 reservationID: reservationID,
                 createdAt: loaded.createdAt,
-                sharedImport: loaded.sharedImport
+                sharedImport: loaded.sharedImport,
+                source: .appGroup
             )
         }
 
@@ -263,6 +435,11 @@ enum HermesShareDraft {
         from directory: URL,
         fileManager: FileManager = .default
     ) throws {
+        // HERMEX-FORK: a pasteboard share cleared itself on read — there is no
+        // inbox state to acknowledge, and validating a reservation file would
+        // throw on a payload that was in fact delivered.
+        guard reservation.source == .appGroup else { return }
+
         let reservedURL = reservedItemURL(for: reservation.itemID, in: directory)
         try validateReservation(reservation, at: reservedURL)
         try fileManager.removeItem(at: reservedURL)
@@ -273,6 +450,9 @@ enum HermesShareDraft {
         in directory: URL,
         fileManager: FileManager = .default
     ) throws {
+        // HERMEX-FORK: same reason as `consume` — nothing on disk to release.
+        guard reservation.source == .appGroup else { return }
+
         let reservedURL = reservedItemURL(for: reservation.itemID, in: directory)
         try validateReservation(reservation, at: reservedURL)
 

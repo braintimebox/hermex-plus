@@ -126,7 +126,14 @@ struct ContentView: View {
             return
         }
 
+        // HERMEX-FORK: the App Group container can be missing altogether on a
+        // sideloaded build (see `saveToPasteboard` for the mechanism). Where the
+        // extension falls back to the pasteboard, the app must look there too or
+        // the payload is delivered and then ignored.
         guard let directory = HermesShareDraft.containerURL() else {
+            // HERMEX-FORK: no App Group container means the payload can only be
+            // sitting on the fallback pasteboard.
+            reservePasteboardSharedImportIfAvailable()
             return
         }
 
@@ -137,11 +144,51 @@ struct ContentView: View {
 
         do {
             pendingSharedImport = try HermesShareDraft.reserveNextPendingImport(from: directory)
+            // HERMEX-FORK: the App Group inbox only wins when it actually had
+            // something; an empty inbox means the share may have travelled on
+            // the fallback pasteboard instead.
+            if let reservation = pendingSharedImport {
+                logSharedImportSource(reservation.source)
+            } else {
+                reservePasteboardSharedImportIfAvailable()
+            }
             refreshWaitingSharedImport(in: directory)
         } catch {
             pendingSharedImport = nil
             hasWaitingSharedImport = false
+            reservePasteboardSharedImportIfAvailable()
         }
+    }
+
+    /// HERMEX-FORK: claims a payload from the fallback transport. Also the place
+    /// where a share that reached neither transport is recorded — an empty inbox
+    /// plus an empty pasteboard used to look exactly like a share that never
+    /// arrived, which is what made this failure invisible for so long.
+    private func reservePasteboardSharedImportIfAvailable() {
+        guard let reservation = HermesShareDraft.reserveNextPasteboardImport() else {
+            hasWaitingSharedImport = false
+            logSharedImportSource(.unavailable)
+            return
+        }
+
+        pendingSharedImport = reservation
+        hasWaitingSharedImport = false
+        logSharedImportSource(reservation.source)
+    }
+
+    /// HERMEX-FORK: names the transport a share arrived on. Without this line the
+    /// two transports are indistinguishable from the outside, and "sharing
+    /// degraded" has no evidence attached to it.
+    private func logSharedImportSource(_ source: ShareDeliverySource) {
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ShareImport",
+            message: "share received",
+            extras: [
+                "source": source.rawValue,
+                "detail": source.diagnosticsDetail
+            ]
+        )
     }
 
     private func consumePendingSharedImport(_ reservation: SharedImportReservation) {

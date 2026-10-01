@@ -451,7 +451,7 @@ struct MessageComposerView: View {
                                 applyCompletion("/\(parsedSlashQuery.commandName) \(subArg)")
                             }
                         )
-                        .padding(.horizontal)
+                        .padding(.horizontal, 8)
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
                     }
                 }
@@ -459,7 +459,7 @@ struct MessageComposerView: View {
                 .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsFileAutocomplete)
 
                 composerSurface
-                    .padding(.horizontal)
+                    .padding(.horizontal, 8)
                     // HERMEX-FORK: слагаемое «поверхность» в телеметрию.
                     .background(GeometryReader { proxy in
                         Color.clear

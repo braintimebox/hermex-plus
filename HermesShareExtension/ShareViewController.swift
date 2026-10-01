@@ -53,15 +53,35 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        guard let directory = HermesShareDraft.containerURL() else {
-            showStatus("Could not access Hermex storage.")
-            completeRequest(after: 0.8)
-            return
+        // HERMEX-FORK: two transports, in order. The App Group container is
+        // primary — it is transactional and carries attachments of any size —
+        // but a sideloaded, re-signed extension does not reliably hold the App
+        // Group entitlement, and then `containerURL` returns nil. Where that
+        // happens the payload travels on a named pasteboard instead of being
+        // dropped, so a share works on a free Apple ID too.
+        var delivered = false
+
+        if let directory = HermesShareDraft.containerURL() {
+            do {
+                try HermesShareDraft.savePendingImport(
+                    draft: draft,
+                    attachments: input.attachments,
+                    in: directory
+                )
+                delivered = true
+            } catch {
+                delivered = false
+            }
         }
 
-        do {
-            try HermesShareDraft.savePendingImport(draft: draft, attachments: input.attachments, in: directory)
-        } catch {
+        if !delivered {
+            delivered = HermesShareDraft.saveToPasteboard(
+                draft: draft,
+                attachments: input.attachments
+            )
+        }
+
+        guard delivered else {
             showStatus("Could not save shared content.")
             completeRequest(after: 0.8)
             return

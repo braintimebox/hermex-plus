@@ -1,3 +1,6 @@
+// HERMEX-FORK: `UIPasteboard` is needed to exercise the fallback share
+// transport (the App Group path needs no UIKit types in these assertions).
+import UIKit
 import XCTest
 @testable import HermesMobile
 
@@ -384,6 +387,95 @@ final class SharedDraftStoreTests: XCTestCase {
         try HermesShareDraft.savePendingDraft(" \n ", in: directory)
 
         XCTAssertNil(try HermesShareDraft.loadPendingDraft(from: directory))
+    }
+
+    // HERMEX-FORK: fallback pasteboard transport (sideloaded builds)
+
+    /// The fallback name must be derived from the app group identifier: the App
+    /// Store Hermex is installed beside this fork, so a shared literal would let
+    /// one app claim the other app's share.
+    func testPasteboardNameIsNamespacedToTheAppGroup() {
+        XCTAssertEqual(
+            HermesShareDraft.sharePasteboardName,
+            "\(HermesShareDraft.appGroupIdentifier).share.inbox"
+        )
+        XCTAssertTrue(HermesShareDraft.sharePasteboardName.hasPrefix("group."))
+    }
+
+    func testPasteboardTransportCarriesDraftAndAttachmentOnce() throws {
+        try skipUnlessPasteboardIsAvailable()
+        defer { HermesShareDraft.clearPasteboard() }
+
+        let saved = HermesShareDraft.saveToPasteboard(
+            draft: "  Summarize this page  ",
+            attachments: [
+                SharedAttachmentImport(
+                    filename: "notes.pdf",
+                    typeIdentifier: "com.adobe.pdf",
+                    data: Data("pages".utf8)
+                )
+            ]
+        )
+        XCTAssertTrue(saved, "an available pasteboard with content must accept the payload")
+
+        let loaded = try XCTUnwrap(HermesShareDraft.loadFromPasteboard())
+        XCTAssertEqual(loaded.draft, "Summarize this page")
+        XCTAssertEqual(loaded.attachments.map(\.filename), ["notes.pdf"])
+        XCTAssertEqual(loaded.attachments.first?.data, Data("pages".utf8))
+
+        // Reading alone must not consume the payload — a share that is read but
+        // never claimed (app backgrounded mid-routing) has to survive.
+        XCTAssertNotNil(HermesShareDraft.loadFromPasteboard())
+
+        let reservation = try XCTUnwrap(HermesShareDraft.reserveNextPasteboardImport())
+        XCTAssertEqual(reservation.source, .pasteboard)
+        XCTAssertEqual(reservation.sharedImport.draft, "Summarize this page")
+        XCTAssertNil(
+            HermesShareDraft.loadFromPasteboard(),
+            "claiming a pasteboard share must clear it, or a relaunch re-imports it"
+        )
+    }
+
+    /// A pasteboard share has no inbox state, so acknowledging it must be a
+    /// no-op rather than a validation failure on a payload that was delivered.
+    func testAcknowledgingPasteboardReservationDoesNotTouchTheInbox() throws {
+        let directory = try temporaryDirectory()
+        let reservation = SharedImportReservation(
+            itemID: "pasteboard-1",
+            reservationID: "reservation-1",
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            sharedImport: SharedImport(draft: "from pasteboard", attachments: []),
+            source: .pasteboard
+        )
+
+        XCTAssertNoThrow(try HermesShareDraft.consume(reservation, from: directory))
+        XCTAssertNoThrow(try HermesShareDraft.release(reservation, in: directory))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("share-inbox-v1").path
+            ),
+            "acknowledging a pasteboard share must not create or touch inbox state"
+        )
+    }
+
+    /// The App Group stays the default source, so call sites and tests written
+    /// before the fallback existed keep their meaning.
+    func testReservationDefaultsToAppGroupTransport() {
+        let reservation = SharedImportReservation(
+            itemID: "item",
+            reservationID: "reservation",
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            sharedImport: SharedImport(draft: "inbox", attachments: [])
+        )
+
+        XCTAssertEqual(reservation.source, .appGroup)
+    }
+
+    private func skipUnlessPasteboardIsAvailable() throws {
+        guard UIPasteboard(name: .init(HermesShareDraft.sharePasteboardName), create: true) == nil else {
+            return
+        }
+        throw XCTSkip("no named pasteboard in this environment")
     }
 
     private func temporaryDirectory() throws -> URL {
