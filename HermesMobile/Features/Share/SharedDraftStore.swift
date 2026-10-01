@@ -204,12 +204,17 @@ enum HermesShareDraft {
 
     /// Reads a fallback payload. Returns nil when the pasteboard is absent or
     /// holds nothing usable.
+    ///
+    /// `UIPasteboard.items` is non-optional in this SDK — an earlier share fix
+    /// in this repo hit exactly that (`UIPasteboard.items non-optional type`),
+    /// so it is read directly here instead of through a conditional binding.
     static func loadFromPasteboard() -> SharedImport? {
-        guard
-            let pasteboard = UIPasteboard(name: .init(sharePasteboardName), create: false),
-            let items = pasteboard.items,
-            !items.isEmpty
-        else {
+        guard let pasteboard = UIPasteboard(name: .init(sharePasteboardName), create: false) else {
+            return nil
+        }
+
+        let items = pasteboard.items
+        guard !items.isEmpty else {
             return nil
         }
 
