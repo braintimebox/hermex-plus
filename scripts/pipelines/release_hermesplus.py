@@ -55,6 +55,11 @@ WEBUI_BASE = os.environ.get("HERMES_WEBUI_BASE", "").rstrip("/")
 # gh resolves the default repo from the git remote; our remote points at
 # upstream sometimes, and `gh run ...` then 404s. Always be explicit.
 OUR_REPO = "braintimebox/hermex-plus"
+# How long to keep asking GitHub for the run of the commit we just pushed, and
+# how often. A run is created seconds after the push, so a single query finds
+# nothing even when the release is perfectly healthy.
+RUN_LOOKUP_SECONDS = 180
+RUN_LOOKUP_POLL_SECONDS = 10
 
 
 def sh(cmd: list[str], check: bool = True) -> str:
@@ -217,6 +222,33 @@ def verify_release(version: str, rid: str) -> bool:
     return False
 
 
+def run_id_for(head: str) -> str:
+    """The CI run id for our commit, from either lookup GitHub offers.
+
+    Two sources because they fail differently: the branch listing is capped by
+    `--limit`, so a busy push can push ours out of the window, while the commit
+    filter is authoritative but is the slower of the two to start matching. A
+    read that finds nothing is a normal miss here, not an error — the caller
+    polls until its deadline.
+    """
+    by_branch = sh(["gh", "run", "list", "--repo", OUR_REPO,
+                    "--workflow=build-ipa.yml", "--branch=main", "--limit=10",
+                    "--json", "databaseId,headSha",
+                    "--jq", f'[.[] | select(.headSha | startswith("{head}"))][0].databaseId'],
+                   check=False)
+    if by_branch and by_branch != "null":
+        return by_branch
+
+    by_commit = sh(["gh", "run", "list", "--repo", OUR_REPO, "--commit", head,
+                    "--limit=5", "--json", "databaseId,headSha",
+                    "--jq", f'[.[] | select(.headSha == "{head}")][0].databaseId'],
+                   check=False)
+    if by_commit and by_commit != "null":
+        return by_commit
+
+    return ""
+
+
 def wait_build() -> str:
     """Wait for the CI run of the commit we just pushed, and return its id.
 
@@ -227,11 +259,24 @@ def wait_build() -> str:
     """
     head = git("rev-parse", "HEAD")
     print(f"  waiting for CI on {head[:8]}")
-    rid = sh(["gh", "run", "list", "--repo", OUR_REPO, "--workflow=build-ipa.yml",
-              "--branch=main", "--limit=10", "--json", "databaseId,headSha",
-              "--jq", f'[.[] | select(.headSha | startswith("{head}"))][0].databaseId'])
-    if not rid or rid == "null":
-        sys.exit(f"no CI run found for {head[:8]} — did the push land?")
+    rid = ""
+
+    # The lookup races GitHub's own bookkeeping: a run appears a few seconds
+    # after the push, and a single query issued right after `git push` finds
+    # nothing. That is how 3.9.22 got reported as "did the push land?" while the
+    # run it was asking about was already in progress — a healthy release
+    # aborted by its own watchdog, with the version already committed, pushed
+    # and tagged. Poll instead of asking once, and ask two ways.
+    lookup_deadline = time.time() + RUN_LOOKUP_SECONDS
+    while time.time() < lookup_deadline:
+        rid = run_id_for(head)
+        if rid:
+            break
+        time.sleep(RUN_LOOKUP_POLL_SECONDS)
+
+    if not rid:
+        sys.exit(f"no CI run found for {head[:8]} after {RUN_LOOKUP_SECONDS}s "
+                 "— did the push land?")
     # 25s * 120 ≈ 50 min. The loop used to allow ~11 min, sized for a build-only
     # run; the job now also runs the whole XCTest suite under a 90-minute limit,
     # so a green build was abandoned mid-flight and its IPA never downloaded —
