@@ -422,6 +422,9 @@ final class SharedDraftStoreTests: XCTestCase {
         XCTAssertEqual(loaded.draft, "Summarize this page")
         XCTAssertEqual(loaded.attachments.map(\.filename), ["notes.pdf"])
         XCTAssertEqual(loaded.attachments.first?.data, Data("pages".utf8))
+        // The type travels with the name: without it the attachment loses what it
+        // is, which is how it gets attached as an anonymous blob downstream.
+        XCTAssertEqual(loaded.attachments.first?.typeIdentifier, "com.adobe.pdf")
 
         // Reading alone must not consume the payload — a share that is read but
         // never claimed (app backgrounded mid-routing) has to survive.
@@ -433,6 +436,29 @@ final class SharedDraftStoreTests: XCTestCase {
         XCTAssertNil(
             HermesShareDraft.loadFromPasteboard(),
             "claiming a pasteboard share must clear it, or a relaunch re-imports it"
+        )
+    }
+
+    /// A payload written by the first build of this fallback carried the bytes
+    /// without an envelope. Such a share must still deliver its content: the name
+    /// is allowed to fall back, the bytes are not. Deliberately does NOT assert
+    /// that a foreign `public.filename` key survives the pasteboard — that is a
+    /// platform conversion this code no longer depends on.
+    func testPasteboardReaderStillDeliversBytesWithoutAnEnvelope() throws {
+        try skipUnlessPasteboardIsAvailable()
+        defer { HermesShareDraft.clearPasteboard() }
+
+        let pasteboard = try XCTUnwrap(
+            UIPasteboard(name: .init(HermesShareDraft.sharePasteboardName), create: true)
+        )
+        pasteboard.setItems([["public.data": Data("legacy pages".utf8)]], options: [:])
+
+        let loaded = try XCTUnwrap(HermesShareDraft.loadFromPasteboard())
+        XCTAssertEqual(loaded.attachments.count, 1, "a bare-data item must still arrive")
+        XCTAssertEqual(loaded.attachments.first?.data, Data("legacy pages".utf8))
+        XCTAssertFalse(
+            (loaded.attachments.first?.filename ?? "").isEmpty,
+            "an attachment without a name must get a usable placeholder"
         )
     }
 

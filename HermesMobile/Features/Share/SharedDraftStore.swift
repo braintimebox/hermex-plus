@@ -190,11 +190,14 @@ enum HermesShareDraft {
             items.append([plainTextPasteboardType: normalized.draft])
         }
 
-        for attachment in normalized.attachments {
-            items.append([
-                dataPasteboardType: attachment.data,
-                filenamePasteboardType: attachment.filename
-            ])
+        for stagedAttachment in normalized.attachments {
+            let envelope = PasteboardAttachmentEnvelope(
+                filename: stagedAttachment.filename,
+                typeIdentifier: stagedAttachment.typeIdentifier,
+                data: stagedAttachment.data
+            )
+            guard let encoded = try? JSONEncoder().encode(envelope) else { continue }
+            items.append([dataPasteboardType: encoded])
         }
 
         guard !items.isEmpty else { return false }
@@ -224,20 +227,69 @@ enum HermesShareDraft {
         for item in items {
             if draft.isEmpty, let text = item[plainTextPasteboardType] as? String {
                 draft = text
-            } else if let data = item[dataPasteboardType] as? Data {
-                let filename = item[filenamePasteboardType] as? String ?? "shared-file"
-                attachments.append(
-                    SharedAttachmentImport(
-                        filename: sanitizedFilename(filename),
-                        typeIdentifier: nil,
-                        data: data
-                    )
-                )
+                continue
             }
+
+            guard let payload = dataPayload(from: item) else { continue }
+            attachments.append(
+                attachment(from: payload, legacyFilename: legacyFilename(from: item))
+            )
         }
 
         let sharedImport = SharedImport(draft: draft, attachments: attachments)
         return sharedImport.isEmpty ? nil : sharedImport
+    }
+
+    /// The bytes of a pasteboard item, whatever representation the system chose
+    /// to hand back for it.
+    private static func dataPayload(from item: [String: Any]) -> Data? {
+        if let data = item[dataPasteboardType] as? Data {
+            return data
+        }
+        if let data = item[dataPasteboardType] as? NSData {
+            return data as Data
+        }
+        return nil
+    }
+
+    /// An attachment out of a pasteboard payload, preferring the self-describing
+    /// envelope and tolerating a bare-data item written by the first build of
+    /// this fallback (which kept the name in a separate key and lost it).
+    private static func attachment(
+        from payload: Data,
+        legacyFilename: String?
+    ) -> SharedAttachmentImport {
+        if let envelope = try? JSONDecoder().decode(
+            PasteboardAttachmentEnvelope.self,
+            from: payload
+        ) {
+            return SharedAttachmentImport(
+                filename: sanitizedFilename(envelope.filename),
+                typeIdentifier: envelope.typeIdentifier,
+                data: envelope.data
+            )
+        }
+
+        return SharedAttachmentImport(
+            filename: sanitizedFilename(legacyFilename ?? "shared-file"),
+            typeIdentifier: nil,
+            data: payload
+        )
+    }
+
+    /// The filename the first fallback build wrote beside the bytes. The value
+    /// can arrive as `String` or as `Data` depending on which representation the
+    /// pasteboard decided to return, so both are accepted.
+    private static func legacyFilename(from item: [String: Any]) -> String? {
+        if let name = item[filenamePasteboardType] as? String, !name.isEmpty {
+            return name
+        }
+        if let data = item[filenamePasteboardType] as? Data,
+           let name = String(data: data, encoding: .utf8),
+           !name.isEmpty {
+            return name
+        }
+        return nil
     }
 
     /// Clears the fallback pasteboard once its payload has been claimed, so a
@@ -268,6 +320,24 @@ enum HermesShareDraft {
     private static let plainTextPasteboardType = "public.utf8-plain-text"
     private static let dataPasteboardType = "public.data"
     private static let filenamePasteboardType = "public.filename"
+
+    /// HERMEX-FORK: one attachment, self-describing.
+    ///
+    /// WHY THE NAME IS INSIDE THE PAYLOAD
+    ///     The first version of this fallback wrote the name as a second key
+    ///     beside the bytes (`public.data` + `public.filename`). A pasteboard
+    ///     item has one representation per key, and a non-text UTI comes back as
+    ///     `Data` rather than the `String` that went in, so the name read back as
+    ///     nil and every attachment arrived as `shared-file` — the attachment was
+    ///     delivered without its identity. CI caught it as
+    ///     `["shared-file"] is not equal to ["notes.pdf"]`. Carrying the name in
+    ///     the payload removes the dependency on representation conversion
+    ///     surviving at all.
+    private struct PasteboardAttachmentEnvelope: Codable {
+        let filename: String
+        let typeIdentifier: String?
+        let data: Data
+    }
 
     // MARK: - Sharing
 
