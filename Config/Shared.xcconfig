@@ -24,6 +24,16 @@ APP_IDENTIFIER_SUFFIX =
 APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
 APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
 
+// HERMEX-FORK: the fork must also open its links under a URL scheme of its own.
+// Upstream declares `hermes-agent`, and iOS resolves a scheme to ONE app. With
+// the App Store Hermex installed beside Hermex Plus both apps claim it, so the
+// share extension's request to open `hermes-agent://share` can be handed to the
+// App Store app — the share sheet then opens the wrong app's window. A scheme
+// from this namespace cannot be claimed by anyone else, which is what makes the
+// share round-trip deterministic. Branch builds keep their suffix, as the
+// bundle identifier does.
+APP_URL_SCHEME_NAME = hermesplus
+
 // Optional per-machine overrides. This include must stay last: later
 // assignments win, so Local.xcconfig values override the defaults above.
 #include? "Local.xcconfig"

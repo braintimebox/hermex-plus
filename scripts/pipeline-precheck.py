@@ -768,6 +768,49 @@ def check_dead_callback_wiring() -> int:
     return 0
 
 
+# --- check 17: APIs recorded as non-optional --------------------------------
+
+def check_non_optional_bindings() -> int:
+    """Gate 17 — no conditional binding on an API recorded as non-optional.
+
+    `UIPasteboard.items` is non-optional in the iOS SDK, so
+    `guard let items = pasteboard.items` does not compile:
+
+        error: initializer for conditional binding must have Optional type,
+               not '[[String : Any]]'
+
+    The fork has paid for this twice — in the original pasteboard work and again
+    on 01.10.2026 while porting the share fallback — each time discovered only in
+    CI, ~20 minutes per cycle. A compiler catches it instantly, but this
+    repository's compiler lives in CI, so the ledger below stands in for it: the
+    APIs this fork has already been burned by, checked locally in a second.
+    """
+    print("[17/17] conditional bindings on APIs recorded as non-optional")
+    # (API, pattern that matches a conditional binding against it)
+    ledger = [
+        ("UIPasteboard.items", re.compile(r"(?:guard|if)\s+let\s+\w+\s*=\s*[^\n]*?\bitems\b")),
+    ]
+    problems: list[str] = []
+    for path in sorted((ROOT / "HermesMobile").rglob("*.swift")):
+        try:
+            text = path.read_text(errors="ignore")
+        except Exception:
+            continue
+        if "UIPasteboard" not in text:
+            continue
+        for api, pattern in ledger:
+            for num, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line) and "pasteboard" in line.lower():
+                    problems.append(
+                        f"{path.relative_to(ROOT)}:{num}: {api} is non-optional — "
+                        f"read it directly: {line.strip()}"
+                    )
+    if problems:
+        return blockers(problems)
+    print("      clean (no binding on a recorded non-optional API)")
+    return 0
+
+
 CHECKS = {
     1: check_release,
     2: check_conflict_markers,
@@ -785,6 +828,7 @@ CHECKS = {
     14: check_fork_identity,
     15: check_readme_feature_drift,
     16: check_dead_callback_wiring,
+    17: check_non_optional_bindings,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

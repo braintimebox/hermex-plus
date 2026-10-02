@@ -3414,13 +3414,30 @@ final class ChatViewModel {
                 showSteeringConfirmation(String(localized: "Steering hint delivered."))
                 return .executed(message: nil)
             }
+            // HERMEX-FORK: a refused steer must not stop the run. The server's
+            // steer contract leaves Queue and Stop to the user, so the message
+            // waits for the current turn instead of cancelling it: cancelling
+            // here destroyed the agent's work in progress and surfaced a failure
+            // the user had not asked for. The reason is recorded, not shown.
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ChatViewModel",
+                message: "steer refused",
+                extras: ["fallback": response.fallback ?? "unknown"]
+            )
         } catch {
-            lastError = error
+            // A transport failure follows the same contract: the message waits,
+            // the run lives. Previously this branch cancelled the stream too.
+            HermexLogger.shared.log(
+                type: "error",
+                screen: "ChatViewModel",
+                message: "steer failed",
+                extras: ["kind": String(describing: type(of: error))]
+            )
         }
 
-        _ = enqueueQueuedSlashMessage(message, attachments: attachmentCoordinator.consumePendingAttachments())
-        await cancelActiveStream()
-        return .executed(message: String(localized: "Steer was unavailable, so the message was queued and the current response was stopped."))
+        let position = enqueueQueuedSlashMessage(message, attachments: attachmentCoordinator.consumePendingAttachments())
+        return .executed(message: String(localized: "Queued (#\(position)) — sends when this response finishes."))
     }
 
     private func interruptResponseFromSlashCommand(_ args: String) async -> SlashCommandExecutionResult {

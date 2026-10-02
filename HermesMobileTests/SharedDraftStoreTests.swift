@@ -402,6 +402,27 @@ final class SharedDraftStoreTests: XCTestCase {
         XCTAssertTrue(HermesShareDraft.sharePasteboardName.hasPrefix("group."))
     }
 
+    /// The share round-trip has to wake THIS app. iOS resolves a URL scheme to
+    /// exactly one app, and upstream declares `hermes-agent`: with the App Store
+    /// Hermex installed beside Hermex Plus both apps claim it, so the extension's
+    /// request to open `hermes-agent://share` could be handed to the App Store
+    /// app and the share sheet opened the wrong window. The fork therefore opens
+    /// its links under a scheme of its own; this test fails if a merge ever
+    /// restores upstream's value (the bundle identifier has the same guard in
+    /// gate 14).
+    func testShareSchemeIsForkOwned() {
+        XCTAssertFalse(HermesShareDraft.urlScheme.isEmpty)
+        XCTAssertNotEqual(
+            HermesShareDraft.urlScheme,
+            "hermes-agent",
+            "the share scheme must not be the one upstream's App Store build claims"
+        )
+        XCTAssertTrue(
+            HermesShareDraft.urlScheme.hasPrefix("hermesplus"),
+            "expected a fork-owned share scheme, got \(HermesShareDraft.urlScheme)"
+        )
+    }
+
     func testPasteboardTransportCarriesDraftAndAttachmentOnce() throws {
         try skipUnlessPasteboardIsAvailable()
         defer { HermesShareDraft.clearPasteboard() }

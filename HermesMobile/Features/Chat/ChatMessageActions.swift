@@ -71,8 +71,14 @@ struct ChatMessageActionMenu: View {
         }
     }
 
-    /// The actions for this message in display order. Mutating actions are
-    /// disabled while the transcript is cached or a stream is active.
+    /// The actions for this message in display order.
+    ///
+    /// HERMEX-FORK: a running response no longer disables the actions that only
+    /// read a message or label it locally — Reply, Forward, Save and Pin stay
+    /// available mid-run. A pin is screen-local state and the others only read,
+    /// so gating them bought nothing and cost the whole menu until the reply
+    /// finished (long answers run for minutes). The actions that rewrite history
+    /// a stream is still writing — Edit, Fork, Regenerate — stay disabled.
     var items: [ChatMessageActionItem] {
         var items: [ChatMessageActionItem] = []
 
@@ -138,21 +144,21 @@ struct ChatMessageActionMenu: View {
             kind: .reply,
             title: String(localized: "Reply"),
             systemImage: "arrowshape.turn.up.left",
-            isEnabled: !(isViewingCachedData || hasActiveStream),
+            isEnabled: !isViewingCachedData,
             perform: { onReply(context) }
         ))
         items.append(ChatMessageActionItem(
             kind: .forward,
             title: String(localized: "Forward"),
             systemImage: "arrowshape.turn.up.right",
-            isEnabled: !(isViewingCachedData || hasActiveStream),
+            isEnabled: !isViewingCachedData,
             perform: { onForward(context) }
         ))
         items.append(ChatMessageActionItem(
             kind: .save,
             title: String(localized: "Save"),
             systemImage: "bookmark",
-            isEnabled: !(isViewingCachedData || hasActiveStream),
+            isEnabled: !isViewingCachedData,
             perform: { onSave(context) }
         ))
         if let onPin {
@@ -160,7 +166,7 @@ struct ChatMessageActionMenu: View {
                 kind: .pin,
                 title: isPinned ? String(localized: "Unpin") : String(localized: "Pin"),
                 systemImage: isPinned ? "pin.slash" : "pin",
-                isEnabled: !(isViewingCachedData || hasActiveStream),
+                isEnabled: !isViewingCachedData,
                 perform: { onPin(context) }
             ))
         }
