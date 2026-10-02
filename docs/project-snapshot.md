@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 2353814 |
-| Версия | 3.9.22 |
-| Обновлено | 2026-10-01 |
+| HEAD | eb1ecde |
+| Версия | 3.9.30 |
+| Обновлено | 2026-10-02 |
 
 **Последние коммиты:**
 ```
-2353814 3.9.22: share fallback transport + wider composer
-a5e7321 3.9.21: composer: widen layout to 8 pt horizontal margin (closer to edges while keeping safe clearance from hardware rounded corners)
-1f6d314 3.9.20: composer: attach files through a UIKit document picker (asCopy, multi-select) — the SwiftUI .fileImporter never delivered a picked file, so the picker's Open button did nothing
-a4e8d6c fix(composer): attach files through UIDocumentPickerViewController
-ba9100a 3.9.19: composer: unified solid card block enclosing the input field and toolbar row, no transparency, mic and scheduled badge in place
-1d0706d 3.9.18: composer: the mic and the scheduled-messages badge leave the horizontal scroller and join the fixed part of the row (with Send), so they are always on screen; the scroller keeps the selectors
+eb1ecde fix(tests): update ChatMessageActionMenuTests for mid-run read actions
+334ecc6 fix(delivery): catch every kind of "the message did not arrive"
+5885496 3.9.30: share opens this app, sending never stops the run
+9593065 fix(share): a scheme of our own, and never stop a run in order to send
+06cf86b pipeline: poll for the CI run instead of asking GitHub once
+10ddbbf 3.9.22: keep the attachment filename across the pasteboard fallback
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 100,716 | **-9,342** |
-| Строк Chat | 38,604 | 40,670 | +2,066 |
-| ChatViewModel | 6,850 | 7,534 | +684 |
+| Строк приложения | 110,058 | 101,062 | **-8,996** |
+| Строк Chat | 38,604 | 40,755 | +2,151 |
+| ChatViewModel | 6,850 | 7,594 | +744 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
