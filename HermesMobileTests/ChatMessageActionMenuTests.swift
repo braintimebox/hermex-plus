@@ -26,21 +26,27 @@ final class ChatMessageActionMenuTests: XCTestCase {
         XCTAssertEqual(menu.items.map(\.kind), [.edit, .fork, .copy, .reply, .forward, .save])
     }
 
-    func testMutatingActionsDisableWhileStreaming() throws {
+    func testStreamingDisablesOnlyHistoryMutatingActions() throws {
         let menu = try makeMenu(role: "assistant", hasActiveStream: true)
 
         let enabledByKind = Dictionary(uniqueKeysWithValues: menu.items.map { ($0.kind, $0.isEnabled) })
+        // HERMEX-FORK: a run in progress no longer closes the whole menu. These
+        // rewrite history the stream is still writing, so they wait for it.
         XCTAssertEqual(enabledByKind[.regenerate], false)
         XCTAssertEqual(enabledByKind[.fork], false)
+        // HERMEX-FORK: these read the message or label it locally, so they work mid-run.
         XCTAssertEqual(enabledByKind[.listen], true)
+        XCTAssertEqual(enabledByKind[.copy], true)
+        XCTAssertEqual(enabledByKind[.reply], true)
+        XCTAssertEqual(enabledByKind[.forward], true)
+        XCTAssertEqual(enabledByKind[.save], true)
+        XCTAssertEqual(enabledByKind[.pin], true)
 
         let uiMenu = menu.uiMenu()
         let disabledTitles = uiMenu.children.compactMap { $0 as? UIAction }
             .filter { $0.attributes.contains(.disabled) }
             .map(\.title)
-        // Reply / Forward / Save carry the tapped message into another screen, so
-        // they are held while a stream is live and the transcript is still shifting.
-        XCTAssertEqual(disabledTitles, ["Regenerate Response", "Fork From Here", "Reply", "Forward", "Save"])
+        XCTAssertEqual(disabledTitles, ["Regenerate Response", "Fork From Here"])
     }
 
     func testListenItemReflectsListeningState() throws {
