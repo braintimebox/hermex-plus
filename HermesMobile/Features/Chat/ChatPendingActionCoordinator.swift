@@ -131,6 +131,13 @@ final class ChatPendingActionCoordinator {
             // is unknown and must fail closed.
             guard response.ok == true || response.staleCleared == true else {
                 approvalErrorMessage = String(localized: "The server did not accept that response. The request is still waiting.")
+                // HERMEX-FORK: the answer did not arrive — logged in the shared delivery shape
+                // so the watchdog sees refusals of this kind as a group.
+                DeliveryTelemetry.record(
+                    DeliveryFailure(path: .approval, reason: .badRequest, retryable: false,
+                                    category: "approval.notAccepted"),
+                    screen: "ChatPendingActionCoordinator"
+                )
                 await refreshApprovalPending(sessionID: prompt.sessionID)
                 return false
             }
@@ -244,6 +251,10 @@ final class ChatPendingActionCoordinator {
             }
 
             clarificationErrorMessage = error.localizedDescription
+            // HERMEX-FORK: a clarification answer that did not arrive is a failed
+            // delivery like any other.
+            DeliveryTelemetry.record(error, path: .clarification,
+                                     screen: "ChatPendingActionCoordinator")
             delegate?.pendingActionCoordinatorDidFailAction(error)
             return false
         }

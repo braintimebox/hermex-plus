@@ -2866,11 +2866,23 @@ final class ChatViewModel {
         guard !isSendingVoiceNote, !isStartingChat else { return false }
         guard !isViewingCachedData else {
             setUploadAttachmentError(String(localized: "Reconnect to the server to send a voice note."))
+            // HERMEX-FORK: a voice note that cannot be sent is a failed delivery.
+            DeliveryTelemetry.record(
+                DeliveryFailure(path: .voiceNote, reason: .offline, retryable: true,
+                                category: "voice.offline"),
+                screen: "ChatViewModel"
+            )
             return false
         }
         guard !audioData.isEmpty else { return false }
         guard audioData.count <= PendingAttachment.maximumUploadBytes else {
             setUploadAttachmentError(PendingAttachment.uploadTooLargeMessage(filename: filename))
+            // HERMEX-FORK: same for a clip over the upload cap.
+            DeliveryTelemetry.record(
+                DeliveryFailure(path: .voiceNote, reason: .badRequest, retryable: false,
+                                category: "voice.tooLarge"),
+                screen: "ChatViewModel"
+            )
             return false
         }
         guard let sessionID else {
@@ -3042,6 +3054,18 @@ final class ChatViewModel {
 
             guard let streamID = response.streamId else {
                 sendErrorMessage = response.error ?? String(localized: "The server did not return a stream ID.")
+                // HERMEX-FORK: a refusal is a failed delivery like any other — recorded here, in
+                // the shared shape, so the daily watchdog groups it instead of the
+                // reason living only in a toast that scrolls away.
+                DeliveryTelemetry.record(
+                    DeliveryFailure(
+                        path: .send,
+                        reason: .badRequest,
+                        retryable: false,
+                        category: response.error == nil ? "server.noStreamId" : "server.refused"
+                    ),
+                    screen: "ChatViewModel"
+                )
                 rollbackOptimisticMessage(id: localMessageID)
                 cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
                 restorePendingAttachments(attachmentsToRestoreOnFailure)
@@ -3075,6 +3099,11 @@ final class ChatViewModel {
             }
             lastError = error
             sendErrorMessage = error.localizedDescription
+            // HERMEX-FORK: the send itself failed on the wire. The
+            // message stays in the draft (restored below) and the failure is
+            // recorded in the shared shape — reason, retryability, category — so
+            // the watchdog can group today's failures without being told.
+            DeliveryTelemetry.record(error, path: .send, screen: "ChatViewModel")
             rollbackOptimisticMessage(id: localMessageID)
             cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
             restorePendingAttachments(attachmentsToRestoreOnFailure)
@@ -3418,22 +3447,18 @@ final class ChatViewModel {
             // steer contract leaves Queue and Stop to the user, so the message
             // waits for the current turn instead of cancelling it: cancelling
             // here destroyed the agent's work in progress and surfaced a failure
-            // the user had not asked for. The reason is recorded, not shown.
-            HermexLogger.shared.log(
-                type: "event",
+            // the user had not asked for. Recorded in the shared delivery shape.
+            DeliveryTelemetry.record(
+                DeliveryFailure(path: .steer, reason: .badRequest, retryable: false,
+                                category: "steer.refused"),
                 screen: "ChatViewModel",
-                message: "steer refused",
-                extras: ["fallback": response.fallback ?? "unknown"]
+                detail: response.fallback ?? "unknown"
             )
         } catch {
             // A transport failure follows the same contract: the message waits,
             // the run lives. Previously this branch cancelled the stream too.
-            HermexLogger.shared.log(
-                type: "error",
-                screen: "ChatViewModel",
-                message: "steer failed",
-                extras: ["kind": String(describing: type(of: error))]
-            )
+            DeliveryTelemetry.record(error, path: .steer, screen: "ChatViewModel",
+                                     detail: "run kept alive")
         }
 
         let position = enqueueQueuedSlashMessage(message, attachments: attachmentCoordinator.consumePendingAttachments())
@@ -5997,6 +6022,20 @@ final class ChatViewModel {
             let sent = await sendMessage(next.text)
             if !sent {
                 queuedSlashMessages.insert(next, at: 0)
+                // HERMEX-FORK: the message did not arrive and is waiting again. Silently, on
+                // screen — but never silently in the log: a queue that cannot
+                // drain is exactly the damage ("сообщение не отправлено"), and the
+                // watchdog needs to see it without being told.
+                DeliveryTelemetry.record(
+                    DeliveryFailure(
+                        path: .queue,
+                        reason: .unknown,
+                        retryable: true,
+                        category: "outbox.requeued"
+                    ),
+                    screen: "ChatViewModel",
+                    detail: "depth \(queuedSlashMessages.count)"
+                )
             }
             attachmentCoordinator.replacePendingAttachments(savedAttachments)
             isDrainingQueuedSlashMessage = false
@@ -6378,6 +6417,10 @@ extension ChatViewModel: ChatAttachmentCoordinatorDelegate {
 
     func attachmentCoordinatorDidFail(_ error: Error) {
         lastError = error
+        // HERMEX-FORK: an attachment that never reached the server is a failed delivery like
+        // any other — the ".txt class" of bug — and it has to be visible in the
+        // log the first time it happens, not after the user mentions it.
+        DeliveryTelemetry.record(error, path: .attachment, screen: "ChatViewModel")
     }
 }
 

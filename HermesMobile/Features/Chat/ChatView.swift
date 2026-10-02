@@ -3560,7 +3560,7 @@ struct ChatView: View {
 
     private func prepareTranscriptForExplicitSend() {
         handleFollowEvent(.reset)
-        // Explicit send re-pins to the tail: the new message must be visible even
+        // HERMEX-FORK: explicit send re-pins to the tail — the new message must be visible even
         // if the reader had scrolled up. Mark near-bottom so the `.onChange`
         // channels let the scroll-to-latest run instead of silently suppressing
         // it (ownership alone gates them; this keeps the presentation signals
@@ -3696,6 +3696,14 @@ struct ChatView: View {
             didSend = await sendDraftMessage()
             if didSend {
                 deliveredSessionId = currentSessionId
+            } else {
+                // The rule is stated in the comment above; this is the line that
+                // makes a silent failure observable instead of invisible.
+                DeliveryTelemetry.record(
+                    DeliveryFailure(path: .scheduled, reason: .unknown, retryable: true,
+                                    category: "scheduled.sendNowFailed"),
+                    screen: "ChatView"
+                )
             }
         } else {
             // Target is another/new chat → send directly via API.

@@ -321,3 +321,86 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
         )
     }
 }
+
+
+// HERMEX-FORK: delivery-failure coverage (upstream has no such suite).
+/// The requirement these pin (owner, 02.10.2026): 3.9.30 has to catch *every*
+/// kind of failure that means "the message did not arrive" — five, ten or more
+/// different ones — and it must classify them the same way every time, so the
+/// daily watchdog groups them instead of drowning in free text. Only a transport
+/// that is down may reach the screen.
+final class DeliveryFailureTests: XCTestCase {
+    private func failure(_ error: Error, path: DeliveryPath = .send) -> DeliveryFailure {
+        DeliveryFailure.classify(error, path: path)
+    }
+
+    func testTransportDownIsTheOnlyThingTheUserIsTold() {
+        XCTAssertTrue(failure(APIError.network(underlying: URLError(.notConnectedToInternet))).showsToUser)
+        XCTAssertTrue(failure(APIError.network(underlying: URLError(.cannotConnectToHost))).showsToUser)
+        XCTAssertTrue(failure(APIError.network(underlying: URLError(.dnsLookupFailed))).showsToUser)
+    }
+
+    func testEverythingElseIsHiddenFromTheScreen() {
+        let hidden: [Error] = [
+            APIError.http(statusCode: 429, body: nil),
+            APIError.http(statusCode: 402, body: nil),
+            APIError.http(statusCode: 500, body: nil),
+            APIError.http(statusCode: 503, body: nil),
+            APIError.http(statusCode: 400, body: nil),
+            APIError.http(statusCode: 401, body: nil),
+            APIError.unauthorized,
+            APIError.network(underlying: URLError(.timedOut)),
+            APIError.network(underlying: URLError(.networkConnectionLost)),
+            APIError.network(underlying: URLError(.cancelled)),
+            APIError.decoding(underlying: NSError(domain: "test", code: 1)),
+            APIError.invalidServerURL,
+        ]
+        for error in hidden {
+            XCTAssertFalse(failure(error).showsToUser,
+                           "must stay off the screen: \(APIError.privacySafeLogCategory(for: error))")
+        }
+    }
+
+    func testEveryFailureTypeGetsItsOwnReason() {
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.notConnectedToInternet))).reason, .offline)
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.cannotConnectToHost))).reason, .unreachable)
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.timedOut))).reason, .timeout)
+        XCTAssertEqual(failure(APIError.http(statusCode: 408, body: nil)).reason, .timeout)
+        XCTAssertEqual(failure(APIError.http(statusCode: 429, body: nil)).reason, .rateLimited)
+        XCTAssertEqual(failure(APIError.http(statusCode: 402, body: nil)).reason, .quotaExhausted)
+        XCTAssertEqual(failure(APIError.http(statusCode: 502, body: nil)).reason, .serverError)
+        XCTAssertEqual(failure(APIError.http(statusCode: 400, body: nil)).reason, .badRequest)
+        XCTAssertEqual(failure(APIError.unauthorized).reason, .unauthorized)
+        XCTAssertEqual(failure(APIError.decoding(underlying: NSError(domain: "t", code: 1))).reason, .decoding)
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.cancelled))).reason, .cancelled)
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.badServerResponse))).reason, .unknown)
+    }
+
+    func testRetryabilityMatchesWhetherRepeatingCanDuplicateWork() {
+        // A chat start is not idempotent: a timeout or a dropped connection can
+        // follow a request the server already accepted, so neither is retryable.
+        XCTAssertFalse(failure(APIError.network(underlying: URLError(.timedOut))).retryable)
+        XCTAssertFalse(failure(APIError.network(underlying: URLError(.networkConnectionLost))).retryable)
+        // A request that provably never left may be repeated.
+        XCTAssertTrue(failure(APIError.network(underlying: URLError(.notConnectedToInternet))).retryable)
+        XCTAssertTrue(failure(APIError.network(underlying: URLError(.cannotConnectToHost))).retryable)
+        // Transient server states are worth another attempt.
+        XCTAssertTrue(failure(APIError.http(statusCode: 429, body: nil)).retryable)
+        XCTAssertTrue(failure(APIError.http(statusCode: 503, body: nil)).retryable)
+        // A refusal is not.
+        XCTAssertFalse(failure(APIError.http(statusCode: 400, body: nil)).retryable)
+    }
+
+    func testCategoryIsThePrivacySafeGroupTheLogAlreadyUses() {
+        XCTAssertEqual(failure(APIError.http(statusCode: 429, body: nil)).category, "http.429")
+        XCTAssertEqual(failure(APIError.network(underlying: URLError(.timedOut))).category,
+                       "network.url.\(URLError.Code.timedOut.rawValue)")
+        XCTAssertEqual(failure(APIError.unauthorized).category, "unauthorized")
+    }
+
+    func testEveryPathIsNameable() {
+        // A path added without a case here would silently lose its grouping.
+        XCTAssertEqual(Set(DeliveryPath.allCases.map(\.rawValue)).count, DeliveryPath.allCases.count)
+        XCTAssertEqual(failure(APIError.http(statusCode: 500, body: nil), path: .queue).path, .queue)
+    }
+}

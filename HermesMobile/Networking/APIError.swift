@@ -222,3 +222,189 @@ private extension String {
         isEmpty ? nil : self
     }
 }
+
+
+// HERMEX-FORK: delivery telemetry — one shape for every failed delivery
+// (upstream has no equivalent; the fork's rule is that nothing that fails to
+// arrive may be silent).
+// MARK: - Delivery failures, in one shape
+
+/// Every path a message can fail to travel, so no path can fail invisibly.
+///
+/// The rule this exists for (owner, 02.10.2026): the *taxonomy* of errors does
+/// not matter — five, ten, twenty different ones — what matters is that a
+/// message which did not arrive is never silent, never erases the draft, and
+/// never spends attention. So every delivery path reports its failure here, in
+/// one shape, and that shape decides two things: the log line, and whether the
+/// screen says anything at all.
+enum DeliveryPath: String, CaseIterable {
+    case send
+    case steer
+    case queue
+    case scheduled
+    case voiceNote
+    case attachment
+    case approval
+    case clarification
+    case share
+}
+
+/// Why the message did not arrive.
+enum DeliveryReason: String {
+    /// No usable network at all.
+    case offline
+    /// The host could not be reached (server down, wrong address, DNS).
+    case unreachable
+    case timeout
+    case rateLimited
+    case quotaExhausted
+    case serverError
+    case badRequest
+    case unauthorized
+    case decoding
+    case cancelled
+    case unknown
+
+    /// The two reasons that cannot be shown any other way: with the transport
+    /// down, nothing the user does will help and no amount of retrying is
+    /// visible. Everything else belongs to the log.
+    var isTransportDown: Bool { self == .offline || self == .unreachable }
+}
+
+struct DeliveryFailure: Equatable {
+    let path: DeliveryPath
+    let reason: DeliveryReason
+    /// Safe to repeat the same request without risking a duplicate side effect.
+    let retryable: Bool
+    /// The privacy-safe grouping the network layer already computes —
+    /// `http.429`, `network.url.-1009`, `decoding`. Logged verbatim so a failure
+    /// type nobody anticipated shows up as its own group in the watchdog
+    /// instead of collapsing into "unknown".
+    let category: String
+
+    /// The only case where the screen may say something.
+    var showsToUser: Bool { reason.isTransportDown }
+
+    private static func reason(
+        for urlError: URLError,
+        path: DeliveryPath
+    ) -> (DeliveryReason, Bool) {
+        switch urlError.code {
+        case .notConnectedToInternet, .dataNotAllowed:
+            return (.offline, true)
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+            return (.unreachable, true)
+        case .networkConnectionLost:
+            // Can fire *after* the server accepted the request, so it is a
+            // failure to hear back rather than a failure to send.
+            return (.timeout, false)
+        case .timedOut:
+            return (.timeout, false)
+        case .cancelled:
+            return (.cancelled, false)
+        default:
+            return (.unknown, false)
+        }
+    }
+
+    static func classify(_ error: Error, path: DeliveryPath) -> DeliveryFailure {
+        let category = APIError.privacySafeLogCategory(for: error)
+
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .network(let underlying):
+                if let urlError = underlying as? URLError {
+                    let (reason, retryable) = Self.reason(for: urlError, path: path)
+                    return DeliveryFailure(path: path, reason: reason,
+                                           retryable: retryable, category: category)
+                }
+                return DeliveryFailure(path: path, reason: .unknown,
+                                       retryable: false, category: category)
+            case .http(let statusCode, _):
+                switch statusCode {
+                case 408:
+                    return DeliveryFailure(path: path, reason: .timeout,
+                                           retryable: false, category: category)
+                case 429:
+                    return DeliveryFailure(path: path, reason: .rateLimited,
+                                           retryable: true, category: category)
+                case 402:
+                    return DeliveryFailure(path: path, reason: .quotaExhausted,
+                                           retryable: true, category: category)
+                case 500...599:
+                    return DeliveryFailure(path: path, reason: .serverError,
+                                           retryable: true, category: category)
+                case 401, 403:
+                    return DeliveryFailure(path: path, reason: .unauthorized,
+                                           retryable: false, category: category)
+                default:
+                    return DeliveryFailure(path: path, reason: .badRequest,
+                                           retryable: false, category: category)
+                }
+            case .unauthorized:
+                return DeliveryFailure(path: path, reason: .unauthorized,
+                                       retryable: false, category: category)
+            case .decoding:
+                return DeliveryFailure(path: path, reason: .decoding,
+                                       retryable: false, category: category)
+            case .invalidServerURL:
+                return DeliveryFailure(path: path, reason: .badRequest,
+                                       retryable: false, category: category)
+            }
+        }
+
+        if let urlError = error as? URLError {
+            let (reason, retryable) = Self.reason(for: urlError, path: path)
+            return DeliveryFailure(path: path, reason: reason,
+                                   retryable: retryable, category: category)
+        }
+
+        return DeliveryFailure(path: path, reason: .unknown,
+                               retryable: false, category: category)
+    }
+}
+
+/// The single funnel every failed delivery goes through.
+///
+/// One place, so a path cannot forget to report: the failure is classified the
+/// same way whether it came from a plain send, a steer, a queued message, a
+/// voice note, an attachment, a scheduled send or an approval. It logs, and it
+/// answers whether the caller may say anything on screen — which it may only
+/// when the transport itself is down.
+enum DeliveryTelemetry {
+    @discardableResult
+    static func record(
+        _ failure: DeliveryFailure,
+        screen: String,
+        detail: String? = nil
+    ) -> DeliveryFailure {
+        var extras: [String: Any] = [
+            "path": failure.path.rawValue,
+            "reason": failure.reason.rawValue,
+            "retryable": failure.retryable,
+            "category": failure.category,
+        ]
+        if let detail, !detail.isEmpty {
+            extras["detail"] = detail
+        }
+        HermexLogger.shared.log(
+            type: "event",
+            screen: screen,
+            message: "delivery failed",
+            extras: extras
+        )
+        return failure
+    }
+
+    /// Convenience for the call sites that hold an `Error`.
+    @discardableResult
+    static func record(
+        _ error: Error,
+        path: DeliveryPath,
+        screen: String,
+        detail: String? = nil
+    ) -> DeliveryFailure {
+        record(DeliveryFailure.classify(error, path: path),
+               screen: screen, detail: detail)
+    }
+}
