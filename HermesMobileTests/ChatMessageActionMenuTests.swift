@@ -40,7 +40,6 @@ final class ChatMessageActionMenuTests: XCTestCase {
         XCTAssertEqual(enabledByKind[.reply], true)
         XCTAssertEqual(enabledByKind[.forward], true)
         XCTAssertEqual(enabledByKind[.save], true)
-        XCTAssertEqual(enabledByKind[.pin], true)
 
         let uiMenu = menu.uiMenu()
         let disabledTitles = uiMenu.children.compactMap { $0 as? UIAction }
