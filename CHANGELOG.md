@@ -1,3 +1,5 @@
+## 3.9.30 — share opens Hermex Plus and not the App Store app: the fork declares its own URL scheme (`hermesplus`) instead of upstream's `hermes-agent`, which both installed apps claimed so iOS could hand the share round-trip to the other one (a test pins it, like gate 14 does for the bundle id); Send during a response no longer stops the run — a refused steer queues the message instead of cancelling the agent's work in progress and reporting a failure nobody asked for; Reply, Forward, Save and Pin stay available while the agent writes (a pin is screen-local state, the rest only read), while Edit, Fork and Regenerate stay disabled; steer outcomes and reasons are logged (gate 17)
+
 ## 3.9.22 — share: fallback to a named pasteboard when the app group container is unreachable (sideloaded builds lose the entitlement), with the transport logged; composer: 8pt horizontal margin
 
 ## 3.9.21 — composer: widen layout to 8 pt horizontal margin (closer to edges while keeping safe clearance from hardware rounded corners)
