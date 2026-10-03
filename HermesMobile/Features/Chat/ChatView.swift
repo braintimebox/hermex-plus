@@ -2391,6 +2391,27 @@ struct ChatView: View {
             // ("shared message kept hanging after send"). Clear it on success,
             // like the standard path; on failure the text is preserved below.
             draftMessage = ""
+
+            // HERMEX-FORK: the second half of that fix, and the one that reached
+            // the user. Clearing `draftMessage` clears only the in-memory
+            // composer; the message had also been written to the durable draft
+            // store, and this path never told the store it was consumed — so
+            // leaving the chat and coming back ran `hydrateDraft()`, read the
+            // sent text out of the store, and put it back in the composer as a
+            // draft (reported 03.10.2026). The standard path resolves the same
+            // way a few lines below in `sendStandardMessage`; both successful
+            // paths now end identically, which is what the regression test
+            // `testBothSuccessfulSendPathsClearTheDurableDraft` pins.
+            let resolvedContent = draftStore.resolveSubmission(
+                submitted: ComposerDraftContent(text: submittedDraft, quotes: submittedContent.quotes),
+                current: ComposerDraftContent(text: draftMessage, quotes: draftQuotes),
+                didStart: true,
+                draftWasEdited: draftRevision != submittedDraftRevision,
+                for: draftKey
+            )
+            draftMessage = resolvedContent.text
+            draftQuotes = resolvedContent.quotes
+
             ChatHaptics.messageSent(isEnabled: isHapticsEnabled)
             // Composer stays visible after send (always-visible mode).
         }

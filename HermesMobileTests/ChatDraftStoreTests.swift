@@ -379,6 +379,56 @@ final class ChatDraftStoreTests: XCTestCase {
         XCTAssertNil(clearedDraft)
     }
 
+    /// HERMEX-FORK: pins the invariant the two send paths must share.
+    ///
+    /// REPORTED 03.10.2026: a message sent while an answer was already streaming
+    /// came back as a draft — leave the chat, re-enter, and the text just sent was
+    /// in the composer again. Cause: `ChatView.sendDraftMessage` has two
+    /// successful branches, and only `sendStandardMessage` told the store the
+    /// draft was consumed (`resolveSubmission`); the streaming branch cleared the
+    /// in-memory composer alone, so the durable copy survived `hydrateDraft()`.
+    ///
+    /// The store was never wrong — this pins the *sequence* both paths must run,
+    /// and its first half records what the old streaming behaviour left behind, so
+    /// the failure it prevents is named rather than implied.
+    func testSuccessfulSendLeavesNoDurableDraftForEitherSendPath() async {
+        let persistence = RecordingChatDraftPersistence()
+        let store = ChatDraftStore(persistence: persistence, debounceDuration: .seconds(10))
+        let key = ChatDraftKey(
+            serverID: "https://example.com",
+            context: .session("chat-1")
+        )
+        let typed = "message sent while the agent was still answering"
+
+        // The streaming path BEFORE the fix: composer cleared, store not told.
+        // This is the residue that came back on the next hydrate.
+        store.setDraft(typed, for: key)
+        let untouched = await store.draft(for: key)
+        XCTAssertEqual(
+            untouched?.text,
+            typed,
+            "a durable copy with no consumption call is exactly the reported residue"
+        )
+
+        // Both paths now end here: composer empty, then the store told the send
+        // was accepted. `draftWasEdited: false` is the no-typing-during-request
+        // case, which is the one that must clear.
+        let resolved = store.resolveSubmission(
+            submittedText: typed,
+            currentText: "",
+            didStart: true,
+            draftWasEdited: false,
+            for: key
+        )
+
+        XCTAssertEqual(resolved, "")
+        let afterSend = await store.draft(for: key)
+        XCTAssertNil(
+            afterSend,
+            "neither send path may leave the sent text behind: re-entering the chat must not restore it"
+        )
+    }
+
     func testFailedSubmissionKeepsAttachmentsStaged() async {
         let persistence = RecordingChatDraftPersistence()
         let store = ChatDraftStore(persistence: persistence, debounceDuration: .seconds(10))
