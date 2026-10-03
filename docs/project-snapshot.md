@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | eb1ecde |
-| Версия | 3.9.30 |
-| Обновлено | 2026-10-02 |
+| HEAD | e2c9968 |
+| Версия | 3.9.31 |
+| Обновлено | 2026-10-03 |
 
 **Последние коммиты:**
 ```
+e2c9968 fix(tests): remove uninstantiated pin action assertion from streaming menu test
+962d867 3.9.30: release 3.9.30
 eb1ecde fix(tests): update ChatMessageActionMenuTests for mid-run read actions
 334ecc6 fix(delivery): catch every kind of "the message did not arrive"
 5885496 3.9.30: share opens this app, sending never stops the run
 9593065 fix(share): a scheme of our own, and never stop a run in order to send
-06cf86b pipeline: poll for the CI run instead of asking GitHub once
-10ddbbf 3.9.22: keep the attachment filename across the pasteboard fallback
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 101,062 | **-8,996** |
-| Строк Chat | 38,604 | 40,755 | +2,151 |
-| ChatViewModel | 6,850 | 7,594 | +744 |
+| Строк приложения | 110,058 | 101,142 | **-8,916** |
+| Строк Chat | 38,604 | 40,806 | +2,202 |
+| ChatViewModel | 6,850 | 7,615 | +765 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |

@@ -1,9 +1,36 @@
 name: Build Hermes Plus
 
-# Tests gate the build. The suite runs BEFORE the IPA is packaged so a broken
-# change cannot reach a device: previously build-ipa.yml packaged and shipped
-# whatever landed on main, and the 92 XCTest files were never executed anywhere
-# (pr-ci.yml is pull_request-only and this repo pushes straight to main).
+# Tests gate the RELEASE, not the compile.
+#
+# Measured on run 37046212026 (v3.9.30, success) — 23 min wall clock:
+#   Release guard       26 s
+#   Build for testing  248 s
+#   Test               689 s   <-- 50% of the whole run
+#   Build for device   368 s   <-- a SECOND cold build, on its own runner
+#   packaging/release   57 s
+#
+# Two changes (02.10.2026), each aimed at one of those two facts:
+#
+#  1. Tests and the device build run in PARALLEL. They used to be serial jobs —
+#     `Package IPA: needs: test` — and each paid for its own cold DerivedData on
+#     its own runner, so ~17.6 min went on waiting for one after the other.
+#     Nothing in the device build depends on the suite, so they now start
+#     together and the wall clock becomes max(test, build) instead of the sum.
+#
+#  2. Tests run 4 simulator clones instead of one. The suite is ~2480 cases
+#     through a single worker (`-parallel-testing-worker-count 1`), which is why
+#     the Test step alone was 11.5 min. Xcode clones the destination per worker.
+#
+# The gate keeps its STRENGTH: publication moved to its own `publish` job with
+# `needs: [test, build]`, so a red suite still cannot produce a Release. Only the
+# order changed — the tests no longer block the compile, they block the publish.
+# Publication runs on ubuntu-latest: creating a Release needs no macOS, and the
+# IPA travels as an artifact.
+#
+# Deliberately NOT done: caching DerivedData between runs. The two heavy jobs use
+# different runners with no shared cache, the repository is public so minutes are
+# not billed, and a stale-cache hit that reports an old result is a worse failure
+# than a slow run. Wall-clock is the only thing at stake.
 #
 # Docs-only pushes (README.md) still skip the whole run.
 
@@ -24,8 +51,10 @@ on:
 # rather than be killed half-way, which would leave a version without an
 # artifact. Queueing (rather than cancelling) keeps that guarantee.
 #
-# This is about wall-clock and release hygiene, not minutes: the repository is
-# public, so hosted-runner minutes are not billed at all.
+# Consequence worth knowing when reading timings: a push made while a run is
+# live waits for it. That wait shows up in the run's `created_at` → `run_started_at`
+# gap, NOT in its duration — a "slow" 30 min delivery is often 23 min of build
+# plus time spent queued behind the previous run.
 concurrency:
   group: build-ipa-${{ github.ref }}
   cancel-in-progress: false
@@ -41,9 +70,9 @@ jobs:
       - name: Check release invariants
         run: python3 scripts/release-check.py --allow-untagged
       - name: Check local gates
-        # Runs all seven gates the pre-push hook runs, so a push made with
+        # Runs all the gates the pre-push hook runs, so a push made with
         # `--no-verify` (which skips the hook entirely) is still caught here.
-        # Gates 4 and 5 are advisory and print warnings without failing; gates 6
+        # Gates 4 and 5 are advisory and print warnings without failing; gate 6
         # (test-lint) and 7 (doc references) are blocking.
         run: |
           python3 -c "import yaml, sys" 2>/dev/null || pip install -q pyyaml
@@ -59,6 +88,9 @@ jobs:
       SCHEME: HermesMobile
       DERIVED_DATA_PATH: DerivedData
       RESULT_BUNDLE_PATH: TestResults.xcresult
+      # One worker was the single largest cost in the run: ~2480 cases serially.
+      # Four clones is what the runner's cores can actually use.
+      TEST_WORKERS: 4
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -115,9 +147,9 @@ jobs:
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             -resultBundlePath "${RESULT_BUNDLE_PATH}" \
             -parallel-testing-enabled YES \
-            -parallel-testing-worker-count 1 \
+            -parallel-testing-worker-count "${TEST_WORKERS}" \
             CODE_SIGNING_ALLOWED=NO
-          echo "Tests: $((SECONDS - start_seconds))s"
+          echo "Tests (${TEST_WORKERS} workers): $((SECONDS - start_seconds))s"
 
       - name: Report test failures
         # Runs even when the suite fails. Without this, a red run shows only
@@ -192,17 +224,15 @@ jobs:
 
   build:
     name: Package IPA
-    needs: test
+    # Runs ALONGSIDE `test`, not after it. The IPA is built either way; whether
+    # it is PUBLISHED is decided by the `publish` job, which needs both.
+    needs: guard
     runs-on: macos-26
     timeout-minutes: 60
-    # Scoped to this job, not the workflow: only Create Release needs to write.
-    # Without it the GITHUB_TOKEN has read-only contents and the step fails with
-    # 403 "Resource not accessible by integration" — after the tests and the IPA
-    # build have both passed, so the failure lands on the last step and reads as a
-    # release-configuration problem rather than a missing permission. Unnoticed
-    # until now because the run never got that far while the suite was red.
-    permissions:
-      contents: write
+    env:
+      PROJECT_PATH: HermesMobile.xcodeproj
+      SCHEME: HermesMobile
+      DERIVED_DATA_PATH: DerivedData
     steps:
       - uses: actions/checkout@v4
 
@@ -211,15 +241,18 @@ jobs:
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
 
       - name: Build for device
-        run: >
-          xcodebuild
-          -project HermesMobile.xcodeproj
-          -scheme HermesMobile
-          -configuration Release
-          -destination 'generic/platform=iOS'
-          -derivedDataPath DerivedData
-          CODE_SIGNING_ALLOWED=NO
-          build
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          echo "Build for device: $((SECONDS - start_seconds))s"
 
       - name: Locate .app
         run: |
@@ -230,11 +263,42 @@ jobs:
           mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "HermesPlus-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
 
       - name: Upload IPA
+        # The artifact is what `publish` hands to the Release — and, on a red
+        # run, the only place the IPA stays without being shipped to anyone.
         uses: actions/upload-artifact@v4
         with:
-          name: HermesPlus-${{ steps.version.outputs.VER }}-unsigned
+          name: ipa
           path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30
+
+  publish:
+    name: Publish release
+    # THE GATE. Both sides must be green, exactly as when `Package IPA` waited on
+    # the test job: a failed suite still cannot publish.
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only on a real push. A manual workflow_dispatch run (used to verify the
+    # suite without releasing) must not publish a release.
+    if: github.event_name == 'push'
+    # Scoped to this job, not the workflow: only the Release needs to write.
+    # Without it the GITHUB_TOKEN has read-only contents and the step fails with
+    # 403 "Resource not accessible by integration" — after everything else has
+    # passed, so the failure lands on the last step and reads as a release
+    # configuration problem rather than a missing permission.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ipa
 
       - name: Guard — never re-publish a delivered version
         # The single most important check in this workflow.
@@ -261,7 +325,6 @@ jobs:
         # the commit it is judging so a skipped publish is never mistaken for a
         # failed one in the log.
         id: delivered
-        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -291,7 +354,7 @@ jobs:
         # on which run happened to publish first rather than on which commit the
         # version was finalised in.
         id: tagging
-        if: github.event_name == 'push' && steps.delivered.outputs.skip != 'true'
+        if: steps.delivered.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -308,10 +371,9 @@ jobs:
           fi
 
       - name: Create Release
-        # Only on a real push. A manual workflow_dispatch run (used to verify
-        # the suite without releasing) must not publish a release.
-        # And never when the guard above found a delivered version.
-        if: github.event_name == 'push' && steps.delivered.outputs.skip != 'true'
+        # Never when the guard above found a delivered version: a Release that
+        # already carries an artifact is not re-published.
+        if: steps.delivered.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VER }}
