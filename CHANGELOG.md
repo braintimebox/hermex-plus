@@ -1,3 +1,5 @@
+## 3.9.32 — goal card: the notice clears itself after three seconds — the card is one line with its own dismissal, a send clears it, and now the timer does too, so a status nobody acts on cannot hold reading space; all three exits share one method so they cannot drift apart
+
 ## 3.9.31 — share: the payload no longer depends on the URL arriving — the drain runs on activation and the destination dialog is re-asked when the app returns from the extension, so a share sent while Hermex was backgrounded lands in the chosen chat instead of opening an empty one (measured 02.10 20:54: the payload was reserved while backgrounded, the dialog was requested with the scene inactive and dropped, and the text was retyped by hand); the goal status card is one line with its own dismissal and clears on the next send, instead of holding a third of the transcript with the keyboard up until the chat was reloaded; pipeline: tests and the device build run in parallel and publication sits behind both (needs: [test, build]) so a red suite still cannot release
 
 ## 3.9.30 — release 3.9.30

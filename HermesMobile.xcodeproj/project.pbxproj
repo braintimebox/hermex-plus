@@ -2513,7 +2513,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesMobile/Resources/HermesMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				DEVELOPMENT_ASSET_PATHS = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
@@ -2522,8 +2522,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2543,7 +2543,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HermesMobile/Resources/HermesMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				DEVELOPMENT_ASSET_PATHS = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesMobile/Resources/Info.plist;
@@ -2552,8 +2552,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2570,7 +2570,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2578,8 +2578,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2595,7 +2595,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2603,8 +2603,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2621,7 +2621,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesShareExtension/Resources/HermesShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesShareExtension/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -2630,8 +2630,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2650,7 +2650,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = HermesShareExtension/Resources/HermesShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesShareExtension/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -2659,8 +2659,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2678,7 +2678,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesLiveActivityWidget/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -2687,8 +2687,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2706,7 +2706,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202610031345;
+				CURRENT_PROJECT_VERSION = 202610031736;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HermesLiveActivityWidget/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -2715,8 +2715,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.31;
-				MARKETING_VERSION = 3.9.31;
+				MARKETING_VERSION = 3.9.32;
+				MARKETING_VERSION = 3.9.32;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
