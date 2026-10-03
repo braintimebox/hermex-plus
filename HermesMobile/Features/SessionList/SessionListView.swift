@@ -22,9 +22,6 @@ struct SessionListView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    // HERMEX-FORK: needed to re-ask for the share destination when the app
-    // returns from the extension. See the `onChange(of: scenePhase)` below.
-    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: SessionListViewModel
     @State private var navigationState: SessionNavigationState
     @State private var sessionPendingRename: SessionSummary?
@@ -404,18 +401,12 @@ struct SessionListView: View {
             .onChange(of: pendingSharedImport) {
                 openPendingSharedImportIfNeeded()
             }
-            // HERMEX-FORK: the share payload arrives while the app is in the
-            // background and asks for the destination dialog in that same
-            // instant. SwiftUI drops a presentation requested by an inactive
-            // scene, and nothing re-asked: the value had not changed again and
-            // this view was already on screen, so `onAppear` never fired a second
-            // time. The reservation stayed staged and the user saw only an empty
-            // chat (measured 02.10.2026 20:54:53 → 20:55:06). Re-asking here, on
-            // the activation that follows the share, is what makes the choice
-            // appear instead of being silently discarded.
-            .onChange(of: scenePhase) {
-                reaskShareDestinationIfActive()
-            }
+            // HERMEX-FORK: the activation hook for an incoming share lives in
+            // `sessionListSurface`, not here. This chain is long enough that one
+            // more modifier fails to type-check as a single expression (runs
+            // 37121532212 at line 430, 37122039325 at line 427) — the cost is the
+            // chain, not the closure, so the hook was moved to an expression with
+            // room for it instead of being reworded here.
             .onChange(of: pendingDeepLinkedSessionID) {
                 // A deep link or a new-chat request is a navigation intent:
                 // close the bots sheet first, then open the session.
@@ -520,6 +511,12 @@ struct SessionListView: View {
         ZStack(alignment: .bottomTrailing) {
             Color(.systemBackground)
                 .ignoresSafeArea()
+                // HERMEX-FORK: the share-activation hook rides here, on a leaf
+                // whose chain is two nodes long, instead of in `body` — see the
+                // note at the top of the body chain. The observer reports every
+                // return to the foreground; the callback decides whether a staged
+                // share still needs its destination dialog.
+                .background(SceneActivationObserver { reaskShareDestinationIfActive() })
 
             content
 
@@ -2133,5 +2130,37 @@ private struct ExistingSessionPicker: View {
                 }
             }
         }
+    }
+}
+
+
+/// HERMEX-FORK: reports every return of the app to the foreground.
+///
+/// WHY THIS EXISTS
+///     A share extension cannot reliably launch its containing app — Apple
+///     permits that for Today widgets only, `extensionContext.open` works in a
+///     debug session and fails in a release build, and iOS 18 blocks
+///     `UIApplication.openURL(_:)` outright — so the payload arrives through the
+///     shared container while the app is still in the background. The destination
+///     dialog requested at that instant is discarded, because SwiftUI presents
+///     only from an active scene, and nothing re-asked: the reservation stayed
+///     staged and the user saw an empty chat (measured 02.10.2026 20:54:53 →
+///     20:55:06, the shared text retyped by hand afterwards).
+///
+///     It is its own view rather than an `.onChange(of: scenePhase)` inside
+///     `SessionListView.body` on purpose: that chain already refuses to
+///     type-check with one more modifier (runs 37121532212 at line 430 and
+///     37122039325 at line 427), while this chain is two nodes long.
+private struct SceneActivationObserver: View {
+    let onActivate: () -> Void
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        Color.clear
+            .onChange(of: scenePhase) {
+                guard scenePhase == .active else { return }
+                onActivate()
+            }
     }
 }
