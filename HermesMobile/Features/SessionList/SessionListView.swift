@@ -414,10 +414,7 @@ struct SessionListView: View {
             // the activation that follows the share, is what makes the choice
             // appear instead of being silently discarded.
             .onChange(of: scenePhase) {
-                guard scenePhase == .active else { return }
-                if pendingSharedReservation != nil {
-                    showSharedDestinationPicker = true
-                }
+                reaskShareDestinationIfActive()
             }
             .onChange(of: pendingDeepLinkedSessionID) {
                 // A deep link or a new-chat request is a navigation intent:
@@ -1480,6 +1477,30 @@ struct SessionListView: View {
         } catch {
             authManager.handleAPIError(error)
         }
+    }
+
+    /// HERMEX-FORK: re-ask for the share destination when the app comes back to
+    /// the foreground.
+    ///
+    /// WHY THIS EXISTS
+    ///     The payload arrives while the app is in the background, and the
+    ///     destination dialog is requested in that same instant — SwiftUI
+    ///     discards a presentation asked for by an inactive scene. Nothing
+    ///     re-asked: `pendingSharedImport` had not changed again, and this view
+    ///     was already on screen, so `onAppear` never fired a second time. The
+    ///     reservation stayed staged and the user saw only an empty chat
+    ///     (measured 02.10.2026 20:54:53 → 20:55:06, then the shared text was
+    ///     retyped by hand).
+    ///
+    ///     The body lives here rather than inline in `body` deliberately: the
+    ///     `body` chain is long enough that a closure with a `guard` and an `if`
+    ///     inside it pushed the Swift type checker past its limit — "unable to
+    ///     type-check this expression in reasonable time" at the modifier's own
+    ///     line, in run 37121532212.
+    private func reaskShareDestinationIfActive() {
+        guard scenePhase == .active else { return }
+        guard pendingSharedReservation != nil else { return }
+        showSharedDestinationPicker = true
     }
 
     private func openPendingSharedImportIfNeeded() {
