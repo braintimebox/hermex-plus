@@ -73,6 +73,49 @@ def git(*args: str, check: bool = True) -> str:
     return sh(["git", *args], check=check)
 
 
+# The exact paths a release commit is allowed to carry. Keep in step with
+# `git_commit_push`, which stages precisely these plus scripts/ and .github/.
+RELEASE_OWNED = {
+    "VERSION",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/project-snapshot.md",
+    "docs/hermesplus-status.yaml",
+    "HermesMobile.xcodeproj/project.pbxproj",
+}
+
+
+def dirty_product_paths() -> list[str]:
+    """Changes a release commit would leave behind — product code, mostly.
+
+    WHY THIS EXISTS
+        `git_commit_push` stages a fixed set of paths, so an uncommitted product
+        change does NOT travel with the release commit. On 03.10.2026 that is
+        exactly what happened: the bump for 3.9.31 was committed and pushed with
+        none of its fixes still in the tree, CI started building the empty
+        content, and only a manual cancel kept a version with no substance from
+        being published. The invariant is that one version carries exactly the
+        code its tag points at, so the release refuses to start instead of
+        guessing — commit the code first, then bump.
+    """
+    paths = []
+    # `git status --porcelain` is avoided on purpose: its first two columns are
+    # the status, so a parser that strips the output loses the leading space of
+    # " M path" and eats the first character of the filename (measured: the guard
+    # reported "ermesMobile/…"). These three commands return bare paths.
+    for args in (
+        ("diff", "--name-only"),
+        ("diff", "--name-only", "--cached"),
+        ("ls-files", "--others", "--exclude-standard"),
+    ):
+        paths.extend(p for p in (git(*args) or "").splitlines() if p.strip())
+
+    return sorted({
+        p for p in paths
+        if p not in RELEASE_OWNED and not p.startswith(("scripts/", ".github/"))
+    })
+
+
 def current_version() -> str:
     return VERSION.read_text(encoding="utf-8").strip()
 
@@ -525,6 +568,18 @@ def cmd_release(next_v: str | None, close_ids: list[int], note: str,
         print("PLAN: bump -> changelog -> close %s -> snapshot -> gate -> push "
               "-> build -> download -> deliver" % close_ids)
         return 0
+
+    # Refuse to bump a tree whose code is not committed yet. See
+    # `dirty_product_paths` — the bump commit cannot carry product changes, so
+    # releasing here would publish a version without them.
+    blocked = dirty_product_paths()
+    if blocked:
+        print("BLOCKED — these changes would NOT be part of the release commit:")
+        for path in blocked:
+            print(f"    {path}")
+        print("    commit them first, then release (the bump is its own commit,")
+        print("    it is not a carrier for code).")
+        return 1
 
     write_version(nxt)
     prepend_changelog(nxt, note)
