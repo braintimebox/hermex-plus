@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 09f5122 |
-| Версия | 3.9.32 |
+| HEAD | 9e6caef |
+| Версия | 3.9.33 |
 | Обновлено | 2026-10-03 |
 
 **Последние коммиты:**
 ```
+9e6caef fix(chat): a message sent during a run no longer comes back as a draft
+ea14a10 3.9.32: goal card: the notice clears itself after three seconds — the card is one line with its own dismissal, a send clears it, and now the timer does too, so a status nobody acts on cannot hold reading space; all three exits share one method so they cannot drift apart
 09f5122 fix(chat): a pinned notice clears itself after three seconds
 abaf828 ci: reject the parallel test workers, keep the parallel jobs (measured)
 2b81008 fix(session): drop the redundant phase check from the share re-ask
 da02df8 fix(session): move the share-activation hook to a leaf view, off the body chain
-14304f3 fix(session): move the share re-ask body out of the body chain
-7df57bf fix(session,release): put the share re-ask in the view that owns the state; refuse a release with uncommitted code
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 287 | -45 |
-| Строк приложения | 110,058 | 101,249 | **-8,809** |
-| Строк Chat | 38,604 | 40,855 | +2,251 |
+| Строк приложения | 110,058 | 101,270 | **-8,788** |
+| Строк Chat | 38,604 | 40,876 | +2,272 |
 | ChatViewModel | 6,850 | 7,664 | +814 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
