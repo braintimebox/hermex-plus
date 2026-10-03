@@ -8865,6 +8865,34 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertNil(viewModel.activeStreamID)
     }
 
+    /// HERMEX-FORK: a pinned notice is a status, not history. Owner's rule
+    /// (03.10.2026): it is visible for **at most three seconds** — "если вообще оно
+    /// должно воровать место для чтения". This pins the automatic exit; the ✕ and
+    /// the send are the other two, and all three run through one method so they
+    /// cannot drift apart.
+    @MainActor
+    func testPinnedNoticeClearsItselfAfterTheDelay() async throws {
+        let dismissalDelay = ManualAsyncDelay()
+        let viewModel = try makeViewModel(
+            pinnedNoticeDismissDelay: { await dismissalDelay.wait() }
+        ) { request in
+            XCTFail("Unexpected request: \(request.url?.path ?? "nil")")
+            throw URLError(.badURL)
+        }
+
+        viewModel.pinLocalNoticeMessage("Goal resumed: ship it")
+        XCTAssertEqual(viewModel.pinnedLocalNotices, ["Goal resumed: ship it"])
+        await dismissalDelay.waitForRegistrationCount(1)
+
+        await dismissalDelay.resumeNext()
+        await drainMainActor()
+
+        XCTAssertTrue(
+            viewModel.pinnedLocalNotices.isEmpty,
+            "the three-second timer clears it with no user action at all"
+        )
+    }
+
     @MainActor
     func testSuccessfulSteeringUsesOneTransientConfirmationAndRestartsDismissal() async throws {
         let streamClient = SpySSEStreamingClient()
@@ -9634,6 +9662,11 @@ final class ChatViewModelSendTests: XCTestCase {
         steeringConfirmationDismissDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(nanoseconds: 3_000_000_000)
         },
+        // HERMEX-FORK: mirrors the steering delay so the three-second notice timer
+        // is drivable in tests instead of being slept through.
+        pinnedNoticeDismissDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 3_000_000_000)
+        },
         streamingScrollCoalescingDelayNanoseconds: UInt64 = 16_000_000,
         speechSynthesizerFactory: @escaping () -> any ChatSpeechSynthesizing = { AVSpeechSynthesizer() },
         listenAudioSession: (any ListenAudioSessionControlling)? = nil,
@@ -9668,6 +9701,8 @@ final class ChatViewModelSendTests: XCTestCase {
             liveActivityManager: liveActivityManager,
             pollingIntervals: pollingIntervals,
             steeringConfirmationDismissDelay: steeringConfirmationDismissDelay,
+            // HERMEX-FORK: ours — see the property in ChatViewModel.
+            pinnedNoticeDismissDelay: pinnedNoticeDismissDelay,
             streamingScrollCoalescingDelayNanoseconds: streamingScrollCoalescingDelayNanoseconds,
             speechSynthesizerFactory: speechSynthesizerFactory,
             // Default to a spy so unit tests never drive the live shared AVAudioSession.

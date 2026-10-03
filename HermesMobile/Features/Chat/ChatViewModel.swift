@@ -747,6 +747,14 @@ final class ChatViewModel {
     private let pollingIntervals: ChatPollingIntervals
     private let steeringConfirmationDismissDelay: @Sendable () async throws -> Void
     @ObservationIgnored private var steeringConfirmationDismissTask: Task<Void, Never>?
+    // HERMEX-FORK: a pinned notice is a status, not history, and it must not hold
+    // reading space hostage. Owner's rule (03.10.2026): the card is visible for at
+    // most three seconds — "должно быть видно максимум 3 секунды если вообще оно
+    // должно воровать место для чтения". It still clears early on a send and on
+    // its own ✕; this is the third way out, the automatic one. Injectable so tests
+    // can drive the dismissal deterministically.
+    private let pinnedNoticeDismissDelay: @Sendable () async throws -> Void
+    @ObservationIgnored private var pinnedNoticeDismissTask: Task<Void, Never>?
     // Real-time window over which rapid streaming updates coalesce into a single
     // scroll trigger / first content flush. Injectable so tests can drive
     // coalescing deterministically; production keeps the 16ms default.
@@ -844,6 +852,11 @@ final class ChatViewModel {
         steeringConfirmationDismissDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(nanoseconds: 3_000_000_000)
         },
+        // HERMEX-FORK: same three seconds the goal card used to hold the screen
+        // for — the automatic exit for a pinned notice (see the property above).
+        pinnedNoticeDismissDelay: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: 3_000_000_000)
+        },
         streamingScrollCoalescingDelayNanoseconds: UInt64 = 16_000_000,
         streamingWordRevealCadenceNanoseconds: UInt64 = 16_000_000,
         streamingMaxRevealLagNanoseconds: UInt64 = 2_000_000_000,
@@ -897,6 +910,8 @@ final class ChatViewModel {
         )
         self.pollingIntervals = pollingIntervals
         self.steeringConfirmationDismissDelay = steeringConfirmationDismissDelay
+        // HERMEX-FORK: the pinned-notice timer (three seconds, owner's rule).
+        self.pinnedNoticeDismissDelay = pinnedNoticeDismissDelay
         self.streamingScrollCoalescingDelayNanoseconds = streamingScrollCoalescingDelayNanoseconds
         self.streamingWordRevealCadenceNanoseconds = streamingWordRevealCadenceNanoseconds
         self.streamingMaxRevealLagNanoseconds = streamingMaxRevealLagNanoseconds
@@ -916,6 +931,8 @@ final class ChatViewModel {
     deinit {
         backgroundPollTask?.cancel()
         steeringConfirmationDismissTask?.cancel()
+        // HERMEX-FORK: the pinned-notice timer is ours, so it is cancelled here too.
+        pinnedNoticeDismissTask?.cancel()
         pendingStreamingScrollTriggerTask?.cancel()
         pendingStreamingContentFlushTask?.cancel()
         listenPreparationTask?.cancel()
@@ -2812,7 +2829,7 @@ final class ChatViewModel {
         // continue, to kick it off" — so the send IS its acknowledgement. It goes
         // here, at the point the send is committed, rather than waiting for the
         // next chat reload.
-        pinnedLocalNotices.removeAll()
+        dismissAllLocalNotices()
 
         let localMessageID = "local-\(UUID().uuidString)"
         let attachmentPreparation = attachmentCoordinator.prepareForSend(localMessageID: localMessageID)
@@ -4538,6 +4555,7 @@ final class ChatViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         pinnedLocalNotices.append(trimmed)
+        schedulePinnedNoticeDismissal()
     }
 
     /// HERMEX-FORK: a pinned notice used to be clearable only by reloading the
@@ -4550,9 +4568,40 @@ final class ChatViewModel {
     /// by the same value.
     func dismissLocalNotice(_ text: String) {
         pinnedLocalNotices.removeAll { $0 == text }
+        if pinnedLocalNotices.isEmpty {
+            pinnedNoticeDismissTask?.cancel()
+            pinnedNoticeDismissTask = nil
+        }
         if steeringConfirmationNotice == text {
             dismissSteeringConfirmation()
         }
+    }
+
+    /// HERMEX-FORK: the automatic way out, and the one the owner actually asked
+    /// for (03.10.2026): the card is visible for **at most three seconds** — "должно
+    /// быть видно максимум 3 секунды если вообще оно должно воровать место для
+    /// чтения". The timer is restarted rather than stacked, so a second notice does
+    /// not leave the first one stranded, and it is cancelled the moment the notices
+    /// go early — by a send or by the ✕.
+    private func schedulePinnedNoticeDismissal() {
+        pinnedNoticeDismissTask?.cancel()
+        let dismissDelay = pinnedNoticeDismissDelay
+        pinnedNoticeDismissTask = Task { @MainActor [weak self] in
+            do {
+                try await dismissDelay()
+            } catch {
+                return
+            }
+            self?.dismissAllLocalNotices()
+        }
+    }
+
+    /// Clears every pinned notice and the timer behind them. Single place, so the
+    /// three exits (timer, ✕, send) cannot drift apart.
+    private func dismissAllLocalNotices() {
+        pinnedNoticeDismissTask?.cancel()
+        pinnedNoticeDismissTask = nil
+        pinnedLocalNotices.removeAll()
     }
 
     private func showSteeringConfirmation(_ text: String) {
