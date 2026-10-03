@@ -1218,22 +1218,47 @@ struct ChatOfflineCacheBanner: View {
 
 struct PinnedLocalNoticeStack: View {
     let notices: [String]
+    // HERMEX-FORK: a transient status is not transcript history, and it used to
+    // render like it was — a multi-line card with a shadow, no way out, and a
+    // fixed 60pt reserved for it. Measured on the goal card: two lines of text
+    // (the goal plus "send a new message … to kick it off") sitting above the
+    // composer with the keyboard up, cleared only by reloading the chat. One
+    // line, no shadow, and an explicit dismissal: the notice cannot eat the
+    // transcript and cannot outlive its usefulness.
+    var onDismiss: (String) -> Void = { _ in }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             ForEach(Array(notices.enumerated()), id: \.offset) { _, notice in
-                HStack(alignment: .top, spacing: 10) {
+                HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.green)
 
                     Text(notice)
                         .font(.footnote)
                         .foregroundStyle(.primary)
+                        // HERMEX-FORK: capped to one line — the card is a status,
+                        // not a paragraph, and the goal form of it carries two
+                        // lines (the goal plus the "type continue" hint).
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        onDismiss(notice)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 26, height: 26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Dismiss"))
                 }
-                .padding(12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
                 .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: ChatComposerMetrics.cardCornerRadius, style: .continuous))
                 .overlay(
@@ -1243,7 +1268,6 @@ struct PinnedLocalNoticeStack: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(notices.joined(separator: "\n"))
     }

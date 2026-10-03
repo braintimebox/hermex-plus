@@ -108,7 +108,7 @@ struct SharedImportReservation: Equatable, Identifiable {
 enum HermesShareDraft {
     static var appGroupIdentifier: String {
         Bundle.main.object(forInfoDictionaryKey: "HermesAppGroupIdentifier") as? String
-            ?? "group.com.uzairansar.hermesmobile"
+            ?? "group.com.braintimebox.hermexplus"
     }
 
     // Legacy single-slot names. Existing installs may still have one of these records.
@@ -129,7 +129,7 @@ enum HermesShareDraft {
 
     static var urlScheme: String {
         Bundle.main.object(forInfoDictionaryKey: "HermesURLScheme") as? String
-            ?? "hermes-agent"
+            ?? "hermesplus"
     }
 
     static let shareURLHost = "share"

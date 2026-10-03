@@ -2808,6 +2808,12 @@ final class ChatViewModel {
             return false
         }
 
+        // HERMEX-FORK: the goal notice itself says "send a new message, or type
+        // continue, to kick it off" — so the send IS its acknowledgement. It goes
+        // here, at the point the send is committed, rather than waiting for the
+        // next chat reload.
+        pinnedLocalNotices.removeAll()
+
         let localMessageID = "local-\(UUID().uuidString)"
         let attachmentPreparation = attachmentCoordinator.prepareForSend(localMessageID: localMessageID)
 
@@ -4532,6 +4538,21 @@ final class ChatViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         pinnedLocalNotices.append(trimmed)
+    }
+
+    /// HERMEX-FORK: a pinned notice used to be clearable only by reloading the
+    /// chat (the two paths that emptied `pinnedLocalNotices`), so a transient
+    /// status — the goal card, which reads "send a new message … to kick it off"
+    /// — sat above the composer until the user left and re-entered. Measured
+    /// with the keyboard up it took a third of the visible transcript. The card
+    /// is one line now and carries its own dismissal; this is what that button
+    /// calls. The steering confirmation is the same kind of notice and is keyed
+    /// by the same value.
+    func dismissLocalNotice(_ text: String) {
+        pinnedLocalNotices.removeAll { $0 == text }
+        if steeringConfirmationNotice == text {
+            dismissSteeringConfirmation()
+        }
     }
 
     private func showSteeringConfirmation(_ text: String) {

@@ -1542,7 +1542,10 @@ struct ChatView: View {
         if composerAccessoryVisibleItemCount > 0 {
             VStack(spacing: composerAccessoryVerticalSpacing) {
                 if !composerLocalNotices.isEmpty {
-                    PinnedLocalNoticeStack(notices: composerLocalNotices)
+                    PinnedLocalNoticeStack(
+                        notices: composerLocalNotices,
+                        onDismiss: { viewModel.dismissLocalNotice($0) }
+                    )
                         .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
                 }
 
@@ -2039,7 +2042,10 @@ struct ChatView: View {
     }
 
     private var pinnedNoticeSpacerHeight: CGFloat {
-        composerLocalNotices.isEmpty ? 0 : CGFloat(composerLocalNotices.count) * 60
+        // HERMEX-FORK: matched to the compact card (one line, 6pt vertical
+        // padding, 26pt dismissal). It used to reserve 60pt per notice, which
+        // was sized for the old multi-line card.
+        composerLocalNotices.isEmpty ? 0 : CGFloat(composerLocalNotices.count) * 40
     }
 
     private var composerLocalNotices: [String] {

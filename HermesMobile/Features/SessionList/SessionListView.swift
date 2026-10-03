@@ -1847,6 +1847,20 @@ private struct PendingNewChatView: View {
         .onChange(of: scenePhase) {
             if scenePhase != .active {
                 flushDraftsBestEffort()
+                return
+            }
+
+            // HERMEX-FORK: the share payload arrives while the app is in the
+            // background and asks for the destination dialog in that same
+            // instant. SwiftUI drops a presentation requested by an inactive
+            // scene, and nothing re-asked: the value had not changed again and
+            // the session list was already on screen, so `onAppear` never fired
+            // a second time. The reservation stayed staged and the user saw only
+            // an empty chat (measured 02.10.2026 20:54:53 → 20:55:06). Re-asking
+            // here, on the activation that follows, is what makes the choice
+            // appear instead of being silently discarded.
+            if pendingSharedReservation != nil {
+                showSharedDestinationPicker = true
             }
         }
         .onDisappear {

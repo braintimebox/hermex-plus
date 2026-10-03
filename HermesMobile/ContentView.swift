@@ -35,6 +35,18 @@ struct ContentView: View {
             }
             .onChange(of: scenePhase) {
                 guard scenePhase == .active else { return }
+                // HERMEX-FORK: delivery must not depend on the URL arriving. A
+                // share extension cannot reliably open its containing app —
+                // Apple allows that for Today widgets only, `extensionContext.open`
+                // works in a debug session and silently fails in a release build,
+                // and iOS 18 blocks the old `UIApplication.openURL(_:)` entry point
+                // outright. So the payload is drained on activation, which is also
+                // the only moment the app can present anything. Measured on
+                // 02.10.2026 20:54:53: the payload was reserved while the app was
+                // backgrounded, the choice dialog was requested in that same
+                // instant and never appeared, and the user retyped the shared text
+                // by hand.
+                importPendingSharedDraftIfAvailable()
                 // #248: the foreground pass stays silent — the in-session completion
                 // paths own notifications while the app is alive.
                 Task { await reconcileOrphanedLiveActivities(notifiesOnCompletion: false) }
@@ -156,6 +168,9 @@ struct ContentView: View {
         } catch {
             pendingSharedImport = nil
             hasWaitingSharedImport = false
+            // HERMEX-FORK: a failed inbox read must still try the fallback
+            // transport, or a payload that travelled on the pasteboard is lost
+            // precisely when the primary transport misbehaves.
             reservePasteboardSharedImportIfAvailable()
         }
     }
