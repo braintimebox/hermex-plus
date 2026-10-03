@@ -88,9 +88,19 @@ jobs:
       SCHEME: HermesMobile
       DERIVED_DATA_PATH: DerivedData
       RESULT_BUNDLE_PATH: TestResults.xcresult
-      # One worker was the single largest cost in the run: ~2480 cases serially.
-      # Four clones is what the runner's cores can actually use.
-      TEST_WORKERS: 4
+      # MEASURED, AND REVERTED — the parallel-workers idea is rejected by data.
+      #
+      # Run 37123440609 with `-parallel-testing-worker-count 4`: the Test step
+      # took 4016s against 689s single-worker in the baseline (run 37046212026),
+      # and four cases failed on one clone with durations of 41s / 77s / 282s /
+      # 354s and NO assertion text — a resource-starvation signature, not a test
+      # that disagreed with the code. 2519 cases passed, the same suite that is
+      # green at 689s on one worker.
+      #
+      # Four simulator clones booting and competing for one runner's cores cost
+      # far more than the clones save, so this stays at 1. The parallelism that
+      # does help is between JOBS (test ∥ device build), not inside the suite.
+      TEST_WORKERS: 1
     steps:
       - name: Check out
         uses: actions/checkout@v4
