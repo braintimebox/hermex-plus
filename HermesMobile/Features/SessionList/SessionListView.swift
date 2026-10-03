@@ -1494,8 +1494,12 @@ struct SessionListView: View {
     ///     inside it pushed the Swift type checker past its limit — "unable to
     ///     type-check this expression in reasonable time" at the modifier's own
     ///     line, in run 37121532212.
+    ///     Only ever called by `SceneActivationObserver`, which reports the
+    ///     transition to `.active` itself — so the phase check lives there, next
+    ///     to the value it reads, and this method does not need `scenePhase` in
+    ///     scope (run 37122924716 failed asking for it after the unused-looking
+    ///     environment value had been removed).
     private func reaskShareDestinationIfActive() {
-        guard scenePhase == .active else { return }
         guard pendingSharedReservation != nil else { return }
         showSharedDestinationPicker = true
     }
