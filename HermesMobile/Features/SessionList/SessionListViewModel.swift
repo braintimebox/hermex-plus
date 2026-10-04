@@ -1623,7 +1623,9 @@ final class SessionListViewModel {
         guard let container = container() else { return }
         let serverURL = server
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            CacheStore.writeQueue.async { [weak self] in
+            // HERMEX-FORK: sessions have their own queue so a long session write cannot
+        // delay a completed turn's message write (see CacheStore.writeQueue).
+        CacheStore.sessionWriteQueue.async { [weak self] in
                 let bgContext = ModelContext(container)
                 do {
                     try write(serverURL, bgContext)

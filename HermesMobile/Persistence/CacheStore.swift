@@ -2,12 +2,26 @@ import Foundation
 import SwiftData
 
 enum CacheStore {
-    /// HERMEX-FORK: one serial queue for every cache write. Serial by
+    /// HERMEX-FORK: serial cache-write queues, one per scope. Serial by
     /// construction, so an older snapshot can never finish after a newer one and
     /// overwrite it — the ordering the timestamp guard below only approximates.
     /// `.utility`, because a cache write is never worth blocking the UI for.
+    ///
+    /// TWO queues, not one, and this is deliberate: ordering is only required within
+    /// a scope. A single queue put a completed turn's message write behind a session
+    /// write (whole-table upsert + `save()` + maintenance scan) — head-of-line
+    /// blocking that did not exist while session writes ran on the main thread. The
+    /// suite caught it: `testCompletedResponseCachesFinalTurnTpsWithoutTranscriptReload`
+    /// waits up to 10 s for the completed turn to reach the cache and started timing
+    /// out. Messages and sessions are independent, so they get independent queues.
     static let writeQueue = DispatchQueue(
-        label: "com.braintimebox.hermexplus.cache.write",
+        label: "com.braintimebox.hermexplus.cache.write.messages",
+        qos: .utility
+    )
+
+    /// Session-scoped cache writes (see `writeQueue` for why there are two).
+    static let sessionWriteQueue = DispatchQueue(
+        label: "com.braintimebox.hermexplus.cache.write.sessions",
         qos: .utility
     )
 
