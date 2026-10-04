@@ -1,3 +1,5 @@
+## 3.9.38 — cache: messages and sessions get separate serial write queues (e45aa2b) — one shared queue put a completed turn's cache write behind a session upsert and made testCompletedResponseCachesFinalTurnTpsWithoutTranscriptReload time out at 10 s. Per-scope ordering preserved, both queues stay off the main thread. This build is the verification for that regression
+
 ## 3.9.37 — test speed: retry backoff made injectable (HermesRetryBackoff) and zeroed in the two affected test classes, so a simulated connectivity failure no longer costs 15 s of wall clock per case. Production schedule unchanged (1+2+4+8 s); the retry loop still runs all five attempts. Expected Test 640 s to about 520 s
 
 ## 3.9.36 — diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation, so the draft resurrection chain is proven from logs instead of inferred. No behaviour change
