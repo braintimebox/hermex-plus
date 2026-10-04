@@ -1593,8 +1593,8 @@ final class SessionListViewModel {
     /// land after a newer one. Nothing waits for the write: the row is already in
     /// `sessions` in memory and the cache is only a cold-start fallback.
     private func cacheSessionInBackground(_ session: SessionSummary, modelContext: ModelContext?) {
-        cacheWriteInBackground { serverURL in
-            try CacheStore.cacheSession(session, serverURL: serverURL, in: $0)
+        cacheWriteInBackground { serverURL, context in
+            try CacheStore.cacheSession(session, serverURL: serverURL, in: context)
         } container: {
             modelContext?.container
         }
@@ -1602,8 +1602,8 @@ final class SessionListViewModel {
 
     /// The `sessions` twin of `cacheSessionInBackground`.
     private func cacheSessionsInBackground(_ sessions: [SessionSummary], modelContext: ModelContext?) {
-        cacheWriteInBackground { serverURL in
-            try CacheStore.cacheSessions(sessions, serverURL: serverURL, in: $0)
+        cacheWriteInBackground { serverURL, context in
+            try CacheStore.cacheSessions(sessions, serverURL: serverURL, in: context)
         } container: {
             modelContext?.container
         }
@@ -1612,7 +1612,7 @@ final class SessionListViewModel {
     /// Shared shape: hop to the serial cache queue, build a context on the worker,
     /// write it, and report a failure on the main actor.
     private func cacheWriteInBackground(
-        _ write: @escaping (ModelContext) throws -> Void,
+        _ write: @escaping (URL, ModelContext) throws -> Void,
         container: @escaping () -> ModelContainer?
     ) {
         guard let container = container() else { return }
@@ -1620,7 +1620,7 @@ final class SessionListViewModel {
         CacheStore.writeQueue.async { [weak self] in
             let bgContext = ModelContext(container)
             do {
-                try write(bgContext)
+                try write(serverURL, bgContext)
             } catch {
                 HermexLogger.shared.log(
                     type: "error",
