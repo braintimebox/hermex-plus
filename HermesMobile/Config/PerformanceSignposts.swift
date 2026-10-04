@@ -1,3 +1,5 @@
+// HERMEX-FORK: ported verbatim from upstream #920 (ffd49a68) — instrumentation only,
+// no behaviour change; see the port commit for the adapted sites.
 import OSLog
 
 /// Signpost intervals on the paths users feel most, for Instruments' `os_signpost`
