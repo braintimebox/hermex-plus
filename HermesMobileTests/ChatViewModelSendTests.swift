@@ -13,6 +13,9 @@ final class ChatViewModelSendTests: XCTestCase {
     /// test's model catalog decides what the next test's selected-model title
     /// resolves to, and one test's timestamp suppresses another's eviction.
     override func setUp() {
+        // HERMEX-FORK: no wall-clock backoff — the retry loop still runs all five
+        // attempts, but a simulated connectivity failure no longer costs 15 s.
+        HermesRetryBackoff.scale = 0
         super.setUp()
         resetProcessGlobalTestState()
     }

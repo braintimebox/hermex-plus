@@ -1959,7 +1959,9 @@ final class ChatViewModel {
                 attempt += 1
                 // Exponential backoff (1s, 2s, 4s, 8s ≈ 15s total), mirroring the
                 // session-list retry so a still-coming-up tunnel gets time to connect.
-                try? await Task.sleep(for: .seconds(pow(2.0, Double(attempt - 1))))
+                // HERMEX-FORK: shared, so tests can zero the wait without
+                // changing the attempt count or the production schedule.
+                await HermesRetryBackoff.sleep(attempt: attempt)
             }
         }
     }

@@ -348,8 +348,8 @@ final class SessionListViewModel {
                 attempt += 1
                 // Exponential backoff (1s, 2s, 4s, 8s ≈ 15s total) so a tunnel
                 // that's still coming up on cold start has time to connect.
-                let delay = TimeInterval(1 << (attempt - 1))
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                // HERMEX-FORK: shared backoff — see HermesRetryBackoff.
+                await HermesRetryBackoff.sleep(attempt: attempt)
             }
         }
     }

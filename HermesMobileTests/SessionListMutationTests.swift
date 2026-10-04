@@ -7,6 +7,13 @@ import UniformTypeIdentifiers
 @testable import HermesMobile
 
 final class SessionListMutationTests: XCTestCase {
+
+    // HERMEX-FORK: no wall-clock retry backoff — the loop still runs all five attempts,
+    // but a simulated connectivity failure no longer costs 15 s of the Test step.
+    override func setUp() {
+        super.setUp()
+        HermesRetryBackoff.scale = 0
+    }
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
         super.tearDown()
