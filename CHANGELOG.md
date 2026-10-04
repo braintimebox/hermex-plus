@@ -1,3 +1,5 @@
+## 3.9.37 — test speed: retry backoff made injectable (HermesRetryBackoff) and zeroed in the two affected test classes, so a simulated connectivity failure no longer costs 15 s of wall clock per case. Production schedule unchanged (1+2+4+8 s); the retry loop still runs all five attempts. Expected Test 640 s to about 520 s
+
 ## 3.9.36 — diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation, so the draft resurrection chain is proven from logs instead of inferred. No behaviour change
 
 ## 3.9.36 — diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation so the draft resurrection chain is proven from logs instead of inferred. No behaviour change: markConversationStarted wiring and .newChat semantics untouched until the runtime logs land
