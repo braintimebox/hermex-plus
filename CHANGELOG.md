@@ -1,3 +1,5 @@
+## 3.9.34 — instrumentation: upstream #920 signposts (Session Open, Transcript Apply, Markdown Parse, Stream Batch Apply, Cache Read/Write) plus a DEBUG-only frame-hitch meter behind --hitch-meter. Measures only — no optimisation, no behaviour change; the existing watchdog and freeze telemetry stack is untouched
+
 ## 3.9.33 — draft: a message sent during a run no longer returns as a draft — the streaming send path clears the durable draft store the same way the standard path does, so re-entering the chat stops restoring text that was already sent; the two paths now share one sequence, pinned by a regression test
 
 ## 3.9.32 — goal card: the notice clears itself after three seconds — the card is one line with its own dismissal, a send clears it, and now the timer does too, so a status nobody acts on cannot hold reading space; all three exits share one method so they cannot drift apart
