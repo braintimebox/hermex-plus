@@ -264,12 +264,10 @@ final class SessionListViewModel {
             isViewingCachedData = false
             isOffline = false
 
+            // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+            // serial) — the row is already in `sessions`, so nothing waits for the write.
             if let modelContext {
-                do {
-                    try CacheStore.cacheSessions(visibleSessions, serverURL: server, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
-                }
+                cacheSessionsInBackground(visibleSessions, modelContext: modelContext)
             }
 
             return true
@@ -674,12 +672,10 @@ final class SessionListViewModel {
                 sessions.insert(session, at: 0)
             }
 
+            // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+            // serial) — the row is already in `sessions`, so nothing waits for the write.
             if let modelContext, session.shouldAppearInSessionList {
-                do {
-                    try CacheStore.cacheSession(session, serverURL: server, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
-                }
+                cacheSessionInBackground(session, modelContext: modelContext)
             }
 
             return session
@@ -788,12 +784,10 @@ final class SessionListViewModel {
             sessions[index] = resolvedSession
         }
 
+        // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+        // serial) — the row is already in `sessions`, so nothing waits for the write.
         if let modelContext, resolvedSession.shouldAppearInSessionList {
-            do {
-                try CacheStore.cacheSession(resolvedSession, serverURL: server, in: modelContext)
-            } catch {
-                cacheErrorMessage = error.localizedDescription
-            }
+            cacheSessionInBackground(resolvedSession, modelContext: modelContext)
         }
 
         return resolvedSession
@@ -903,12 +897,10 @@ final class SessionListViewModel {
                 sessions[existingIndex] = updatedSession
             }
 
+            // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+            // serial) — the row is already in `sessions`, so nothing waits for the write.
             if let modelContext {
-                do {
-                    try CacheStore.cacheSession(updatedSession, serverURL: server, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
-                }
+                cacheSessionInBackground(updatedSession, modelContext: modelContext)
             }
 
             return true
@@ -950,12 +942,10 @@ final class SessionListViewModel {
             if !sessions.contains(where: { $0.sessionId == duplicatedSession.sessionId }) {
                 sessions.insert(duplicatedSession, at: 0)
 
+                // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+                // serial) — the row is already in `sessions`, so nothing waits for the write.
                 if let modelContext {
-                    do {
-                        try CacheStore.cacheSessions(sessions, serverURL: server, in: modelContext)
-                    } catch {
-                        cacheErrorMessage = error.localizedDescription
-                    }
+                    cacheSessionsInBackground(sessions, modelContext: modelContext)
                 }
             }
             return duplicatedSession
@@ -1249,12 +1239,10 @@ final class SessionListViewModel {
                     sessions.insert(newSession, at: 0)
                 }
 
+                // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
+                // serial) — the row is already in `sessions`, so nothing waits for the write.
                 if let modelContext {
-                    do {
-                        try CacheStore.cacheSession(newSession, serverURL: server, in: modelContext)
-                    } catch {
-                        cacheErrorMessage = error.localizedDescription
-                    }
+                    cacheSessionInBackground(newSession, modelContext: modelContext)
                 }
             }
 
@@ -1593,6 +1581,54 @@ final class SessionListViewModel {
             } catch {
                 // Skip, retry next cycle
                 continue
+            }
+        }
+    }
+
+    /// HERMEX-FORK: session cache writes used to run synchronously on the MainActor
+    /// (`SessionListViewModel` is `@MainActor`), so a whole-table upsert plus
+    /// `save()` — and the throttled maintenance scan on top of it — could block the
+    /// UI thread. They now go to `CacheStore.writeQueue`, which is serial, so the
+    /// order of writes is preserved by construction and an older snapshot cannot
+    /// land after a newer one. Nothing waits for the write: the row is already in
+    /// `sessions` in memory and the cache is only a cold-start fallback.
+    private func cacheSessionInBackground(_ session: SessionSummary, modelContext: ModelContext?) {
+        cacheWriteInBackground { serverURL in
+            try CacheStore.cacheSession(session, serverURL: serverURL, in: $0)
+        } container: {
+            modelContext?.container
+        }
+    }
+
+    /// The `sessions` twin of `cacheSessionInBackground`.
+    private func cacheSessionsInBackground(_ sessions: [SessionSummary], modelContext: ModelContext?) {
+        cacheWriteInBackground { serverURL in
+            try CacheStore.cacheSessions(sessions, serverURL: serverURL, in: $0)
+        } container: {
+            modelContext?.container
+        }
+    }
+
+    /// Shared shape: hop to the serial cache queue, build a context on the worker,
+    /// write it, and report a failure on the main actor.
+    private func cacheWriteInBackground(
+        _ write: @escaping (ModelContext) throws -> Void,
+        container: @escaping () -> ModelContainer?
+    ) {
+        guard let container = container() else { return }
+        let serverURL = server
+        CacheStore.writeQueue.async { [weak self] in
+            let bgContext = ModelContext(container)
+            do {
+                try write(bgContext)
+            } catch {
+                HermexLogger.shared.log(
+                    type: "error",
+                    message: "cache write: \(error.localizedDescription)"
+                )
+                Task { @MainActor [weak self] in
+                    self?.cacheErrorMessage = error.localizedDescription
+                }
             }
         }
     }

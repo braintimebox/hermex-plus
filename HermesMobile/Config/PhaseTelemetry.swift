@@ -28,6 +28,12 @@ struct PhaseAggregator {
         case markdownParse = "Markdown Parse"
         case cacheRead = "Cache Read"
         case cacheWrite = "Cache Write"
+        /// HERMEX-FORK: the two session writers used to share the `Cache Write`
+        /// phase with the message writer, so a 522 ms reading could not be
+        /// attributed to a caller. They get their own phases so the
+        /// main-thread cost of session writes is visible on its own.
+        case cacheWriteSessions = "Cache Write (sessions)"
+        case cacheWriteSession = "Cache Write (session)"
         case sessionOpen = "Session Open"
     }
 

@@ -3324,7 +3324,9 @@ final class ChatViewModel {
         // two sends in quick succession can have their blocks start in either
         // order, and the older snapshot would then be stamped newer and win.
         let issuedAt = Date()
-        DispatchQueue.global(qos: .utility).async {
+        // HERMEX-FORK: CacheStore.writeQueue is serial, so writes keep their order
+        // by construction instead of relying on the timestamp guard alone.
+        CacheStore.writeQueue.async {
             let bgContext = ModelContext(container)
             do {
                 try CacheStore.cacheMessages(

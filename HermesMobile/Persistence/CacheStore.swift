@@ -2,6 +2,15 @@ import Foundation
 import SwiftData
 
 enum CacheStore {
+    /// HERMEX-FORK: one serial queue for every cache write. Serial by
+    /// construction, so an older snapshot can never finish after a newer one and
+    /// overwrite it — the ordering the timestamp guard below only approximates.
+    /// `.utility`, because a cache write is never worth blocking the UI for.
+    static let writeQueue = DispatchQueue(
+        label: "com.braintimebox.hermexplus.cache.write",
+        qos: .utility
+    )
+
     @MainActor
     static func cachedSessions(
         serverURL: URL,
@@ -86,12 +95,13 @@ enum CacheStore {
         in context: ModelContext,
         cachedAt: Date = Date()
     ) throws {
-        // HERMEX-FORK: #920 — cached-session write interval.
-        let signpost = performanceSignposter.beginInterval("Cache Write")
-        PhaseTelemetry.shared.begin(.cacheWrite)
+        // HERMEX-FORK: #920 + attribution — the "sessions" writer has its own phase,
+        // so it is no longer merged with the message writer's 522 ms readings.
+        let signpost = performanceSignposter.beginInterval("Cache Write (sessions)")
+        PhaseTelemetry.shared.begin(.cacheWriteSessions)
         defer {
-            performanceSignposter.endInterval("Cache Write", signpost, "rows=\(sessions.count, privacy: .public)")
-            PhaseTelemetry.shared.end(.cacheWrite, context: ["rows": sessions.count])
+            performanceSignposter.endInterval("Cache Write (sessions)", signpost, "rows=\(sessions.count, privacy: .public)")
+            PhaseTelemetry.shared.end(.cacheWriteSessions, context: ["rows": sessions.count])
         }
 
         let serverURLString = serverURL.absoluteString
@@ -142,12 +152,12 @@ enum CacheStore {
     ) throws {
         guard let sessionID = session.sessionId else { return }
 
-        // HERMEX-FORK: #920 — single cached-session write interval.
-        let signpost = performanceSignposter.beginInterval("Cache Write")
-        PhaseTelemetry.shared.begin(.cacheWrite)
+        // HERMEX-FORK: #920 + attribution — the single-session writer has its own phase.
+        let signpost = performanceSignposter.beginInterval("Cache Write (session)")
+        PhaseTelemetry.shared.begin(.cacheWriteSession)
         defer {
-            performanceSignposter.endInterval("Cache Write", signpost, "rows=1")
-            PhaseTelemetry.shared.end(.cacheWrite, context: ["rows": 1])
+            performanceSignposter.endInterval("Cache Write (session)", signpost, "rows=1")
+            PhaseTelemetry.shared.end(.cacheWriteSession, context: ["rows": 1])
         }
 
         let serverURLString = serverURL.absoluteString
