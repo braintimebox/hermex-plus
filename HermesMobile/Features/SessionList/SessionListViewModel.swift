@@ -265,9 +265,9 @@ final class SessionListViewModel {
             isOffline = false
 
             // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
-            // serial) — the row is already in `sessions`, so nothing waits for the write.
+            // serial) — awaited for read-after-write, without blocking the main actor.
             if let modelContext {
-                cacheSessionsInBackground(visibleSessions, modelContext: modelContext)
+                await cacheSessionsAwaited(visibleSessions, modelContext: modelContext)
             }
 
             return true
@@ -673,9 +673,9 @@ final class SessionListViewModel {
             }
 
             // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
-            // serial) — the row is already in `sessions`, so nothing waits for the write.
+            // serial) — awaited for read-after-write, without blocking the main actor.
             if let modelContext, session.shouldAppearInSessionList {
-                cacheSessionInBackground(session, modelContext: modelContext)
+                await cacheSessionAwaited(session, modelContext: modelContext)
             }
 
             return session
@@ -715,7 +715,7 @@ final class SessionListViewModel {
                 return nil
             }
 
-            guard let importedSession = storeOpenedExternalSession(
+            guard let importedSession = await storeOpenedExternalSession(
                 detail,
                 listedSession: session,
                 expectedSessionID: sessionID,
@@ -744,7 +744,7 @@ final class SessionListViewModel {
                 )
                 guard !Task.isCancelled, generation == sessionOpenGeneration else { return nil }
                 guard let detail = response.session,
-                      let existingSession = storeOpenedExternalSession(
+                      let existingSession = await storeOpenedExternalSession(
                           detail,
                           listedSession: session,
                           expectedSessionID: sessionID,
@@ -775,7 +775,7 @@ final class SessionListViewModel {
         listedSession: SessionSummary,
         expectedSessionID: String,
         modelContext: ModelContext?
-    ) -> SessionSummary? {
+    ) async -> SessionSummary? {
         let currentSession = sessions.first(where: { $0.sessionId == expectedSessionID }) ?? listedSession
         let resolvedSession = currentSession.mergingImportedDetail(detail)
         guard resolvedSession.sessionId == expectedSessionID else { return nil }
@@ -787,7 +787,7 @@ final class SessionListViewModel {
         // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
         // serial) — the row is already in `sessions`, so nothing waits for the write.
         if let modelContext, resolvedSession.shouldAppearInSessionList {
-            cacheSessionInBackground(resolvedSession, modelContext: modelContext)
+            await cacheSessionAwaited(resolvedSession, modelContext: modelContext)
         }
 
         return resolvedSession
@@ -898,9 +898,9 @@ final class SessionListViewModel {
             }
 
             // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
-            // serial) — the row is already in `sessions`, so nothing waits for the write.
+            // serial) — awaited for read-after-write, without blocking the main actor.
             if let modelContext {
-                cacheSessionInBackground(updatedSession, modelContext: modelContext)
+                await cacheSessionAwaited(updatedSession, modelContext: modelContext)
             }
 
             return true
@@ -943,9 +943,9 @@ final class SessionListViewModel {
                 sessions.insert(duplicatedSession, at: 0)
 
                 // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
-                // serial) — the row is already in `sessions`, so nothing waits for the write.
+                // serial) — awaited for read-after-write, without blocking the main actor.
                 if let modelContext {
-                    cacheSessionsInBackground(sessions, modelContext: modelContext)
+                    await cacheSessionsAwaited(sessions, modelContext: modelContext)
                 }
             }
             return duplicatedSession
@@ -1240,9 +1240,9 @@ final class SessionListViewModel {
                 }
 
                 // HERMEX-FORK: cache writes moved off the MainActor (CacheStore.writeQueue,
-                // serial) — the row is already in `sessions`, so nothing waits for the write.
+                // serial) — awaited for read-after-write, without blocking the main actor.
                 if let modelContext {
-                    cacheSessionInBackground(newSession, modelContext: modelContext)
+                    await cacheSessionAwaited(newSession, modelContext: modelContext)
                 }
             }
 
@@ -1588,21 +1588,25 @@ final class SessionListViewModel {
     /// HERMEX-FORK: session cache writes used to run synchronously on the MainActor
     /// (`SessionListViewModel` is `@MainActor`), so a whole-table upsert plus
     /// `save()` — and the throttled maintenance scan on top of it — could block the
-    /// UI thread. They now go to `CacheStore.writeQueue`, which is serial, so the
-    /// order of writes is preserved by construction and an older snapshot cannot
-    /// land after a newer one. Nothing waits for the write: the row is already in
-    /// `sessions` in memory and the cache is only a cold-start fallback.
-    private func cacheSessionInBackground(_ session: SessionSummary, modelContext: ModelContext?) {
-        cacheWriteInBackground { serverURL, context in
+    /// UI thread.
+    ///
+    /// They now run on `CacheStore.writeQueue`, which is serial: the order of writes
+    /// is preserved by construction, so an older snapshot cannot land after a newer
+    /// one. The write is *awaited* rather than fired and forgotten, because callers
+    /// and tests read the cache straight after mutating — read-after-write
+    /// consistency is part of the contract. `await` suspends the main actor, it does
+    /// not hold it, so the UI still never blocks on the write itself.
+    private func cacheSessionAwaited(_ session: SessionSummary, modelContext: ModelContext?) async {
+        await cacheWriteAwaited { serverURL, context in
             try CacheStore.cacheSession(session, serverURL: serverURL, in: context)
         } container: {
             modelContext?.container
         }
     }
 
-    /// The `sessions` twin of `cacheSessionInBackground`.
-    private func cacheSessionsInBackground(_ sessions: [SessionSummary], modelContext: ModelContext?) {
-        cacheWriteInBackground { serverURL, context in
+    /// The `sessions` twin of `cacheSessionAwaited`.
+    private func cacheSessionsAwaited(_ sessions: [SessionSummary], modelContext: ModelContext?) async {
+        await cacheWriteAwaited { serverURL, context in
             try CacheStore.cacheSessions(sessions, serverURL: serverURL, in: context)
         } container: {
             modelContext?.container
@@ -1610,27 +1614,32 @@ final class SessionListViewModel {
     }
 
     /// Shared shape: hop to the serial cache queue, build a context on the worker,
-    /// write it, and report a failure on the main actor.
-    private func cacheWriteInBackground(
+    /// write it, and wait for the write to finish. A failure is logged and still
+    /// reaches `cacheErrorMessage` on the main actor.
+    private func cacheWriteAwaited(
         _ write: @escaping (URL, ModelContext) throws -> Void,
         container: @escaping () -> ModelContainer?
-    ) {
+    ) async {
         guard let container = container() else { return }
         let serverURL = server
-        CacheStore.writeQueue.async { [weak self] in
-            let bgContext = ModelContext(container)
-            do {
-                try write(serverURL, bgContext)
-            } catch {
-                HermexLogger.shared.log(
-                    type: "error",
-                    message: "cache write: \(error.localizedDescription)"
-                )
-                Task { @MainActor [weak self] in
-                    self?.cacheErrorMessage = error.localizedDescription
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            CacheStore.writeQueue.async { [weak self] in
+                let bgContext = ModelContext(container)
+                do {
+                    try write(serverURL, bgContext)
+                } catch {
+                    HermexLogger.shared.log(
+                        type: "error",
+                        message: "cache write: \(error.localizedDescription)"
+                    )
+                    Task { @MainActor [weak self] in
+                        self?.cacheErrorMessage = error.localizedDescription
+                    }
                 }
+                continuation.resume()
             }
         }
     }
+
 
 }
