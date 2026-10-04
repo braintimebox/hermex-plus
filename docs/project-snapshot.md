@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 3f36423 |
+| HEAD | 245f4f0 |
 | Версия | 3.9.34 |
 | Обновлено | 2026-10-04 |
 
 **Последние коммиты:**
 ```
+245f4f0 perf(telemetry): aggregate #920 phase durations into hermex-logs.jsonl
+ed43a0d 3.9.34: mark the ported #920 files (gate 13 — provenance for sync surface)
+2915233 3.9.34: instrumentation: upstream #920 signposts (Session Open, Transcript Apply, Markdown Parse, Stream Batch Apply, Cache Read/Write) plus a DEBUG-only frame-hitch meter behind --hitch-meter. Measures only — no optimisation, no behaviour change; the existing watchdog and freeze telemetry stack is untouched
 3f36423 perf(chat): port upstream #920 signposts and the debug hitch meter (instrumentation only)
 e030495 3.9.33: draft: a message sent during a run no longer returns as a draft — the streaming send path clears the durable draft store the same way the standard path does, so re-entering the chat stops restoring text that was already sent; the two paths now share one sequence, pinned by a regression test
 9e6caef fix(chat): a message sent during a run no longer comes back as a draft
-ea14a10 3.9.32: goal card: the notice clears itself after three seconds — the card is one line with its own dismissal, a send clears it, and now the timer does too, so a status nobody acts on cannot hold reading space; all three exits share one method so they cannot drift apart
-09f5122 fix(chat): a pinned notice clears itself after three seconds
-abaf828 ci: reject the parallel test workers, keep the parallel jobs (measured)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -46,8 +46,8 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 ## 4. Размеры (когда важно)
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
-| Swift-файлы приложения | 332 | 289 | -43 |
-| Строк приложения | 110,058 | 101,515 | **-8,543** |
-| Строк Chat | 38,604 | 40,904 | +2,300 |
-| ChatViewModel | 6,850 | 7,671 | +821 |
+| Swift-файлы приложения | 332 | 290 | -42 |
+| Строк приложения | 110,058 | 101,802 | **-8,256** |
+| Строк Chat | 38,604 | 40,924 | +2,320 |
+| ChatViewModel | 6,850 | 7,688 | +838 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |
