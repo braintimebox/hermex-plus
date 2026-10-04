@@ -103,15 +103,40 @@ struct StreamingMarkdownRenderer: View {
     }
 
     var body: some View {
-        Group {
+        // HERMEX-FORK: 3.9.39 — диагностика. Политика вызывается РОВНО ОДИН раз
+        // на кадр, ветки ниже читают результат. Раньше вызов был внутри условия;
+        // форма изменена, семантика renderer — нет.
+        let policySignpost = performanceSignposter.beginInterval("Render Policy")
+        PhaseTelemetry.shared.begin(.renderPolicy)
+        let fallbackReason = MarkdownContentRenderingPolicy.fallbackReason(for: displayedContent, isStreaming: true)
+        PhaseTelemetry.shared.end(.renderPolicy, context: ["chars": displayedContent.count])
+        performanceSignposter.endInterval("Render Policy", policySignpost, "chars=\(displayedContent.count, privacy: .public)")
+
+        return Group {
             if displayedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // HERMEX-FORK: 3.9.39 — доля ветки empty.
+                let _ = PhaseTelemetry.shared.record(.lightRender, milliseconds: 0, context: ["branchEmpty": 1])
                 Text(verbatim: " ")
-            } else if let fallbackReason = MarkdownContentRenderingPolicy.fallbackReason(for: displayedContent, isStreaming: true) {
+            } else if let fallbackReason {
+                // HERMEX-FORK: 3.9.39 — доля ветки fallback + повод + объём.
+                // Тайминг этой фазы = сборка значения view, НЕ layout: .fixedSize
+                // считается позже и этим таймером не покрывается.
+                let _ = PhaseTelemetry.shared.record(.fallbackRender, milliseconds: 0, context: [
+                    "branchFallback": 1,
+                    "chars": displayedContent.count,
+                    "reasonChars": fallbackReason == .tooManyCharacters ? 1 : 0,
+                    "reasonLines": fallbackReason == .tooManyLines ? 1 : 0
+                ])
                 PlainMarkdownFallbackView(
                     content: displayedContent,
                     reason: fallbackReason
                 )
             } else {
+                // HERMEX-FORK: 3.9.39 — доля ветки light.
+                let _ = PhaseTelemetry.shared.record(.lightRender, milliseconds: 0, context: [
+                    "branchLight": 1,
+                    "chars": displayedContent.count
+                ])
                 streamingMarkdownContent
             }
         }
@@ -417,9 +442,15 @@ private struct ChatMarkdownView: View {
         // so the parse alone is timed (same shape as upstream).
         let signpost = performanceSignposter.beginInterval("Markdown Parse")
         PhaseTelemetry.shared.begin(.markdownParse)
+        // HERMEX-FORK: 3.9.39 — разделяем парсинг settled и streaming контента.
+        // Старая фаза .markdownParse оставлена как есть, чтобы baseline 3.9.36
+        // (1874 сэмпла, p50 0,1 мс) оставался сопоставимым.
+        let splitPhase: PhaseAggregator.Phase = isStreaming ? .markdownParseStream : .markdownParseSettled
+        PhaseTelemetry.shared.begin(splitPhase)
         let parsedContent = MarkdownContent(content)
         performanceSignposter.endInterval("Markdown Parse", signpost, "chars=\(content.count, privacy: .public)")
         PhaseTelemetry.shared.end(.markdownParse, context: ["chars": content.count])
+        PhaseTelemetry.shared.end(splitPhase, context: ["chars": content.count])
 
         return Markdown(parsedContent)
             .markdownTheme(MarkdownUI.Theme.chat(colorScheme: colorScheme, isStreaming: isStreaming))

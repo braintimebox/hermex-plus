@@ -35,6 +35,14 @@ struct PhaseAggregator {
         case cacheWriteSessions = "Cache Write (sessions)"
         case cacheWriteSession = "Cache Write (session)"
         case sessionOpen = "Session Open"
+        // HERMEX-FORK: 3.9.39 — диагностика реального streaming-пути.
+        // Мёртвый StreamingMarkdownChunkedView НЕ инструментирован: подтверждено
+        // отсутствие call sites (определение + два комментария).
+        case renderPolicy = "Render Policy"
+        case fallbackRender = "Fallback Render"
+        case lightRender = "Light Render"
+        case markdownParseSettled = "Markdown Parse (settled)"
+        case markdownParseStream = "Markdown Parse (stream)"
     }
 
     /// One flush-window summary for a single phase.
