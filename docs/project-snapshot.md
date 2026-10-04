@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 4c754a7 |
+| HEAD | ae374e1 |
 | Версия | 3.9.36 |
 | Обновлено | 2026-10-04 |
 
 **Последние коммиты:**
 ```
+ae374e1 3.9.36: use the gate's marker form (HERMEX-FORK:) on the probe comments — the gate matches the colon, so 'HERMEX-FORK (' read as unmarked
+e10666c 3.9.36: diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation so the draft resurrection chain is proven from logs instead of inferred. No behaviour change: markConversationStarted wiring and .newChat semantics untouched until the runtime logs land
 4c754a7 diag(draft): runtime probe for the draft lifecycle — proof before fix
 4762ee3 3.9.35: cache: session cache writes run on a serial cache queue off the MainActor and are awaited, so ordering and read-after-write both hold while the UI never blocks on the write; cache-write telemetry split per writer. Attribution correction: the 522/1123 ms phase readings were background time — the main-thread blocker in the logs is transcriptMessages.fullRecompute (up to 1008 ms), recorded as the next step and not touched here
 4401284 fix(cache): await the session cache write — read-after-write was part of the contract
 138e985 3.9.35: cache: session cache writes moved off the MainActor onto a serial cache queue (ordering guaranteed by construction); cache-write telemetry split per writer. Attribution correction: the 522/1123 ms phase readings were background time — the main-thread blocker in the logs is transcriptMessages.fullRecompute (up to 1008 ms), recorded as the next step and not touched here
-2aab968 3.9.35: fix the cache-write helper signature (anonymous closure argument inside a closure with explicit arguments — compile error caught by CI)
-fd99dd9 3.9.35: cache: session cache writes moved off the MainActor onto a serial cache queue, so ordering is guaranteed by construction; cache-write telemetry split per writer (Cache Write / Cache Write (sessions) / Cache Write (session)). Attribution correction: the 522/1123 ms phase readings were background time — the main-thread blocker in the logs is transcriptMessages.fullRecompute (up to 1008 ms), recorded as the next step and not touched here
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
