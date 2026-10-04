@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 47b2f91 |
+| HEAD | 2aab968 |
 | Версия | 3.9.35 |
 | Обновлено | 2026-10-04 |
 
 **Последние коммиты:**
 ```
+2aab968 3.9.35: fix the cache-write helper signature (anonymous closure argument inside a closure with explicit arguments — compile error caught by CI)
+fd99dd9 3.9.35: cache: session cache writes moved off the MainActor onto a serial cache queue, so ordering is guaranteed by construction; cache-write telemetry split per writer (Cache Write / Cache Write (sessions) / Cache Write (session)). Attribution correction: the 522/1123 ms phase readings were background time — the main-thread blocker in the logs is transcriptMessages.fullRecompute (up to 1008 ms), recorded as the next step and not touched here
 47b2f91 perf(cache): move session cache writes off the MainActor; split cache-write telemetry
 3b03aec 3.9.34: telemetry bridge: #920 phase durations (Stream Batch Apply, Transcript Apply, Markdown Parse, Cache Read/Write, Session Open) now aggregate into hermex-logs.jsonl as type=phase events with count/p50/p90/max and context (chars, mutated, messages, rows). No per-interval disk I/O; signposts and the hitch meter unchanged; the watchdog and jank events untouched
 ad6df3b 3.9.34: keep the telemetry bridge in the Config group (gate 3 — group path must match the file's location)
 18482d9 3.9.34: telemetry bridge: #920 phase durations (Stream Batch Apply, Transcript Apply, Markdown Parse, Cache Read/Write, Session Open) now aggregate into hermex-logs.jsonl as type=phase events with count/p50/p90/max and context (chars, mutated, messages, rows). No per-interval disk I/O; signposts and the hitch meter unchanged; the watchdog and jank events untouched
-245f4f0 perf(telemetry): aggregate #920 phase durations into hermex-logs.jsonl
-ed43a0d 3.9.34: mark the ported #920 files (gate 13 — provenance for sync surface)
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
