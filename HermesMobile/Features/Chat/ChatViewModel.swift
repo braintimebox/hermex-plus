@@ -1107,6 +1107,8 @@ final class ChatViewModel {
     func flushPendingStreamingContent() {
         // HERMEX-FORK: #920 — times one applied batch of streamed tokens.
         let signpost = performanceSignposter.beginInterval("Stream Batch Apply")
+        // HERMEX-FORK: same interval, aggregated locally for hermex-logs.jsonl.
+        PhaseTelemetry.shared.begin(.streamBatchApply)
         cancelPendingStreamingContentFlush()
 
         var didMutate = false
@@ -1123,6 +1125,7 @@ final class ChatViewModel {
         }
         // HERMEX-FORK: #920 — batch interval ends with whether it mutated the transcript.
         performanceSignposter.endInterval("Stream Batch Apply", signpost, "mutated=\(didMutate ? 1 : 0, privacy: .public)")
+        PhaseTelemetry.shared.end(.streamBatchApply, context: ["mutated": didMutate ? 1 : 0])
     }
 
     private var requestProfileName: String? {
@@ -2013,6 +2016,16 @@ final class ChatViewModel {
 #if DEBUG
         debugTagIdentitySource("cache")
 #endif
+        // HERMEX-FORK: #920 (adapted) — this is the site upstream instruments; our
+        // structure keeps the read in a do-block, so the interval covers the cached
+        // read that follows. Same interval, also aggregated locally for the log.
+        let signpost = performanceSignposter.beginInterval("Transcript Apply")
+        PhaseTelemetry.shared.begin(.transcriptApply)
+        defer {
+            performanceSignposter.endInterval("Transcript Apply", signpost, "messages=\(self.messages.count, privacy: .public)")
+            PhaseTelemetry.shared.end(.transcriptApply, context: ["messages": self.messages.count])
+        }
+
         let cachedMessages: [ChatMessage]
         do {
             cachedMessages = try CacheStore.cachedMessages(
@@ -2269,7 +2282,11 @@ final class ChatViewModel {
 #endif
         // HERMEX-FORK: #920 — times applying a reloaded transcript.
         let signpost = performanceSignposter.beginInterval("Transcript Apply")
-        defer { performanceSignposter.endInterval("Transcript Apply", signpost, "messages=\(self.messages.count, privacy: .public)") }
+        PhaseTelemetry.shared.begin(.transcriptApply)
+        defer {
+            performanceSignposter.endInterval("Transcript Apply", signpost, "messages=\(self.messages.count, privacy: .public)")
+            PhaseTelemetry.shared.end(.transcriptApply, context: ["messages": self.messages.count])
+        }
         let reloadedMessagesOffset = Self.resolvedMessagesOffset(
             from: session,
             loadedMessageCount: reloadedMessages.count

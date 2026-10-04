@@ -1601,6 +1601,7 @@ struct SessionListView: View {
     private func startOpeningSession(_ session: SessionSummary) {
         // HERMEX-FORK: #920 — taps and keyboard opens both start here.
         SessionOpenSignpost.begin(sessionID: session.sessionId)
+        PhaseTelemetry.shared.begin(.sessionOpen)
         sessionOpenTask?.cancel()
         sessionOpenTask = Task { await openSession(session) }
     }

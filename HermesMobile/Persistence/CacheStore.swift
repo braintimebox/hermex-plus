@@ -11,7 +11,11 @@ enum CacheStore {
         // HERMEX-FORK: #920 — cached-session read interval (duration only; the row
         // count lands after the fetch, which a defer cannot see).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        defer { performanceSignposter.endInterval("Cache Read", signpost) }
+        PhaseTelemetry.shared.begin(.cacheRead)
+        defer {
+            performanceSignposter.endInterval("Cache Read", signpost)
+            PhaseTelemetry.shared.end(.cacheRead)
+        }
         let serverURLString = serverURL.absoluteString
         let descriptor = FetchDescriptor<CachedSession>(
             predicate: #Predicate { cachedSession in
@@ -38,7 +42,11 @@ enum CacheStore {
     ) throws -> [ChatMessage] {
         // HERMEX-FORK: #920 — cached-message read interval (duration only).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        defer { performanceSignposter.endInterval("Cache Read", signpost) }
+        PhaseTelemetry.shared.begin(.cacheRead)
+        defer {
+            performanceSignposter.endInterval("Cache Read", signpost)
+            PhaseTelemetry.shared.end(.cacheRead)
+        }
 
         if let limit, limit <= 0 {
             return []
@@ -80,7 +88,11 @@ enum CacheStore {
     ) throws {
         // HERMEX-FORK: #920 — cached-session write interval.
         let signpost = performanceSignposter.beginInterval("Cache Write")
-        defer { performanceSignposter.endInterval("Cache Write", signpost, "rows=\(sessions.count, privacy: .public)") }
+        PhaseTelemetry.shared.begin(.cacheWrite)
+        defer {
+            performanceSignposter.endInterval("Cache Write", signpost, "rows=\(sessions.count, privacy: .public)")
+            PhaseTelemetry.shared.end(.cacheWrite, context: ["rows": sessions.count])
+        }
 
         let serverURLString = serverURL.absoluteString
         // Only sessions with a real server-minted id are cacheable. A row with
@@ -132,7 +144,11 @@ enum CacheStore {
 
         // HERMEX-FORK: #920 — single cached-session write interval.
         let signpost = performanceSignposter.beginInterval("Cache Write")
-        defer { performanceSignposter.endInterval("Cache Write", signpost, "rows=1") }
+        PhaseTelemetry.shared.begin(.cacheWrite)
+        defer {
+            performanceSignposter.endInterval("Cache Write", signpost, "rows=1")
+            PhaseTelemetry.shared.end(.cacheWrite, context: ["rows": 1])
+        }
 
         let serverURLString = serverURL.absoluteString
         let cacheKey = CachedSession.cacheKey(serverURLString: serverURLString, sessionID: sessionID)
@@ -163,7 +179,11 @@ enum CacheStore {
     ) throws {
         // HERMEX-FORK: #920 — cached-message write interval.
         let signpost = performanceSignposter.beginInterval("Cache Write")
-        defer { performanceSignposter.endInterval("Cache Write", signpost, "rows=\(messages.count, privacy: .public)") }
+        PhaseTelemetry.shared.begin(.cacheWrite)
+        defer {
+            performanceSignposter.endInterval("Cache Write", signpost, "rows=\(messages.count, privacy: .public)")
+            PhaseTelemetry.shared.end(.cacheWrite, context: ["rows": messages.count])
+        }
 
         // Marked so a freeze during this known-heavy main-thread operation is
         // attributed to it in the freeze report (heavyOp field).

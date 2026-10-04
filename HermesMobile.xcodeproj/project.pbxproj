@@ -233,6 +233,7 @@
 		C28702000000000000000001 /* ChatDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000002 /* ChatDraftStore.swift */; };
 		C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000004 /* ChatDraftStoreTests.swift */; };
 		870000000000000000000201 /* HitchMeterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000202 /* HitchMeterTests.swift */; };
+		870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000204 /* PhaseTelemetryTests.swift */; };
 		C28702000000000000000005 /* ChatDraftAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000006 /* ChatDraftAttachmentStore.swift */; };
 		C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */; };
 		C04400000000000000000003 /* CacheFallbackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C04400000000000000000004 /* CacheFallbackPolicyTests.swift */; };
@@ -241,6 +242,7 @@
 		C09200000000000000000001 /* AppFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09200000000000000000002 /* AppFont.swift */; };
 		870000000000000000000001 /* PerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000002 /* PerformanceSignposts.swift */; };
 		870000000000000000000003 /* HitchMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000004 /* HitchMeter.swift */; };
+		870000000000000000000005 /* PhaseTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000006 /* PhaseTelemetry.swift */; };
 		1A2B3C4D5E6F700000000100 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F700000000101 /* AppTheme.swift */; };
 		C012400000000000000002 /* AppIconChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = C012400000000000000001 /* AppIconChoice.swift */; };
 		C03120000000000000B001 /* GitWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03120000000000000F001 /* GitWorkspace.swift */; };
@@ -726,6 +728,7 @@
 		C28702000000000000000002 /* ChatDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000004 /* ChatDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStoreTests.swift; sourceTree = "<group>"; };
 		870000000000000000000202 /* HitchMeterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitchMeterTests.swift; sourceTree = "<group>"; };
+		870000000000000000000204 /* PhaseTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTelemetryTests.swift; sourceTree = "<group>"; };
 		C28702000000000000000006 /* ChatDraftAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStoreTests.swift; sourceTree = "<group>"; };
 		C04400000000000000000004 /* CacheFallbackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheFallbackPolicyTests.swift; sourceTree = "<group>"; };
@@ -734,6 +737,7 @@
 		C09200000000000000000002 /* AppFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFont.swift; sourceTree = "<group>"; };
 		870000000000000000000002 /* PerformanceSignposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSignposts.swift; sourceTree = "<group>"; };
 		870000000000000000000004 /* HitchMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitchMeter.swift; sourceTree = "<group>"; };
+		870000000000000000000006 /* PhaseTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTelemetry.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F700000000101 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		C012400000000000000001 /* AppIconChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconChoice.swift; sourceTree = "<group>"; };
 		C03120000000000000F001 /* GitWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorkspace.swift; sourceTree = "<group>"; };
@@ -1078,6 +1082,7 @@
 				0B077A87C9D846D7A9D27D7A /* BotPendingRequestTests.swift */,
 				C28702000000000000000004 /* ChatDraftStoreTests.swift */,
 				870000000000000000000202 /* HitchMeterTests.swift */,
+				870000000000000000000204 /* PhaseTelemetryTests.swift */,
 				C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */,
 				10CA110C0DE000000000C002 /* LocalizationCatalogTests.swift */,
 				1A2B3C4D5E6F7000000000BC /* APIClientTests.swift */,
@@ -1583,6 +1588,7 @@
 				C09200000000000000000002 /* AppFont.swift */,
 				870000000000000000000002 /* PerformanceSignposts.swift */,
 				870000000000000000000004 /* HitchMeter.swift */,
+				870000000000000000000006 /* PhaseTelemetry.swift */,
 				1A2B3C4D5E6F700000000101 /* AppTheme.swift */,
 				C012400000000000000001 /* AppIconChoice.swift */,
 			);
@@ -2023,6 +2029,7 @@
 				C09200000000000000000001 /* AppFont.swift in Sources */,
 				870000000000000000000001 /* PerformanceSignposts.swift in Sources */,
 				870000000000000000000003 /* HitchMeter.swift in Sources */,
+				870000000000000000000005 /* PhaseTelemetry.swift in Sources */,
 				1A2B3C4D5E6F700000000100 /* AppTheme.swift in Sources */,
 				C012400000000000000002 /* AppIconChoice.swift in Sources */,
 				C09300000000000000000001 /* HapticButton.swift in Sources */,
@@ -2334,6 +2341,7 @@
 				B5A100000000000000000005 /* SharedDraftStoreTests.swift in Sources */,
 				C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */,
 				870000000000000000000201 /* HitchMeterTests.swift in Sources */,
+				870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */,
 				C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */,
 				B5A100000000000000000009 /* ShareInputReaderTests.swift in Sources */,
 				B5A100000000000000000060 /* AuthManagerStateTests.swift in Sources */,

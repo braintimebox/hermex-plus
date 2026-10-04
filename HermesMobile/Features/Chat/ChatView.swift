@@ -2163,6 +2163,7 @@ struct ChatView: View {
         let messages = viewModel.messages.count
         DispatchQueue.main.async {
             SessionOpenSignpost.end(sessionID: sessionID, messages: messages)
+            PhaseTelemetry.shared.end(.sessionOpen, context: ["messages": messages])
         }
     }
 

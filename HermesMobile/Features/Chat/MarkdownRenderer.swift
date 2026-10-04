@@ -416,8 +416,10 @@ private struct ChatMarkdownView: View {
         // HERMEX-FORK: #920 — parse here rather than inside `Markdown(_: String)`
         // so the parse alone is timed (same shape as upstream).
         let signpost = performanceSignposter.beginInterval("Markdown Parse")
+        PhaseTelemetry.shared.begin(.markdownParse)
         let parsedContent = MarkdownContent(content)
         performanceSignposter.endInterval("Markdown Parse", signpost, "chars=\(content.count, privacy: .public)")
+        PhaseTelemetry.shared.end(.markdownParse, context: ["chars": content.count])
 
         return Markdown(parsedContent)
             .markdownTheme(MarkdownUI.Theme.chat(colorScheme: colorScheme, isStreaming: isStreaming))
