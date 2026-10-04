@@ -2046,6 +2046,8 @@ private struct PendingNewChatView: View {
     private func hydrateDraft() async {
         let textBeforeHydration = draftMessage
         let persistedDraft = await draftStore.draft(for: draftKey)
+        // HERMEX-FORK (diagnostic, temporary): the new-chat slot read on hydrate.
+        draftStore.logDraftProbe("hydrate.SessionListView", key: draftKey, textLength: persistedDraft?.text.count ?? 0)
         guard !Task.isCancelled, draftMessage == textBeforeHydration else { return }
 
         if textBeforeHydration.isEmpty {

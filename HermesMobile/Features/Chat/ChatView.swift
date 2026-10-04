@@ -2621,6 +2621,10 @@ struct ChatView: View {
         let textBeforeHydration = draftMessage
         let quotesBeforeHydration = draftQuotes
         let persistedDraft = await draftStore.draft(for: draftKey)
+        // HERMEX-FORK (diagnostic, temporary): which key is read on hydrate, and how
+        // much text it carries — the entry point of the suspected resurrection.
+        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        draftStore.logDraftProbe("hydrate.ChatView", key: draftKey, textLength: persistedDraft?.text.count ?? 0)
         guard !Task.isCancelled,
               draftMessage == textBeforeHydration,
               draftQuotes == quotesBeforeHydration
