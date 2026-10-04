@@ -1196,6 +1196,11 @@ struct ChatView: View {
             handleLatestRunOutcomeChange(viewModel.latestRunOutcome)
         }
         .environment(\.composerChipCatalog, viewModel.composerChipCatalog)
+        // HERMEX-FORK: #920 — the first transcript frame ends the `Session Open`
+        // interval the session list began (upstream hangs this off the same hook).
+        .onChange(of: viewModel.messages.isEmpty, initial: true) { _, isEmpty in
+            if !isEmpty { endSessionOpenSignpost() }
+        }
         .environment(\.openURL, OpenURLAction(handler: handleTranscriptLink))
         .environment(\.chatWorkspaceRoot, session.workspace)
         .task(id: transcriptSkillReferenceCount) {
@@ -2149,6 +2154,16 @@ struct ChatView: View {
 
     private var latestTranscriptMessageRole: String? {
         transcriptMessages.last?.message.role
+    }
+
+    /// HERMEX-FORK: #920 — ends this session's `Session Open` interval on the next
+    /// main-queue turn, so it includes the first transcript frame's layout.
+    private func endSessionOpenSignpost() {
+        let sessionID = session.sessionId
+        let messages = viewModel.messages.count
+        DispatchQueue.main.async {
+            SessionOpenSignpost.end(sessionID: sessionID, messages: messages)
+        }
     }
 
     private func prepareInitialAppearance() {

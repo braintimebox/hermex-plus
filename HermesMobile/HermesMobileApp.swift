@@ -83,6 +83,13 @@ struct HermesMobileApp: App {
             } else {
                 ContentView(authManager: authManager)
                     .preferredColorScheme(AppTheme.storedValue(appThemeRawValue).colorScheme)
+                    .overlay(alignment: .topLeading) {
+                        // HERMEX-FORK: #920 (adapted) — upstream hangs this off its
+                        // DevAutoLogin chain, which our fork does not have.
+                        if HitchMeter.isEnabled {
+                            HitchMeterOverlay()
+                        }
+                    }
             }
             #else
             ContentView(authManager: authManager)

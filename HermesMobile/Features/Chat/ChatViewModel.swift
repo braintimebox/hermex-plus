@@ -1105,6 +1105,8 @@ final class ChatViewModel {
     }
 
     func flushPendingStreamingContent() {
+        // HERMEX-FORK: #920 — times one applied batch of streamed tokens.
+        let signpost = performanceSignposter.beginInterval("Stream Batch Apply")
         cancelPendingStreamingContentFlush()
 
         var didMutate = false
@@ -1119,6 +1121,8 @@ final class ChatViewModel {
         if didMutate {
             scheduleStreamingScrollTrigger()
         }
+        // HERMEX-FORK: #920 — batch interval ends with whether it mutated the transcript.
+        performanceSignposter.endInterval("Stream Batch Apply", signpost, "mutated=\(didMutate ? 1 : 0, privacy: .public)")
     }
 
     private var requestProfileName: String? {
@@ -2263,6 +2267,9 @@ final class ChatViewModel {
 #if DEBUG
         debugTagIdentitySource("reload")
 #endif
+        // HERMEX-FORK: #920 — times applying a reloaded transcript.
+        let signpost = performanceSignposter.beginInterval("Transcript Apply")
+        defer { performanceSignposter.endInterval("Transcript Apply", signpost, "messages=\(self.messages.count, privacy: .public)") }
         let reloadedMessagesOffset = Self.resolvedMessagesOffset(
             from: session,
             loadedMessageCount: reloadedMessages.count
