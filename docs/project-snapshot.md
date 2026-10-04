@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | 245f4f0 |
+| HEAD | ad6df3b |
 | Версия | 3.9.34 |
 | Обновлено | 2026-10-04 |
 
 **Последние коммиты:**
 ```
+ad6df3b 3.9.34: keep the telemetry bridge in the Config group (gate 3 — group path must match the file's location)
+18482d9 3.9.34: telemetry bridge: #920 phase durations (Stream Batch Apply, Transcript Apply, Markdown Parse, Cache Read/Write, Session Open) now aggregate into hermex-logs.jsonl as type=phase events with count/p50/p90/max and context (chars, mutated, messages, rows). No per-interval disk I/O; signposts and the hitch meter unchanged; the watchdog and jank events untouched
 245f4f0 perf(telemetry): aggregate #920 phase durations into hermex-logs.jsonl
 ed43a0d 3.9.34: mark the ported #920 files (gate 13 — provenance for sync surface)
 2915233 3.9.34: instrumentation: upstream #920 signposts (Session Open, Transcript Apply, Markdown Parse, Stream Batch Apply, Cache Read/Write) plus a DEBUG-only frame-hitch meter behind --hitch-meter. Measures only — no optimisation, no behaviour change; the existing watchdog and freeze telemetry stack is untouched
 3f36423 perf(chat): port upstream #920 signposts and the debug hitch meter (instrumentation only)
-e030495 3.9.33: draft: a message sent during a run no longer returns as a draft — the streaming send path clears the durable draft store the same way the standard path does, so re-entering the chat stops restoring text that was already sent; the two paths now share one sequence, pinned by a regression test
-9e6caef fix(chat): a message sent during a run no longer comes back as a draft
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
