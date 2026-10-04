@@ -569,7 +569,7 @@ final class ChatDraftStore {
     /// Updates the draft's typed text without disturbing its attachments or
     /// settings.
     func setDraft(_ text: String, for key: ChatDraftKey) {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe("setDraft", key: key, textLength: text.count)
         markChangedBeforeLoad(key)
         updateDraft(for: key) { $0.text = text }
@@ -597,7 +597,7 @@ final class ChatDraftStore {
         updateDraft(for: key) { $0.quotes = quotes }
     }
 
-    /// HERMEX-FORK (diagnostic, temporary — remove once the draft lifecycle is proven):
+    /// HERMEX-FORK: (diagnostic, temporary — remove once the draft lifecycle is proven):
     /// follows one draft text across the lifecycle. Logs the key shape and the text
     /// length so a single string can be tracked from share → composer → send → clear,
     /// and so the suspected resurrection chain (session key → `.newChat(server:)`) is
@@ -632,7 +632,7 @@ final class ChatDraftStore {
     }
 
     func setContent(_ content: ComposerDraftContent, for key: ChatDraftKey) {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe("setContent", key: key, textLength: content.text.count)
         markChangedBeforeLoad(key)
         updateDraft(for: key) { draft in
@@ -676,7 +676,7 @@ final class ChatDraftStore {
     /// Clears the draft's user-authored content. Attachments and settings are
     /// managed separately (attachments sync from the composer observationally).
     func clearDraft(for key: ChatDraftKey) {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe("clearDraft", key: key, textLength: 0)
         setContent(.empty, for: key)
     }
@@ -688,7 +688,7 @@ final class ChatDraftStore {
         draftWasEdited: Bool,
         for key: ChatDraftKey
     ) -> ComposerDraftContent {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe(
             "resolveSubmission.in",
             key: key,
@@ -702,7 +702,7 @@ final class ChatDraftStore {
         }
 
         guard !draftWasEdited else {
-            // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("resolveSubmission.keptEdited", key: key, textLength: current.text.count)
             return current
         }
@@ -717,18 +717,18 @@ final class ChatDraftStore {
                     draft.attachments = []
                 }
             }
-            // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("resolveSubmission.consumed", key: key, textLength: current.text.count)
             return current
         }
 
         if current.isEmpty {
             setContent(submitted, for: key)
-            // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("resolveSubmission.restored", key: key, textLength: submitted.text.count)
             return submitted
         }
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe("resolveSubmission.keptEditing", key: key, textLength: current.text.count)
         return current
     }
@@ -778,7 +778,7 @@ final class ChatDraftStore {
     /// between contexts, e.g. a new-chat draft into its created session.
     @discardableResult
     func moveDraft(from sourceKey: ChatDraftKey, to targetKey: ChatDraftKey) -> ChatDraft {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe("moveDraft", key: sourceKey, textLength: drafts[sourceKey]?.text.count ?? 0,
                       detail: "to=\(ChatDraftStore.probeLabel(targetKey))")
         markChangedBeforeLoad(sourceKey)
@@ -801,7 +801,7 @@ final class ChatDraftStore {
         to newChatKey: ChatDraftKey,
         didStartConversation: Bool
     ) -> ChatDraft? {
-        // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
         logDraftProbe(
             "restoreAbandonedNewChatDraft",
             key: sessionKey,
@@ -809,7 +809,7 @@ final class ChatDraftStore {
             detail: "didStartConversation=\(didStartConversation) to=\(ChatDraftStore.probeLabel(newChatKey))"
         )
         guard !didStartConversation else {
-            // HERMEX-FORK (diagnostic, temporary) — probe for the draft lifecycle.
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("restoreAbandonedNewChatDraft.skipped", key: sessionKey, textLength: 0)
             return nil
         }
