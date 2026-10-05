@@ -215,7 +215,78 @@ NOTICES   транзиентное → статус-строка; требует
 
 ---
 
-## 7. План по этапам
+## 7. Performance roadmap — rendering-ветка (строгий порядок)
+
+**Правило:** до 3.9.40 ничего не оптимизируется. Каждый шаг — instrumentation-only,
+одна переменная на сборку, baseline каждого шага переиспользуется следующим.
+
+```
+3.9.40  Frame Histogram            ← СДЕЛАНО (собрано, ждёт установки и данных)
+        все кадры, p50–p99, бакеты, контексты idle/scroll/stream/scroll+stream/app_update
+   ↓
+3.9.41  Incremental Render
+        гипотеза: при streaming перерисовывается ТОЛЬКО новый фрагмент, или система
+        заставляет заново раскладывать/рендерить большой объём уже готового текста
+        сравнение: incremental vs full re-render, стоимость от накопленной длины
+   ↓
+3.9.42  Fallback Render
+        отдельно: Frame Time fallback-ветки, layout/render passes, короткий vs длинный контент
+   ↓
+3.9.43  .fixedSize A/B
+        один и тот же контент, .fixedSize ON/OFF → histogram + render/layout метрики
+        только здесь проверяется, является ли .fixedSize источником стоимости
+   ↓
+3.9.44  ProMotion A/B
+        что реально даёт CADisableMinimumFrameDurationOnPhone: cadence, frame time,
+        hitching — а не предположение, что 120 Hz решит проблему сам по себе
+```
+
+### 7.1 Что именно измеряет 3.9.41 (уточнение, чтобы не спорить потом)
+
+В текущей архитектуре стрим идёт через `LightStreamingRenderer` = `Text(verbatim: content)`.
+Markdown там не парсится вообще, поэтому «incremental render» для потоковой ветки означает
+не парсинг, а **раскладку текста**: на каждый коммит SwiftUI раскладывает **всю накопленную
+строку**, а не только новый фрагмент.
+
+Измеримое (без Instruments):
+
+```
+на каждый коммит стрима:
+  accumulatedChars   — накопленная длина текста                (счётчик)
+  deltaChars         — сколько добавилось с прошлого коммита   (счётчик)
+  commitIntervalMs   — интервал между коммитами                (таймер)
+  frameMsAroundCommit— длительность ближайшего кадра            (из канала 3.9.40)
+
+вывод, который это даёт:
+  стоимость кадра растёт с accumulatedChars → раскладывается весь текст (O(N) per update)
+  стоимость кадра не зависит от accumulatedChars → раскладка инкрементальная
+```
+
+Это единственный способ отличить «инкрементально» от «целиком заново» без Instruments.
+
+### 7.2 Параллельные измерения (чтобы не принять побочный эффект за проблему Rendering)
+
+```
+Main Thread              → загрузка, длительные операции, блокировки, sync-работа
+State / Streaming Updates→ частота обновлений, сколько UI-updates на одно stream-событие,
+                            coalescing/debounce
+Persistence / Operation Stall → Session Open, hydration, persistence, WAL
+                            (ОТДЕЛЬНАЯ линия: их миллисекунды НЕ складываются с бюджетом кадра)
+Memory                   → resident memory, рост на длинном стриме, AttributeGraph
+                            (проверка, а не поиск: утечки картинок закрыты ранее)
+```
+
+Две линии производительности существуют раздельно и **никогда не суммируются**:
+
+```
+PERFORMANCE
+ ├── FRAME TIME      (кадр ~19 мс)     ← layout / rendering / display
+ └── OPERATION STALL (Session Open 916 мс, Cache Write 842 мс, ...)  ← отдельные операции
+```
+
+---
+
+## 8. План по этапам
 
 ```
 GATE 0  серверный API: idempotency key / message id / 409 / reconciliation   ← ЗАКРЫТ (§2)
@@ -230,7 +301,7 @@ GATE 0  серверный API: idempotency key / message id / 409 / reconciliat
          (паттерн Kanban уже реализован) — отдельное решение, вне клиента
 ```
 
-## 8. Сохранить / изменить / не трогать
+## 9. Сохранить / изменить / не трогать
 
 | | |
 |---|---|
@@ -238,7 +309,7 @@ GATE 0  серверный API: idempotency key / message id / 409 / reconciliat
 **Изменить** | канал уведомлений; двойной `setContent`; `clearDraft`; классификация `-1005`; разбор 409 в привязку к `activeStreamId` |
 **Не трогать** | `StreamingMarkdownChunkedView` и splitters (dead code); `MainThreadWatchdog`; порог 4000 до данных |
 
-## 9. NOT VERIFIED
+## 10. NOT VERIFIED
 
 ```
 exactly-once без серверного ключа            — НЕДОСТИЖИМО (см. §2.2), не NOT VERIFIED, а REJECTED
