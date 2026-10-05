@@ -558,6 +558,15 @@ final class FrameTimeMonitor: NSObject {
     private let jankMaxThresholdMs: Double = 50.0
     private let reportRateLimit: TimeInterval = 30.0
 
+    // HERMEX-FORK: 3.9.40 — frame histogram (diagnostic only).
+    // Continuous baseline: EVERY window reports the distribution of ALL observed
+    // frames, not only the already-bad ones. The existing `jank` event stays
+    // untouched so the 3.9.36–3.9.39 baseline remains comparable.
+    private var windowFramesMs: [Double] = []
+    /// Bucket edges in ms: <8.33 (120 fps) | 8.33–16.67 (60 fps) |
+    /// 16.67–33.33 | 33.33–50 | >50.
+    private static let histogramBucketUpperBounds: [Double] = [8.33, 16.67, 33.33, 50.0]
+
     private override init() {}
 
     /// Start the display link on the main run loop. Idempotent.
@@ -585,6 +594,8 @@ final class FrameTimeMonitor: NSObject {
         frameCount += 1
         frameMsSum += frameMs
         frameMsMax = max(frameMsMax, frameMs)
+        // HERMEX-FORK: 3.9.40 — keep every frame of the window for the histogram.
+        if windowFramesMs.count < 8192 { windowFramesMs.append(frameMs) }
 
         guard Date().timeIntervalSince(windowStart) >= windowDuration else { return }
 
@@ -597,6 +608,12 @@ final class FrameTimeMonitor: NSObject {
         frameMsSum = 0
         frameMsMax = 0
         windowStart = Date()
+
+        // HERMEX-FORK: 3.9.40 — report the whole window distribution BEFORE the
+        // jank gate, so healthy windows are captured as well (that is the point:
+        // a baseline of all frames, not only the already-bad ones).
+        emitFrameHistogram()
+        windowFramesMs.removeAll(keepingCapacity: true)
 
         guard avgMs > jankAvgThresholdMs || maxMs > jankMaxThresholdMs else { return }
         let now = Date()
@@ -616,5 +633,76 @@ final class FrameTimeMonitor: NSObject {
                 "scrollOwner": ctx.scrollOwner,
             ]
         )
+    }
+
+    // HERMEX-FORK: 3.9.40 — emit the frame distribution of one window.
+    // Diagnostic only: nothing in the app derives behaviour from these numbers.
+    private func emitFrameHistogram() {
+        let frames = windowFramesMs
+        guard !frames.isEmpty else { return }
+        let sorted = frames.sorted()
+        let buckets = Self.histogramBuckets(for: frames)
+        let ctx = MainThreadWatchdog.snapshotPerformanceContext()
+        HermexLogger.shared.log(
+            type: "frames",
+            durationMs: Self.percentile(sorted, 0.50),
+            message: String(
+                format: "frame histogram n=%d p50=%.1f p95=%.1f max=%.1f ms",
+                frames.count,
+                Self.percentile(sorted, 0.50),
+                Self.percentile(sorted, 0.95),
+                sorted[sorted.count - 1]
+            ),
+            extras: [
+                "n": frames.count,
+                "b_lt_8_33": buckets[0],
+                "b_8_33_16_67": buckets[1],
+                "b_16_67_33_33": buckets[2],
+                "b_33_33_50": buckets[3],
+                "b_gt_50": buckets[4],
+                "p50": Self.percentile(sorted, 0.50),
+                "p75": Self.percentile(sorted, 0.75),
+                "p90": Self.percentile(sorted, 0.90),
+                "p95": Self.percentile(sorted, 0.95),
+                "p99": Self.percentile(sorted, 0.99),
+                "maxMs": sorted[sorted.count - 1],
+                "frameTag": Self.frameContextTag(ctx),
+            ]
+        )
+    }
+
+    /// Counts frames per bucket: <8.33 | 8.33–16.67 | 16.67–33.33 | 33.33–50 | >50 ms.
+    private static func histogramBuckets(for frames: [Double]) -> [Int] {
+        var buckets = [0, 0, 0, 0, 0]
+        let edges = histogramBucketUpperBounds
+        for ms in frames {
+            if ms < edges[0] { buckets[0] += 1 }
+            else if ms < edges[1] { buckets[1] += 1 }
+            else if ms < edges[2] { buckets[2] += 1 }
+            else if ms <= edges[3] { buckets[3] += 1 }
+            else { buckets[4] += 1 }
+        }
+        return buckets
+    }
+
+    /// Nearest-rank percentile over an already sorted array.
+    private static func percentile(_ sorted: [Double], _ p: Double) -> Double {
+        guard !sorted.isEmpty else { return 0 }
+        let rank = Int((Double(sorted.count - 1) * p).rounded())
+        return sorted[min(sorted.count - 1, max(0, rank))]
+    }
+
+    /// HERMEX-FORK: 3.9.40 — one tag per window, so the later instrumentation
+    /// steps (3.9.41 rendering/layout, 3.9.42 main thread + stream updates) can
+    /// correlate frame cost with what the app was actually doing.
+    private static func frameContextTag(_ ctx: MainThreadWatchdog.PerformanceContext) -> String {
+        if ctx.isStreaming {
+            return ctx.scrollOwner == "user" ? "scroll+stream" : "stream"
+        }
+        switch ctx.scrollOwner {
+        case "user": return "scroll"
+        case "app": return "app_update"
+        default: return "idle"
+        }
     }
 }
