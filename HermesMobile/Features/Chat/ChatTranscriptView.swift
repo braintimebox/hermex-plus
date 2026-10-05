@@ -321,6 +321,9 @@ struct ChatTranscriptView: View {
             }
             .onChange(of: streamingScrollTrigger) {
                 if isFollowingLatestContent {
+                    // HERMEX-FORK: 3.9.41 — count programmatic follow-scrolls
+                    // during streaming (hypothesis G1). Diagnostic only.
+                    StreamCommitTelemetry.shared.recordFollowScroll()
                     releasingHold { onScrollToLatestContent(proxy, true, "streaming") }
                 }
             }

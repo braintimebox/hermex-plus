@@ -165,6 +165,13 @@ struct StreamingMarkdownRenderer: View {
         contentCommitTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             guard !Task.isCancelled else { return }
+            // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that is about
+            // to change `displayedContent`; nothing here affects rendering.
+            StreamCommitTelemetry.shared.recordCommit(
+                accumulatedChars: latestContent.count,
+                deltaChars: max(0, latestContent.count - displayedContent.count),
+                followActive: MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
+            )
             displayedContent = latestContent
         }
     }

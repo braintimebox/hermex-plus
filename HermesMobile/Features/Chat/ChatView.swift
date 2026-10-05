@@ -3550,6 +3550,11 @@ struct ChatView: View {
             isUserInteractingWithScroll = metrics.isUserInteracting
             MainThreadWatchdog.setPerformanceContext(isUserInteracting: metrics.isUserInteracting)
         }
+        // HERMEX-FORK: 3.9.41 — publish the follow latch on every metrics report
+        // so the stream-commit telemetry can attribute frame cost to an active
+        // auto-follow (hypothesis G1). Observational only; the latch changes on
+        // its own flip path, this only mirrors its current value.
+        MainThreadWatchdog.setPerformanceContext(isFollowingBottom: followLatch.isFollowing)
 
         // F2 (scroll degradation): while the user is actively dragging/flicking,
         // degrade the per-glyph streaming fade so the frame budget goes to scroll.

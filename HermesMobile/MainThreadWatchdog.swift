@@ -262,6 +262,12 @@ final class MainThreadWatchdog {
         var isUserInteracting = false
         var isScrolledNearBottom = true
         var scrollOwner: String = "app"
+        /// HERMEX-FORK: 3.9.41 — follow-latch state, published from ChatView so
+        /// the stream-commit telemetry can tell whether an auto-follow scroll
+        /// was active while a frame degraded (hypothesis G1). Observational
+        /// only: nothing reads it to decide behaviour. Default matches
+        /// `ChatScrollPolicy.FollowLatch.isFollowing = true`.
+        var isFollowingBottom = true
         /// Number of rows actually rendered in the transcript — the N in the
         /// O(N × markdown) freeze model (messageCount is the message-array
         /// count, not the rendered-row count). Updated from the recompute path.
@@ -280,7 +286,8 @@ final class MainThreadWatchdog {
         isUserInteracting: Bool? = nil,
         isScrolledNearBottom: Bool? = nil,
         scrollOwner: String? = nil,
-        displayedRowCount: Int? = nil
+        displayedRowCount: Int? = nil,
+        isFollowingBottom: Bool? = nil
     ) {
         contextLock.lock()
         defer { contextLock.unlock() }
@@ -290,6 +297,7 @@ final class MainThreadWatchdog {
         if let isScrolledNearBottom { performanceContext.isScrolledNearBottom = isScrolledNearBottom }
         if let scrollOwner { performanceContext.scrollOwner = scrollOwner }
         if let displayedRowCount { performanceContext.displayedRowCount = displayedRowCount }
+        if let isFollowingBottom { performanceContext.isFollowingBottom = isFollowingBottom }
     }
 
     /// Snapshot the current observed context (called off-main in watchdog).
@@ -563,6 +571,10 @@ final class FrameTimeMonitor: NSObject {
     // frames, not only the already-bad ones. The existing `jank` event stays
     // untouched so the 3.9.36–3.9.39 baseline remains comparable.
     private var windowFramesMs: [Double] = []
+    /// HERMEX-FORK: 3.9.41 — last observed frame duration. Read on the main
+    /// actor by the stream-commit telemetry to pair each commit with the frame
+    /// it landed in. Observational only.
+    private(set) var lastFrameMs: Double = 0
     /// Bucket edges in ms: <8.33 (120 fps) | 8.33–16.67 (60 fps) |
     /// 16.67–33.33 | 33.33–50 | >50.
     private static let histogramBucketUpperBounds: [Double] = [8.33, 16.67, 33.33, 50.0]
@@ -591,6 +603,7 @@ final class FrameTimeMonitor: NSObject {
 
         let frameMs = (link.timestamp - lastTimestamp) * 1000
         lastTimestamp = link.timestamp
+        lastFrameMs = frameMs
         frameCount += 1
         frameMsSum += frameMs
         frameMsMax = max(frameMsMax, frameMs)

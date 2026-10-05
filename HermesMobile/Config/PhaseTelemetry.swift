@@ -254,3 +254,137 @@ final class PhaseTelemetry {
         (value * 10).rounded() / 10
     }
 }
+
+// HERMEX-FORK: 3.9.41 — streaming-commit diagnostics (instrumentation only).
+//
+// WHY: the 3.9.40 frame histogram proved that only streaming contexts degrade
+// (`stream` 34.3% of frames miss 16.67 ms, `app_update` only 3.4%), but it
+// cannot say WHY. This channel records, per commit of the streaming renderer,
+// enough to discriminate the four remaining hypotheses from §7 of the baseline:
+//
+//   G1  follow-scroll competes for the frame      → cost high only when followActive
+//   G2  the whole accumulated text is re-laid out → cost grows with accumulatedChars
+//   G3  the initial heavy layout dominates        → bad frames cluster at small streamAgeMs
+//   G4  the degradation merely coincides with
+//       background operations (cache/session)     → no dependence on length/follow
+//
+// Nothing here changes behaviour: values are only written to the log.
+// Aggregation is per 2 s window so the channel stays comparable to `frames`.
+final class StreamCommitTelemetry {
+    static let shared = StreamCommitTelemetry()
+
+    private let queue = DispatchQueue(label: "hermex.streamCommit.telemetry")
+    private let windowDuration: TimeInterval = 2.0
+    /// A gap longer than this between commits means a new answer started.
+    private let streamGap: TimeInterval = 3.0
+
+    private var windowStart = Date()
+    private var lastCommitAt: Date?
+    private var streamStart = Date()
+    private var streamID = 0
+
+    private var commits = 0
+    private var accumulatedMin = Int.max
+    private var accumulatedMax = 0
+    private var deltaSum = 0
+    private var deltaMax = 0
+    private var intervalSumMs = 0.0
+    private var intervalMaxMs = 0.0
+    private var intervals = 0
+    private var followActiveCommits = 0
+    private var followScrolls = 0
+    private var frameSumMs = 0.0
+    private var frameMaxMs = 0.0
+    private var frameSamples = 0
+
+    private init() {}
+
+    /// One renderer commit of the streaming text.
+    /// Called on the main actor, so the frame duration is read on main too.
+    func recordCommit(accumulatedChars: Int, deltaChars: Int, followActive: Bool) {
+        let now = Date()
+        let frameMs = FrameTimeMonitor.shared.lastFrameMs
+        queue.sync {
+            if let last = lastCommitAt, now.timeIntervalSince(last) > streamGap {
+                flushLocked(at: last)
+                streamID += 1
+                streamStart = now
+            }
+            if let last = lastCommitAt {
+                let ms = now.timeIntervalSince(last) * 1000
+                intervalSumMs += ms
+                intervalMaxMs = max(intervalMaxMs, ms)
+                intervals += 1
+            }
+            lastCommitAt = now
+
+            commits += 1
+            accumulatedMin = min(accumulatedMin, accumulatedChars)
+            accumulatedMax = max(accumulatedMax, accumulatedChars)
+            deltaSum += deltaChars
+            deltaMax = max(deltaMax, deltaChars)
+            if followActive { followActiveCommits += 1 }
+            if frameMs > 0 {
+                frameSumMs += frameMs
+                frameMaxMs = max(frameMaxMs, frameMs)
+                frameSamples += 1
+            }
+
+            if now.timeIntervalSince(windowStart) >= windowDuration { flushLocked(at: now) }
+        }
+    }
+
+    /// A programmatic auto-follow scroll fired while streaming (G1).
+    func recordFollowScroll() {
+        queue.sync { followScrolls += 1 }
+    }
+
+    private func flushLocked(at now: Date) {
+        guard commits > 0 else {
+            windowStart = now
+            return
+        }
+        let avgFrame = frameSamples > 0 ? frameSumMs / Double(frameSamples) : 0
+        let ageMs = now.timeIntervalSince(streamStart) * 1000
+        HermexLogger.shared.log(
+            type: "streamCommit",
+            durationMs: avgFrame,
+            screen: "Performance",
+            message: String(
+                format: "stream commits n=%d accum<=%d avgFrame=%.1f maxFrame=%.1f follow=%d/%d",
+                commits, accumulatedMax, avgFrame, frameMaxMs, followActiveCommits, commits
+            ),
+            extras: [
+                "streamId": streamID,
+                "commits": commits,
+                "accumulatedMin": accumulatedMin == Int.max ? 0 : accumulatedMin,
+                "accumulatedMax": accumulatedMax,
+                "deltaSum": deltaSum,
+                "deltaMax": deltaMax,
+                "intervalAvgMs": intervals > 0 ? intervalSumMs / Double(intervals) : 0,
+                "intervalMaxMs": intervalMaxMs,
+                "followActiveCommits": followActiveCommits,
+                "followScrolls": followScrolls,
+                "streamAgeMs": ageMs,
+                "frameAvgMs": avgFrame,
+                "frameMaxMs": frameMaxMs,
+                "frameSamples": frameSamples,
+            ]
+        )
+
+        commits = 0
+        accumulatedMin = Int.max
+        accumulatedMax = 0
+        deltaSum = 0
+        deltaMax = 0
+        intervalSumMs = 0
+        intervalMaxMs = 0
+        intervals = 0
+        followActiveCommits = 0
+        followScrolls = 0
+        frameSumMs = 0
+        frameMaxMs = 0
+        frameSamples = 0
+        windowStart = now
+    }
+}
