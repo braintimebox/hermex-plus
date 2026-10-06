@@ -116,6 +116,12 @@ final class ChatStreamCoordinator {
     private(set) var activeStreamID: String? {
         didSet {
             guard activeStreamID != oldValue else { return }
+            // HERMEX-FORK: 3.9.42 — diagnostic. Publish the streaming flag at the
+            // exact start/end of a stream. It used to be published only from
+            // `ChatViewModel.messages.didSet`, which never fires for in-place
+            // content edits during a stream, so the `stream` frame tag lagged and
+            // the stream-commit channel read a stale flag.
+            MainThreadWatchdog.setPerformanceContext(isStreaming: activeStreamID != nil)
             activeRunStartedAt = activeStreamID == nil ? nil : Date()
             if activeStreamID != nil {
                 latestRunEnding = nil

@@ -43,6 +43,11 @@ struct MarkdownRenderer: View {
         }
         .onChange(of: isStreaming) { wasStreaming, nowStreaming in
             if wasStreaming, !nowStreaming {
+                // HERMEX-FORK: 3.9.42 — diagnostic. Flush the pending stream-commit
+                // window the moment the stream ends, so a short stream that never
+                // crossed a 2 s window boundary is still recorded (on 3.9.41 those
+                // windows were silently lost).
+                StreamCommitTelemetry.shared.endStream()
                 lingersAfterStreaming = true
             }
         }

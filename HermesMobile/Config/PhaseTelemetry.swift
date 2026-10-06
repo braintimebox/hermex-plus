@@ -339,6 +339,18 @@ final class StreamCommitTelemetry {
         queue.sync { followScrolls += 1 }
     }
 
+    /// Stream ended (or the app is going away): emit whatever is still pending.
+    ///
+    /// WHY THIS EXISTS: on 3.9.41 this channel produced zero events while six
+    /// `Stream Batch Apply` phases proved streaming was happening. The window
+    /// only flushed on a commit that crossed the 2 s boundary; a stream that
+    /// ended first kept its last window in memory forever — no flush, no event.
+    /// The short streams in that session (1-7 batches) never crossed it.
+    func endStream() {
+        let now = Date()
+        queue.sync { flushLocked(at: now) }
+    }
+
     private func flushLocked(at now: Date) {
         guard commits > 0 else {
             windowStart = now
