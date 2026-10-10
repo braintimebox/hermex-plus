@@ -47,7 +47,11 @@ extension APIClient {
     }
 
     func chatStreamStatus(streamID: String) async throws -> ChatStreamStatusResponse {
-        try await send(endpoint: .chatStreamStatus(streamID: streamID), method: "GET")
+        // HERMEX-FORK: (#585 port) — an explicit short timeout keeps the reconnect
+        // budget in seconds. Without it a probe against a black-holed host waits the
+        // 60s session default, so one transient failure parked the suspended stream
+        // for a full minute before the caller saw anything.
+        try await send(endpoint: .chatStreamStatus(streamID: streamID), method: "GET", timeout: 10)
     }
 
     func approvalPending(sessionID: String) async throws -> ApprovalPendingResponse {
