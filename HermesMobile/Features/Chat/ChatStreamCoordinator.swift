@@ -433,45 +433,52 @@ final class ChatStreamCoordinator {
         await task.value
     }
 
-    // HERMEX-FORK: (#585 port) — attempts for the reconnect status probe.
-    private static let reconnectProbeMaxAttempts = 3
+    // HERMEX-FORK: (#585 port) — budget mirrors upstream: one probe plus three
+    // retries, i.e. four status requests, sleeping 1s/2s/4s between them.
+    private static let reconnectProbeMaxAttempts = 4
 
     private func performReconnectIfNeeded(
         reconnectTaskID: UUID,
         streamID: String,
         runGeneration: Int
     ) async {
+        var lastTransientError: Error?
         for attempt in 1...Self.reconnectProbeMaxAttempts {
-            let finished = await performReconnectAttempt(
+            guard let transientError = await performReconnectAttempt(
                 reconnectTaskID: reconnectTaskID,
                 streamID: streamID,
                 runGeneration: runGeneration
-            )
-            if finished { return }
-            guard attempt < Self.reconnectProbeMaxAttempts else {
-                // Budget spent. `isConnectionSuspended` stays true, so a later
-                // `reconnectIfNeeded` (foreground, or the next message) re-arms
-                // the probe — the stream is parked, not silently dead.
+            ) else {
+                // Recovered, finalized, or a non-transient error already surfaced.
                 return
             }
+            lastTransientError = transientError
+            guard attempt < Self.reconnectProbeMaxAttempts else { break }
             await HermesRetryBackoff.sleep(attempt: attempt)
+        }
+        // HERMEX-FORK: (#585 port) — budget spent on transient failures: the run is
+        // still suspended and never became terminal, so surface it. Without this the
+        // client parked silently with `isConnectionSuspended == true` and no visible
+        // outcome, which is strictly worse than the single probe we replaced.
+        if let lastTransientError {
+            delegate?.streamCoordinatorDidReceiveRecoveryError(lastTransientError)
         }
     }
 
-    /// HERMEX-FORK: (#585 port) — one status probe. Returns true when the attempt
+    /// HERMEX-FORK: (#585 port) — one status probe. Returns nil when the attempt
     /// reached an outcome that must not be retried (recovered, finalized, or the
-    /// error was surfaced to the delegate). Returns false ONLY for a transient
+    /// error was surfaced to the delegate). Returns the error only for a transient
     /// probe failure, so the outer loop retries it inside the same single-flight task.
     private func performReconnectAttempt(
         reconnectTaskID: UUID,
         streamID: String,
         runGeneration: Int
-    ) async -> Bool {
+    ) async -> Error? {
         guard reconnectTaskIsCurrent(
             reconnectTaskID: reconnectTaskID,
             streamID: streamID,
             runGeneration: runGeneration
-        ) else { return true }
+        ) else { return nil }
 
         do {
             let response = try await client.chatStreamStatus(streamID: streamID)
@@ -479,7 +486,7 @@ final class ChatStreamCoordinator {
                 reconnectTaskID: reconnectTaskID,
                 streamID: streamID,
                 runGeneration: runGeneration
-            ) else { return true }
+            ) else { return nil }
             delegate?.streamCoordinatorDidConfirmRecovery()
 
             if response.active == true {
@@ -490,7 +497,7 @@ final class ChatStreamCoordinator {
                         streamID: streamID,
                         runGeneration: runGeneration
                       )
-                else { return true }
+                else { return nil }
 
                 if delegate?.streamCoordinatorStreamingAssistantMessageID == nil {
                     restoreSnapshotIfAvailable(streamID: streamID)
@@ -515,7 +522,7 @@ final class ChatStreamCoordinator {
                     reconnectTaskID: reconnectTaskID,
                     streamID: streamID,
                     runGeneration: runGeneration
-                ) else { return true }
+                ) else { return nil }
                 let replayAfterSeq = Self.runJournalReplayAfterSeq(from: lastEventID) ?? 0
                 isConnectionSuspended = false
                 start(streamID: streamID, replayAfterSeq: replayAfterSeq)
@@ -528,7 +535,7 @@ final class ChatStreamCoordinator {
                         runGeneration: runGeneration
                       ),
                       canFinalizeRunAfterLoad(streamID: streamID, capturedGeneration: runGeneration)
-                else { return true }
+                else { return nil }
 
                 // #246: the server reports the run is over. Finalize it (and end
                 // the Live Activity) instead of re-arming and leaving it dangling
@@ -537,7 +544,7 @@ final class ChatStreamCoordinator {
             }
             // HERMEX-FORK: (#585 port) — the attempt is finished; the retrying
             // wrapper must not probe again.
-            return true
+            return nil
         } catch {
             if (error as? APIError)?.indicatesMissingStream == true,
                reconnectTaskIsCurrent(
@@ -553,27 +560,33 @@ final class ChatStreamCoordinator {
                         runGeneration: runGeneration
                       ),
                       canFinalizeRunAfterLoad(streamID: streamID, capturedGeneration: runGeneration)
-                else { return true }
+                else { return nil }
                 finalizeInactiveStream(streamID: streamID)
-                return true
+                return nil
             }
             guard reconnectTaskIsCurrent(
                 reconnectTaskID: reconnectTaskID,
                 streamID: streamID,
                 runGeneration: runGeneration
-            ) else { return true }
+            ) else { return nil }
             // HERMEX-FORK: (#585 port) — a transient failure used to surface the error
             // on the FIRST probe and leave `isConnectionSuspended == true` with no retry
             // scheduled, so the run never recovered on its own. Backoff only re-arms the
             // probe; it does not decide whether the original POST landed.
-            if Self.isTransientProbeFailure(error) { return false }
+            if Self.isTransientProbeFailure(error) { return error }
             delegate?.streamCoordinatorDidReceiveRecoveryError(error)
-            return true
+            return nil
         }
     }
 
     /// HERMEX-FORK: (#585 port) — a probe failure worth retrying: connectivity
     /// URLErrors, request timeouts, and the transient 5xx family.
+    ///
+    /// Wider than `APIError.isRetryableConnectionFailure` ON PURPOSE. That one
+    /// deliberately excludes `.timedOut` and `.networkConnectionLost` because they
+    /// can fire after the server already accepted a POST, so retrying would
+    /// duplicate. A status probe is a GET with no side effects, so retrying it is
+    /// always safe — do not "simplify" this back to the send-path predicate.
     private static func isTransientProbeFailure(_ error: Error) -> Bool {
         guard let apiError = error as? APIError else { return false }
         if case .http(let status, _) = apiError, [502, 503, 504].contains(status) {

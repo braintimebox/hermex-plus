@@ -51,7 +51,15 @@ extension APIClient {
         // budget in seconds. Without it a probe against a black-holed host waits the
         // 60s session default, so one transient failure parked the suspended stream
         // for a full minute before the caller saw anything.
-        try await send(endpoint: .chatStreamStatus(streamID: streamID), method: "GET", timeout: 10)
+        // Goes through `sendData` because `send(endpoint:method:)` has no timeout
+        // parameter and the overload that does requires a `body`.
+        let data = try await sendData(
+            endpoint: .chatStreamStatus(streamID: streamID),
+            method: "GET",
+            encodedBody: nil,
+            timeout: 10
+        )
+        return try decode(ChatStreamStatusResponse.self, from: data)
     }
 
     func approvalPending(sessionID: String) async throws -> ApprovalPendingResponse {

@@ -341,7 +341,18 @@ final class ChatStreamCoordinatorTests: APIClientTestCase {
     }
 
     @MainActor
+    /// HERMEX-FORK: (#585 port) — a transient probe failure no longer ends the
+    /// recovery. The retry happens inside the same single-flight task, so one
+    /// `reconnectIfNeeded()` both absorbs the failure and restores the stream.
+    /// Before #585 this test expected the error to surface immediately and a
+    /// manual second call to finish the job — that is the "parked until something
+    /// else notices" defect this port removes.
     func testSuccessfulReconnectConfirmsRecoveryAfterTransientStatusFailure() async {
+        // HERMEX-FORK: (#585 port) — zero the shared backoff so the internal retry
+        // does not cost 3 s of wall clock in the suite.
+        HermesRetryBackoff.scale = 0
+        defer { HermesRetryBackoff.scale = 1 }
+
         let statusRequestCount = CoordinatorLockedCounter()
         let streamClient = CoordinatorSpySSEStreamingClient()
         let delegate = CoordinatorDelegateSpy()
@@ -358,11 +369,8 @@ final class ChatStreamCoordinatorTests: APIClientTestCase {
 
         await coordinator.reconnectIfNeeded()
 
-        XCTAssertEqual(delegate.recoveryErrors.count, 1)
-        XCTAssertEqual(delegate.confirmedRecoveryCount, 0)
-
-        await coordinator.reconnectIfNeeded()
-
+        XCTAssertEqual(statusRequestCount.value, 2)
+        XCTAssertEqual(delegate.recoveryErrors.count, 0)
         XCTAssertEqual(delegate.confirmedRecoveryCount, 1)
         XCTAssertFalse(coordinator.isConnectionSuspended)
         XCTAssertEqual(streamClient.startedURLs.count, 2)
@@ -2455,5 +2463,107 @@ private final class ObservationChangeProbe: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         count += 1
+    }
+}
+
+// MARK: - HERMEX-FORK: (#585 port) — reconnect budget behaviour
+//
+// Before the upstream PR #585 port, a single transient failure of the status probe
+// surfaced the error and left the stream suspended for good: nothing re-armed the
+// probe, and the1s refresh loop skips a suspended connection. These cases pin the
+// replacement contract — a transient failure retries inside one single-flight task,
+// a non-transient one surfaces at once, and an exhausted budget surfaces exactly
+// one error instead of parking silently.
+extension ChatStreamCoordinatorTests {
+    @MainActor
+    func testReconnectExhaustsTransientProbeBudgetAndSurfacesOneError() async {
+        HermesRetryBackoff.scale = 0
+        defer { HermesRetryBackoff.scale = 1 }
+
+        let statusRequestCount = CoordinatorLockedCounter()
+        let streamClient = CoordinatorSpySSEStreamingClient()
+        let delegate = CoordinatorDelegateSpy()
+        let coordinator = makeCoordinator(streamClient: streamClient, delegate: delegate) { request in
+            XCTAssertEqual(request.url?.path, "/api/chat/stream/status")
+            _ = statusRequestCount.increment()
+            throw URLError(.cannotConnectToHost)
+        }
+
+        coordinator.start(streamID: "stream-123")
+        coordinator.suspendActiveStreamConnection()
+
+        await coordinator.reconnectIfNeeded()
+
+        // Upstream's budget: one probe plus three retries.
+        XCTAssertEqual(statusRequestCount.value, 4)
+        // One error for the whole budget, not one per attempt.
+        XCTAssertEqual(delegate.recoveryErrors.count, 1)
+        XCTAssertEqual(delegate.confirmedRecoveryCount, 0)
+        // The stream stays suspended and is NOT restarted into a dead connection.
+        XCTAssertTrue(coordinator.isConnectionSuspended)
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+
+        // The budget is per call, not global: a later reconnectIfNeeded probes again
+        // instead of finding the stream permanently parked.
+        let afterBudget = statusRequestCount.value
+        await coordinator.reconnectIfNeeded()
+        XCTAssertGreaterThan(statusRequestCount.value, afterBudget)
+    }
+
+    @MainActor
+    func testReconnectSurfacesNonTransientProbeFailureAfterOneProbe() async {
+        HermesRetryBackoff.scale = 0
+        defer { HermesRetryBackoff.scale = 1 }
+
+        let statusRequestCount = CoordinatorLockedCounter()
+        let streamClient = CoordinatorSpySSEStreamingClient()
+        let delegate = CoordinatorDelegateSpy()
+        let coordinator = makeCoordinator(streamClient: streamClient, delegate: delegate) { request in
+            XCTAssertEqual(request.url?.path, "/api/chat/stream/status")
+            _ = statusRequestCount.increment()
+            return apiTestJSONResponse(#"{"error":"nope"}"#, for: request, status: 401)
+        }
+
+        coordinator.start(streamID: "stream-123")
+        coordinator.suspendActiveStreamConnection()
+
+        await coordinator.reconnectIfNeeded()
+
+        // A 401 is not a connectivity blip: retrying it would only add latency.
+        XCTAssertEqual(statusRequestCount.value, 1)
+        XCTAssertEqual(delegate.recoveryErrors.count, 1)
+        XCTAssertEqual(delegate.confirmedRecoveryCount, 0)
+        XCTAssertTrue(coordinator.isConnectionSuspended)
+        XCTAssertEqual(streamClient.startedURLs.count, 1)
+    }
+
+    @MainActor
+    func testReconnectProbeTimeoutIsClassifiedAsTransient() async {
+        HermesRetryBackoff.scale = 0
+        defer { HermesRetryBackoff.scale = 1 }
+
+        // The10s probe timeout lands as URLError(.timedOut) wrapped in APIError.
+        // It must be retried — unlike a send timeout, a GET status probe carries no
+        // duplicate-side-effect risk, which is exactly why the send path keeps
+        // `.timedOut` out of APIError.isRetryableConnectionFailure.
+        let statusRequestCount = CoordinatorLockedCounter()
+        let delegate = CoordinatorDelegateSpy()
+        let coordinator = makeCoordinator(delegate: delegate) { request in
+            let attempt = statusRequestCount.increment()
+            if attempt <= 2 {
+                throw URLError(.timedOut)
+            }
+            return apiTestJSONResponse(#"{"active": true, "stream_id": "stream-123"}"#, for: request)
+        }
+
+        coordinator.start(streamID: "stream-123")
+        coordinator.suspendActiveStreamConnection()
+
+        await coordinator.reconnectIfNeeded()
+
+        XCTAssertEqual(statusRequestCount.value, 3)
+        XCTAssertEqual(delegate.recoveryErrors.count, 0)
+        XCTAssertEqual(delegate.confirmedRecoveryCount, 1)
+        XCTAssertFalse(coordinator.isConnectionSuspended)
     }
 }
