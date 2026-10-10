@@ -136,6 +136,34 @@ struct MessageBubbleView: View {
             isStreaming ? ChatMotion.streamingFollow(reduceMotion: reduceMotion) : nil,
             value: messageText
         )
+        // HERMEX-FORK: readability. The assistant row had no background, no
+        // border and no inset — text floated directly on the transcript
+        // background, so there was no visual boundary telling one reply from
+        // the next and no contrast anchor for the eye. The user bubble has had
+        // all three since forever; this gives the assistant reply the same
+        // containment. Applied AFTER the animation modifier on purpose: the
+        // container is static furniture, it must not animate with the growing
+        // text height.
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            assistantBubbleBackground,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(assistantBubbleBorder, lineWidth: 0.5)
+        )
+    }
+
+    private var assistantBubbleBackground: Color {
+        colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6)
+    }
+
+    private var assistantBubbleBorder: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : Color.black.opacity(0.06)
     }
 
     @ViewBuilder
