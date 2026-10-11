@@ -1862,7 +1862,7 @@ struct ChatView: View {
     /// The accent bar's colour: the assistant's reply is marked in the accent
     /// blue, the user's own message in a neutral grey. Colour follows the
     /// speaker because that is the one fact the card no longer states in text.
-    private func pinnedAccentColor(for role: String) -> Color {
+    private func pinnedAccentColor(for role: String?) -> Color {
         role == "user" ? Color(.systemGray3) : Color.accentColor
     }
 
