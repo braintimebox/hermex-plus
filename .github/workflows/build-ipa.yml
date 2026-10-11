@@ -171,16 +171,29 @@ jobs:
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
+          # MEASURED (run 38135481553): шаг Test = 492s, из них
+          #   162.7s  — выполнение 2582 кейсов (медиана 0.002s, p90 0.020s)
+          #   365s    — ТИХАЯ настройка симулятора между TEST BUILD SUCCEEDED и
+          #             "Testing started": лог в этом окне пуст, внутри xcodebuild
+          #             идёт загрузка назначения, установка приложения и раннера.
+          #
+          # Тесты при этом шли на 'Clone 1 of iPhone 17' — то есть Xcode клонировал
+          # симулятор. При TEST_WORKERS=1 параллелизма нет, но цена клона
+          # оплачивается целиком. Отключаем параллелизм, чтобы идти на базовое
+          # назначение без клонирования.
+          #
+          # Осторожно: это ГИПОТЕЗА, а не подтверждённый выигрыш. Ранее замеренный
+          # эксперимент с 4 воркерами (4016s против 689s) отвергнут и остаётся
+          # отвергнутым — речь только о параллелизме при одном воркере.
           xcodebuild test-without-building \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
             -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             -resultBundlePath "${RESULT_BUNDLE_PATH}" \
-            -parallel-testing-enabled YES \
-            -parallel-testing-worker-count "${TEST_WORKERS}" \
+            -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO
-          echo "Tests (${TEST_WORKERS} workers): $((SECONDS - start_seconds))s"
+          echo "Tests (parallel disabled): $((SECONDS - start_seconds))s"
 
       - name: Report test failures
         # Runs even when the suite fails. Without this, a red run shows only
