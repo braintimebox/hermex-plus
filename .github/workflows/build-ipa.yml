@@ -119,9 +119,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}
-          key: dd-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
+          key: dd-${{ runner.os }}-test-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
           restore-keys: |
-            dd-${{ runner.os }}-
+            dd-${{ runner.os }}-test-
 
       - name: Select simulator
         id: sim
@@ -267,6 +267,21 @@ jobs:
       - name: Read version
         id: version
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      # Единый стандарт кэша по всем репозиториям: ключ по хешу проекта и
+      # зависимостей, без github.sha (иначе каждый push заливал бы гигабайты заново).
+      # Ключ отдельный от job'ы `test`: та собирает для симулятора, эта — для
+      # устройства, содержимое DerivedData различается, общий ключ их затёр бы.
+      #
+      # MEASURED: "Build for device" = 325s (run 37192693467). Гипотеза, не факт —
+      # проверяется разницей между прогоном с попаданием и без.
+      - name: Restore DerivedData cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}
+          key: dd-${{ runner.os }}-device-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
+          restore-keys: |
+            dd-${{ runner.os }}-device-
 
       - name: Build for device
         run: |
