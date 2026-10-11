@@ -1590,6 +1590,71 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.activeStreamID, "stream-123")
     }
 
+    /// HERMEX-FORK: a fast second tap must not send a second respond for the
+    /// same approval. `isRespondingToApproval` is set inside the coordinator
+    /// while the buttons only disable through a SwiftUI state change, which
+    /// lands on a later runloop tick — so between the first tap and that update
+    /// a second tap went through and posted a duplicate decision for the same
+    /// approval id. Both calls are issued concurrently below; without the guard
+    /// the server sees two responds for one prompt, and the choice that lands is
+    /// whichever returned last rather than the one the user settled on.
+    @MainActor
+    func testApprovalSecondTapWhileFirstInFlightIsIgnored() async throws {
+        let streamClient = SpySSEStreamingClient()
+        let approvalStreamClient = SpySSEStreamingClient()
+        let respondCounter = LockedCounter()
+        let viewModel = try makeViewModel(
+            streamClient: streamClient,
+            approvalStreamClient: approvalStreamClient
+        ) { request in
+            switch request.url?.path {
+            case "/api/chat/start":
+                return apiTestJSONResponse("""
+                {
+                  "session_id": "session-abc",
+                  "stream_id": "stream-123"
+                }
+                """, for: request)
+            case "/api/approval/respond":
+                respondCounter.increment()
+                return apiTestJSONResponse(#"{"ok": true, "choice": "once"}"#, for: request)
+            case "/api/approval/pending":
+                return apiTestJSONResponse(#"{"pending": null, "pending_count": 0}"#, for: request)
+            default:
+                XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+                throw URLError(.badURL)
+            }
+        }
+
+        let didStart = await viewModel.sendMessage("Run the installer")
+        XCTAssertTrue(didStart)
+
+        let gatewayApproval = ApprovalPendingResponse.streamPayload(from: Data("""
+        {
+          "pending": {
+            "id": "approval-1",
+            "command": "curl https://example.test/install.sh | bash",
+            "description": "High risk command",
+            "pattern_keys": ["network_download", "pipe_to_shell"]
+          },
+          "pending_count": 1
+        }
+        """.utf8))
+        approvalStreamClient.emit(.approvalPending(gatewayApproval))
+        XCTAssertEqual(viewModel.approvalPrompt?.pending.approvalId, "approval-1")
+
+        // Two decisions for the same prompt, exactly as two quick taps do.
+        async let first = viewModel.respondToApproval(.once)
+        async let second = viewModel.respondToApproval(.always)
+        _ = await (first, second)
+
+        XCTAssertEqual(
+            respondCounter.count, 1,
+            "The second tap must be dropped before it reaches the server, or the user's final decision is not the one that lands."
+        )
+    }
+
+
     @MainActor
     func testApprovalResponseDoesNotUseSyntheticDisplayIDWhenServerIdentifierMissing() async throws {
         let streamClient = SpySSEStreamingClient()

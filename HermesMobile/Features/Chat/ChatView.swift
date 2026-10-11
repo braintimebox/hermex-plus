@@ -262,7 +262,12 @@ struct ChatView: View {
         CFAbsoluteTimeGetCurrent()
     }
     private let bottomAnchorID = "chat-bottom-anchor"
-    private let transcriptSpacing: CGFloat = 8
+    // HERMEX-FORK: was 8. The gap between transcript rows was the single
+    // largest source of empty vertical space on a long conversation: at the
+    // default text size a row is ~20pt of text, so 8pt of dead space between
+    // rows is 40% overhead. 6pt still separates turns clearly while buying
+    // back roughly two extra rows of visible content per screen.
+    private let transcriptSpacing: CGFloat = 6
     private let composerAccessoryVerticalSpacing: CGFloat = 8
     private let activeRunStatusSpacerHeight: CGFloat = 36
     private let approvalBypassStatusSpacerHeight: CGFloat = 38

@@ -103,6 +103,15 @@ final class ChatPendingActionCoordinator {
 
     @discardableResult
     func respondToApproval(_ choice: ApprovalChoice) async -> Bool {
+        // HERMEX-FORK: re-entrancy guard. `isRespondingToApproval` is set
+        // further down and the buttons only disable through a SwiftUI state
+        // change, which lands on a later runloop tick — a fast second tap
+        // could therefore send a second respond for the same approval id
+        // while the first was still in flight. Checked here, before any
+        // await, so the second call returns immediately instead of
+        // re-posting the decision.
+        guard !isRespondingToApproval else { return false }
+
         guard let prompt = approvalPrompt,
               prompt.sessionID == delegate?.pendingActionSessionID
         else { return false }
@@ -165,6 +174,10 @@ final class ChatPendingActionCoordinator {
 
     @discardableResult
     func skipApprovalsForCurrentSession() async -> Bool {
+        // HERMEX-FORK: same re-entrancy guard as `respondToApproval` — enabling
+        // the bypass for the whole session must not fire twice on a fast tap.
+        guard !isRespondingToApproval else { return false }
+
         guard let prompt = approvalPrompt,
               prompt.sessionID == delegate?.pendingActionSessionID
         else { return false }
