@@ -1595,7 +1595,29 @@ struct ChatView: View {
                     message: pinnedMsg,
                     totalCount: pinnedMessageIDs.count
                 )
-                .background(.ultraThinMaterial)
+                // HERMEX-FORK: the banner was a full-bleed frosted strip with no
+                // rounding, sitting directly under a nav bar that is also a light
+                // opaque surface — so it read as part of the header chrome rather
+                // than as an object marking "something is pinned here". It is now
+                // a card: inset from both edges, rounded, and carrying a
+                // role-coloured accent bar on its left edge, which is the anchor
+                // the eye finds when scanning for a pinned message.
+                .padding(.horizontal, 12)
+                .padding(.top, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(pinnedAccentColor(for: pinnedMsg.role))
+                        .frame(width: 3)
+                        .padding(.vertical, 6)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
+                )
                 .contentShape(Rectangle())
                 .onTapGesture {
                     pinnedScrollTarget = latestPinnedID
@@ -1806,22 +1828,19 @@ struct ChatView: View {
     /// scrolls to it; long-press opens the pinned list or unpins. When more than
     /// one message is pinned a trailing "+N" badge signals the rest.
     private func pinnedBannerRow(id: String, message: ChatMessage, totalCount: Int) -> some View {
+        // HERMEX-FORK: the `You` / `Hermes` label is gone and the pin moved to
+        // the trailing edge. The label spent one of the card's two lines on
+        // something the transcript already states by position, so the preview
+        // was the only line carrying content; dropping it gives the text the
+        // full width. The pin goes right, where it reads as a marker of the
+        // card rather than as its first word.
         HStack(spacing: 8) {
-            Image(systemName: "pin.fill")
+            Text(Self.pinnedPreview(for: message.content))
                 .font(.caption)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(message.role == "user" ? "You" : "Hermes")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(Self.pinnedPreview(for: message.content))
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundColor(.primary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if totalCount > 1 {
                 Text("+\(totalCount - 1)")
@@ -1831,9 +1850,20 @@ struct ChatView: View {
                     .padding(.vertical, 2)
                     .background(.quaternary, in: Capsule())
             }
+
+            Image(systemName: "pin.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
+    }
+
+    /// The accent bar's colour: the assistant's reply is marked in the accent
+    /// blue, the user's own message in a neutral grey. Colour follows the
+    /// speaker because that is the one fact the card no longer states in text.
+    private func pinnedAccentColor(for role: String) -> Color {
+        role == "user" ? Color(.systemGray3) : Color.accentColor
     }
 
     /// Collapses a message body to a single-line preview, normalising newlines
