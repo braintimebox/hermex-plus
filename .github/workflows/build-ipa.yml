@@ -105,6 +105,24 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      # MEASURED: "Build for testing" = 233s (run 37192693467), "Test" = 640s.
+      # Кэш DerivedData переиспользует скомпилированные артефакты между запусками.
+      #
+      # Ключ НЕ содержит github.sha: иначе каждый запуск заливал бы в кэш
+      # несколько гигабайт заново (лимит кэша — 10 ГБ на репозиторий), и загрузка
+      # съедала бы экономию. Сохранение идёт только при смене проекта или
+      # зависимостей; при обычном правке исходников — только восстановление.
+      #
+      # Это гипотеза, а не подтверждённый выигрыш: проверяется по разнице
+      # "Build for testing" между run'ом с попаданием и без.
+      - name: Restore DerivedData cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}
+          key: dd-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
+          restore-keys: |
+            dd-${{ runner.os }}-
+
       - name: Select simulator
         id: sim
         run: |
