@@ -105,23 +105,26 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      # MEASURED: "Build for testing" = 233s (run 37192693467), "Test" = 640s.
-      # Кэш DerivedData переиспользует скомпилированные артефакты между запусками.
+      # Правильный вид кэша для этого проекта — КЭШ ЗАГРУЗКИ (SPM), а не кэш сборки.
       #
-      # Ключ НЕ содержит github.sha: иначе каждый запуск заливал бы в кэш
-      # несколько гигабайт заново (лимит кэша — 10 ГБ на репозиторий), и загрузка
-      # съедала бы экономию. Сохранение идёт только при смене проекта или
-      # зависимостей; при обычном правке исходников — только восстановление.
+      # Измерено: полный кэш DerivedData восстанавливался за 15s и не ускорял
+      # сборку (Build for testing 171s без кэша против 187s с кэшем) — инкрементальное
+      # состояние Xcode ломается при восстановлении из архива, mtime сбрасываются,
+      # и всё пересобирается заново поверх стоимости восстановления.
       #
-      # Это гипотеза, а не подтверждённый выигрыш: проверяется по разнице
-      # "Build for testing" между run'ом с попаданием и без.
-      - name: Restore DerivedData cache
+      # Кэшируем только SourcePackages: это обходит повторное клонирование шести
+      # репозиториев зависимостей на каждый запуск.
+      #
+      # Ключ хэширует project.pbxproj, а НЕ Package.resolved — тот файл в репозитории
+      # не закоммичен, hashFiles() по нему возвращал пустую строку и ключ получался
+      # постоянным, то есть кэш никогда не инвалидировался.
+      - name: Restore SPM cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA_PATH }}
-          key: dd-${{ runner.os }}-test-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
           restore-keys: |
-            dd-${{ runner.os }}-test-
+            spm-${{ runner.os }}-
 
       - name: Select simulator
         id: sim
@@ -268,20 +271,16 @@ jobs:
         id: version
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
 
-      # Единый стандарт кэша по всем репозиториям: ключ по хешу проекта и
-      # зависимостей, без github.sha (иначе каждый push заливал бы гигабайты заново).
-      # Ключ отдельный от job'ы `test`: та собирает для симулятора, эта — для
-      # устройства, содержимое DerivedData различается, общий ключ их затёр бы.
-      #
-      # MEASURED: "Build for device" = 325s (run 37192693467). Гипотеза, не факт —
-      # проверяется разницей между прогоном с попаданием и без.
-      - name: Restore DerivedData cache
+      # Тот же SPM-кэш загрузки, что и в job `test`, — общий ключ: SourcePackages
+      # не зависит от устройства или симулятора, раздельные ключи лишь удваивали
+      # бы расход кэша при лимите 10 ГБ на репозиторий.
+      - name: Restore SPM cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.DERIVED_DATA_PATH }}
-          key: dd-${{ runner.os }}-device-${{ hashFiles('HermesMobile.xcodeproj/**', 'Package.resolved') }}
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
           restore-keys: |
-            dd-${{ runner.os }}-device-
+            spm-${{ runner.os }}-
 
       - name: Build for device
         run: |
