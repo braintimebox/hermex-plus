@@ -17,6 +17,11 @@ final class FileBrowserViewModel {
     /// Directory path → message for listings that failed; tapping the row retries.
     private(set) var failedPaths: [String: String] = [:]
     private(set) var selectedPath: String?
+    /// HERMEX-FORK: the folder the user is actually looking at. Derived from the
+    /// last directory that was listed, not from `expandedPaths` — that is a Set,
+    /// so it has no order and `.last` would name a different folder on each
+    /// read. Empty string is the workspace root.
+    private(set) var currentDirectoryPath = "" 
     private(set) var isLoadingRoot = false
     private(set) var errorMessage: String?
     private(set) var lastError: Error?
@@ -76,6 +81,81 @@ final class FileBrowserViewModel {
     /// Pull-to-refresh: re-lists the root and every open directory, keeping expansion.
     func refresh() async {
         await loadRoot(reloadingOpenDirectories: true)
+    }
+
+    // MARK: - Manual file management
+
+    // HERMEX-FORK: the server has served /api/file/{delete,create,rename,move,
+    // create-dir} since long before this app knew about them; the browser was
+    // read-only only because nothing called them.
+    /// Every mutation ends the same way: the server is the source of truth for
+    /// what is on disk, so the affected directory is re-listed rather than the
+    /// tree being patched locally. A local optimisation would drift the moment
+    /// a concurrent write or a failed rename happened.
+    private func runFileMutation(_ operation: () async throws -> FileMutationResponse, reloading path: String) async {
+        do {
+            let response = try await operation()
+            if let response, response.ok == false {
+                lastError = FileMutationRejection(serverMessage: response.error)
+            }
+        } catch {
+            lastError = error
+        }
+        await loadDirectory(path)
+    }
+
+    /// Removes a file or folder. The caller confirms first — this is the one
+    /// operation here that cannot be undone from the app.
+    func deleteEntry(at path: String) async {
+        guard let sessionID = session.sessionId else { return }
+        await runFileMutation(
+            { try await self.apiClient.deleteFile(sessionID: sessionID, path: path) },
+            reloading: parentDirectory(of: path)
+        )
+    }
+
+    /// Creates an empty file at `path`, which must include the new name.
+    func createFile(at path: String) async {
+        guard let sessionID = session.sessionId else { return }
+        await runFileMutation(
+            { try await self.apiClient.createFile(sessionID: sessionID, path: path) },
+            reloading: parentDirectory(of: path)
+        )
+    }
+
+    /// Creates a folder at `path`, which must include the new name.
+    func createDirectory(at path: String) async {
+        guard let sessionID = session.sessionId else { return }
+        await runFileMutation(
+            { try await self.apiClient.createDirectory(sessionID: sessionID, path: path) },
+            reloading: parentDirectory(of: path)
+        )
+    }
+
+    /// Renames in place: the server takes the new name, not a full path.
+    func renameEntry(at path: String, to newName: String) async {
+        guard let sessionID = session.sessionId else { return }
+        await runFileMutation(
+            { try await self.apiClient.renameFile(sessionID: sessionID, path: path, newName: newName) },
+            reloading: parentDirectory(of: path)
+        )
+    }
+
+    /// Moves an entry into another directory of the same workspace.
+    func moveEntry(at path: String, toDirectory destDir: String) async {
+        guard let sessionID = session.sessionId else { return }
+        await runFileMutation(
+            { try await self.apiClient.moveFile(sessionID: sessionID, path: path, destDir: destDir) },
+            reloading: parentDirectory(of: path)
+        )
+    }
+
+    /// The directory a mutation should refresh: the entry's own parent, since
+    /// that is where the row appears and disappears.
+    private func parentDirectory(of path: String) -> String {
+        let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
+        guard let lastSlash = trimmed.lastIndex(of: "/") else { return "" }
+        return String(trimmed[..<lastSlash])
     }
 
     func retryRoot() async {
@@ -180,6 +260,10 @@ final class FileBrowserViewModel {
             // orphaned listing would be shown as current if the folder ever came back.
             if tree.node(at: path)?.isDirectory == true {
                 commitListing(response.entries ?? [], of: path)
+                // HERMEX-FORK: only a listing that actually landed becomes the
+                // current folder — a failed or dropped one must not own where a
+                // new file is written.
+                currentDirectoryPath = path
             }
         } catch {
             guard generation == loadGenerations[path] else { return }

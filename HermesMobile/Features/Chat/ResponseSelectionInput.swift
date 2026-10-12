@@ -249,6 +249,13 @@ final class ResponseSelectionInput: UIView, UITextInput, UITextInteractionDelega
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        // HERMEX-FORK: the whole reply is always copyable. UIKit's own `copy`
+        // answers only for an existing selection, and a long press lands with a
+        // one-paragraph selection, so the menu never offered a way to take the
+        // entire response — "Select All" then "Copy" was the only route and it
+        // is two steps in a menu most people do not read. The item below is
+        // always there and takes the whole document.
+        if action == #selector(copyWholeReply(_:)) { return hasText }
         if action == #selector(copy(_:)) { return selectedTextRange?.isEmpty == false }
         if action == #selector(selectAll(_:)) { return hasText }
         if action == #selector(askHermex(_:)) { return selectedTextRange?.isEmpty == false }
@@ -259,12 +266,31 @@ final class ResponseSelectionInput: UIView, UITextInput, UITextInteractionDelega
         super.buildMenu(with: builder)
         guard builder.system == .context else { return }
 
+        // HERMEX-FORK: first in the list, because a long press lands with a
+        // one-paragraph selection and this is the item people are looking for.
+        let copyWhole = UICommand(
+            title: String(localized: "Copy Whole Reply"),
+            image: UIImage(systemName: "doc.on.doc.fill"),
+            action: #selector(copyWholeReply(_:))
+        )
         let ask = UICommand(
             title: String(localized: "Ask Hermex"),
             image: UIImage(systemName: "quote.opening"),
             action: #selector(askHermex(_:))
         )
-        builder.replaceChildren(ofMenu: .standardEdit) { $0 + [ask] }
+        // First, so it is the item the eye lands on: it is the one people want.
+        builder.replaceChildren(ofMenu: .standardEdit) { [copyWhole] + $0 + [ask] }
+    }
+
+    /// HERMEX-FORK: copies the entire response, selection or not. This is the
+    /// path that used to exist before the UIKit text-selection adapter took the
+    /// long-press gesture away from the SwiftUI context menu.
+    @objc func copyWholeReply(_ sender: Any?) {
+        let full = document.text as String
+        guard !full.isEmpty else { return }
+        UIPasteboard.general.string = full
+        selectedTextRange = nil
+        resignFirstResponder()
     }
 
     override func copy(_ sender: Any?) {

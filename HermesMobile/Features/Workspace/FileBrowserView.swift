@@ -10,6 +10,14 @@ struct FileBrowserView: View {
     @State private var viewModel: FileBrowserViewModel
     @State private var searchText = ""
     @State private var openedFile: FileTreeNode?
+    // HERMEX-FORK: manual file management state. Rename and delete both need
+    // confirmation, and neither can be done from the row itself.
+    @State private var renamingEntry: FileTreeNode?
+    @State private var renameDraft = ""
+    @State private var deletingEntry: FileTreeNode?
+    @State private var newEntryIsDirectory = false
+    @State private var newEntryName = ""
+    @State private var showingNewEntryAlert = false
     /// The warm fetch handed over when `openedFile` was tapped; consumed by that preview only.
     @State private var openedFilePrefetch: Task<FileResponse, Error>?
 
@@ -29,6 +37,41 @@ struct FileBrowserView: View {
         }
         .navigationTitle("Files")
         .navigationBarTitleDisplayMode(.inline)
+        // HERMEX-FORK: creating a file or a folder was only ever possible from
+        // the web UI. Both land in the current folder, named in a prompt.
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        newEntryIsDirectory = false
+                        newEntryName = ""
+                        showingNewEntryAlert = true
+                    } label: {
+                        Label(String(localized: "New File"), systemImage: "doc.badge.plus")
+                    }
+                    Button {
+                        newEntryIsDirectory = true
+                        newEntryName = ""
+                        showingNewEntryAlert = true
+                    } label: {
+                        Label(String(localized: "New Folder"), systemImage: "folder.badge.plus")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel(String(localized: "New file or folder"))
+            }
+        }
+        .alert(
+            newEntryIsDirectory
+                ? String(localized: "New Folder")
+                : String(localized: "New File"),
+            isPresented: $showingNewEntryAlert
+        ) {
+            TextField(String(localized: "Name"), text: $newEntryName)
+            Button(String(localized: "Create")) { createEntry() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
         .navigationDestination(item: $openedFile) { node in
             FilePreviewView(
                 session: session,
@@ -42,6 +85,91 @@ struct FileBrowserView: View {
             await viewModel.loadInitialRootIfNeeded()
             handleLastError()
         }
+        // HERMEX-FORK: rename takes the new name only — the server resolves the
+        // full path from the current one, so a move and a rename cannot be
+        // confused on the wire.
+        // The field lives inside the actions closure: SwiftUI's alert has no
+        // `prompt:` variant, and a text field there is what makes the keyboard
+        // come up with the dialog.
+        .alert(String(localized: "Rename"), isPresented: renameAlertBinding) {
+            TextField(String(localized: "New name"), text: $renameDraft)
+            Button(String(localized: "Rename")) {
+                commitRename()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) { renamingEntry = nil }
+        } message: {
+            if let entry = renamingEntry {
+                Text(String(localized: "Renaming \(entry.name)."))
+            }
+        }
+        // Deleting a folder deletes what is inside it, and the server has no
+        // undo — so the confirmation names the entry rather than asking a
+        // generic "are you sure".
+        .alert(String(localized: "Delete"), isPresented: deleteAlertBinding, presenting: deletingEntry) { entry in
+            Button(String(localized: "Delete"), role: .destructive) {
+                Task {
+                    await viewModel.deleteEntry(at: entry.path)
+                    handleLastError()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) { deletingEntry = nil }
+        } message: { entry in
+            Text(String(localized: "\(entry.name) will be removed from the workspace. This cannot be undone."))
+        }
+    }
+
+    /// The folder the user is looking at: a creation lands here rather than at
+    /// the root, because a file made in the wrong place is a file that is lost.
+    /// The ViewModel owns it — `expandedPaths` is a Set and has no order, so
+    /// reading "the last open folder" from it would be arbitrary.
+    private var currentDirectoryPath: String {
+        viewModel.currentDirectoryPath
+    }
+
+    private func createEntry() {
+        let name = newEntryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        let base = currentDirectoryPath
+        let path = base.isEmpty ? name : "\(base)/\(name)"
+
+        Task {
+            if newEntryIsDirectory {
+                await viewModel.createDirectory(at: path)
+            } else {
+                await viewModel.createFile(at: path)
+            }
+            handleLastError()
+        }
+    }
+
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { renamingEntry != nil },
+            set: { if !$0 { renamingEntry = nil } }
+        )
+    }
+
+    /// Runs the pending rename. Split out because the alert's action closure
+    /// cannot see the entry it was presenting — SwiftUI dismisses the binding
+    /// before the button's work runs, so the entry is read here while it is
+    /// still set.
+    private func commitRename() {
+        guard let entry = renamingEntry else { return }
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != entry.name else { return }
+        renamingEntry = nil
+        Task {
+            await viewModel.renameEntry(at: entry.path, to: trimmed)
+            handleLastError()
+        }
+    }
+
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { deletingEntry != nil },
+            set: { if !$0 { deletingEntry = nil } }
+        )
     }
 
     @ViewBuilder
@@ -84,7 +212,12 @@ struct FileBrowserView: View {
                     hasLoadFailure: viewModel.loadFailure(for: item.node.path) != nil,
                     childCount: viewModel.childCount(of: item.node.path),
                     onPressDown: { viewModel.prefetchFile(at: item.node.path) },
-                    onTap: { open(item.node) }
+                    onTap: { open(item.node) },
+                    onRename: {
+                        renameDraft = item.node.name
+                        renamingEntry = item.node
+                    },
+                    onDelete: { deletingEntry = item.node }
                 )
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                 .listRowSeparator(.hidden)
@@ -196,6 +329,10 @@ private struct FileTreeRowView: View {
     let childCount: Int?
     let onPressDown: () -> Void
     let onTap: () -> Void
+    // HERMEX-FORK: manual file management. The server has served these routes
+    // all along; the browser was read-only because nothing wired them up.
+    var onRename: () -> Void = {}
+    var onDelete: () -> Void = {}
 
     private var node: FileTreeNode { item.node }
 
@@ -238,6 +375,22 @@ private struct FileTreeRowView: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // HERMEX-FORK: manual file management. The server has served
+        // /api/file/{delete,rename} all along; nothing in the client called them,
+        // so the browser was read-only by omission rather than by design.
+        .contextMenu {
+            Button {
+                onRename()
+            } label: {
+                Label(String(localized: "Rename"), systemImage: "pencil")
+            }
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label(String(localized: "Delete"), systemImage: "trash")
+            }
+        }
     }
 
     @ViewBuilder

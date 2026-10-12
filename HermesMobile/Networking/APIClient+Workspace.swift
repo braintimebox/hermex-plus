@@ -41,6 +41,54 @@ extension APIClient {
         )
     }
 
+    // MARK: - Manual file management
+
+    // HERMEX-FORK: all five operations the server already offers for workspace
+    // files — nothing here is new on the wire, only newly reachable from iOS.
+    /// All five operations the server already offers for workspace files. They
+    /// are POSTs with a JSON body; the server answers `{"ok": true, ...}` or an
+    /// error status, and the caller refreshes the listing rather than optimising
+    /// the tree locally — the server owns what is on disk.
+    func deleteFile(sessionID: String, path: String) async throws -> FileMutationResponse {
+        try await send(
+            endpoint: .fileDelete(sessionID: sessionID, path: path),
+            method: "POST",
+            body: FileDeleteRequest(sessionID: sessionID, path: path)
+        )
+    }
+
+    func createFile(sessionID: String, path: String, content: String = "") async throws -> FileMutationResponse {
+        try await send(
+            endpoint: .fileCreate(sessionID: sessionID, path: path, content: content),
+            method: "POST",
+            body: FileCreateRequest(sessionID: sessionID, path: path, content: content)
+        )
+    }
+
+    func createDirectory(sessionID: String, path: String) async throws -> FileMutationResponse {
+        try await send(
+            endpoint: .fileCreateDir(sessionID: sessionID, path: path),
+            method: "POST",
+            body: FileCreateDirRequest(sessionID: sessionID, path: path)
+        )
+    }
+
+    func renameFile(sessionID: String, path: String, newName: String) async throws -> FileMutationResponse {
+        try await send(
+            endpoint: .fileRename(sessionID: sessionID, path: path, newName: newName),
+            method: "POST",
+            body: FileRenameRequest(sessionID: sessionID, path: path, newName: newName)
+        )
+    }
+
+    func moveFile(sessionID: String, path: String, destDir: String) async throws -> FileMutationResponse {
+        try await send(
+            endpoint: .fileMove(sessionID: sessionID, path: path, destDir: destDir),
+            method: "POST",
+            body: FileMoveRequest(sessionID: sessionID, path: path, destDir: destDir)
+        )
+    }
+
     func directoryList(sessionID: String, path: String? = nil) async throws -> DirectoryListResponse {
         try await send(
             endpoint: .directoryList(sessionID: sessionID, path: path),

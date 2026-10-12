@@ -368,6 +368,9 @@ struct ChatView: View {
     @State private var activeGitSheet: ActiveGitSheet?
     @State private var turnDiffPresentation: TurnDiffPresentation?
     @State private var pinnedMessageIDs: [String] = []
+    /// HERMEX-FORK: a pin now outlives the chat, so it is read back from the
+    /// SavedMessage rows on open — once, after the transcript resolves.
+    @State private var didRestorePinnedMessages = false
     /// Set to a pinned message's id to scroll the transcript to it; cleared by
     /// `ChatTranscriptView` once the scroll is consumed.
     @State private var pinnedScrollTarget: String?
@@ -1800,6 +1803,11 @@ struct ChatView: View {
                     pinnedMessageIDs.append(context.messageID)
                     saveMessage(context)
                 }
+                // HERMEX-FORK: the pin used to live only in the `@State` array
+                // above, so it evaporated on the way out of the chat and had to
+                // be redone after every relaunch. The flag now rides on the
+                // SavedMessage row, which survives.
+                persistPinnedState()
             },
             isMessagePinned: { messageID in
                 pinnedMessageIDs.contains(messageID)
@@ -2257,6 +2265,11 @@ struct ChatView: View {
         // на сервере жива, а её блок в ленте остаётся.
         await viewModel.restoreGoalStateIfNeeded()
         guard !Task.isCancelled else { return }
+
+        // HERMEX-FORK: pins outlive the chat. Read them back now that the
+        // transcript is loaded, so the banner can resolve the messages it
+        // points at instead of showing a row that leads nowhere.
+        restorePinnedMessagesIfNeeded()
 
         await uploadInitialAttachmentsIfNeeded()
         guard !Task.isCancelled else { return }
@@ -3660,20 +3673,29 @@ struct ChatView: View {
         }
     }
 
-    private func saveMessage(_ context: MessageActionContext) {
+    private func saveMessage(_ context: MessageActionContext, isPinned: Bool = false) {
         let sessionID = session.sessionId ?? ""
         // Guard against a duplicate: SavedMessage uses a UNIQUE savedKey, and a
         // second insert with the same key is silently dropped by SwiftData. The
         // pin action toggles so it won't double-save, but the standalone Save
         // menu item can run twice on the same message.
-        guard findSavedMessage(messageID: context.messageID) == nil else { return }
+        if let existing = findSavedMessage(messageID: context.messageID) {
+            // The row is already there from a plain Save; pinning must still
+            // leave the flag behind, so upgrade it rather than dropping the pin.
+            if isPinned, !existing.isPinned {
+                existing.isPinned = true
+                try? modelContext.save()
+            }
+            return
+        }
         let saved = SavedMessage(
             messageId: context.messageID,
             sessionId: sessionID,
             sessionTitle: session.title ?? "Chat",
             content: context.copyText,
             author: context.role == .user ? "You" : "Hermes",
-            serverURLString: server.absoluteString
+            serverURLString: server.absoluteString,
+            isPinned: isPinned
         )
         modelContext.insert(saved)
     }
@@ -3685,6 +3707,61 @@ struct ChatView: View {
         )
         descriptor.fetchLimit = 1
         return (try? modelContext.fetch(descriptor))?.first
+    }
+
+
+    /// HERMEX-FORK: writes the current pin set onto the rows that already
+    /// survive. Called after every pin toggle so the state on disk matches the
+    /// banner on screen.
+    private func persistPinnedState() {
+        let sessionID = session.sessionId ?? ""
+        let serverKey = server.absoluteString
+        let pinned = Set(pinnedMessageIDs)
+
+        // Every saved row of this chat gets the flag it currently deserves, so
+        // unpinning is recorded too and not just pinning. The server string is
+        // read into a local first: `#Predicate` cannot evaluate it inline.
+        var descriptor = FetchDescriptor<SavedMessage>(
+            predicate: #Predicate { $0.sessionId == sessionID && $0.serverURLString == serverKey }
+        )
+        let rows = (try? modelContext.fetch(descriptor)) ?? []
+        for row in rows where row.isPinned != pinned.contains(row.messageId) {
+            row.isPinned = pinned.contains(row.messageId)
+        }
+
+        // A pin without a prior Save has no row to carry the flag. Write one.
+        for messageID in pinned where !rows.contains(where: { $0.messageId == messageID }) {
+            guard let message = viewModel.messages.first(where: { $0.id == messageID }),
+                  let context = MessageActionContext(message: message, visibleIndex: 0, messagesOffset: nil)
+            else { continue }
+            saveMessage(context, isPinned: true)
+        }
+
+        try? modelContext.save()
+    }
+
+    /// HERMEX-FORK: restores the pins this chat had before it was closed. Runs
+    /// once per open, after the transcript exists so the banner can resolve the
+    /// message bodies it points at.
+    private func restorePinnedMessagesIfNeeded() {
+        guard !didRestorePinnedMessages else { return }
+        didRestorePinnedMessages = true
+
+        let sessionID = session.sessionId ?? ""
+        let serverKey = server.absoluteString
+        var descriptor = FetchDescriptor<SavedMessage>(
+            predicate: #Predicate {
+                $0.sessionId == sessionID && $0.isPinned && $0.serverURLString == serverKey
+            }
+        )
+        descriptor.sortBy = [SortDescriptor(\.savedAt)]
+        let rows = (try? modelContext.fetch(descriptor)) ?? []
+
+        // Keep the restored order stable, and drop rows whose message is no
+        // longer in the transcript — a banner pointing at nothing is worse than
+        // no banner.
+        let known = Set(viewModel.messages.map(\.id))
+        pinnedMessageIDs = rows.map(\.messageId).filter { known.contains($0) }
     }
 
     private func deleteSavedMessage(messageID: String) {

@@ -43,6 +43,25 @@ struct WorkspaceMutationResponse: Decodable, Equatable {
     let error: String?
 }
 
+/// HERMEX-FORK: what the file-management routes answer. Every one of them
+/// reports `ok`, and some add `error` in the body with a 200 status — the same
+/// shape the workspace mutations use, so the same rejection path applies.
+struct FileMutationResponse: Decodable, Equatable {
+    let ok: Bool?
+    let error: String?
+}
+
+/// Raised when a file route answers HTTP 200 but reports `ok: false` in the
+/// body. Same reasoning as `WorkspaceMutationRejection`: a failure presented as
+/// a success leaves the listing showing a file that was never written.
+struct FileMutationRejection: LocalizedError, Equatable {
+    let serverMessage: String?
+
+    var errorDescription: String? {
+        serverMessage?.isEmpty == false ? serverMessage : String(localized: "The server refused that change.")
+    }
+}
+
 /// Surfaced when a mutation route answers with HTTP success but reports
 /// `ok: false` in the body. Upstream signals failure via non-2xx today, but
 /// these routes are undocumented, so an explicit body-level failure must not
@@ -76,6 +95,66 @@ struct RenameWorkspaceRequest: Encodable, Equatable {
 
 struct ReorderWorkspacesRequest: Encodable, Equatable {
     let paths: [String]
+}
+
+// HERMEX-FORK: request bodies for the manual file-management endpoints the
+// server already serves (api/routes.py:15451-15472). Every one of them carries
+// `session_id`, because the server resolves the workspace root through the
+// session — there is no way to address a file without one.
+struct FileDeleteRequest: Encodable, Equatable {
+    let sessionID: String
+    let path: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case path
+    }
+}
+
+struct FileCreateRequest: Encodable, Equatable {
+    let sessionID: String
+    let path: String
+    let content: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case path
+        case content
+    }
+}
+
+struct FileRenameRequest: Encodable, Equatable {
+    let sessionID: String
+    let path: String
+    let newName: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case path
+        case newName = "new_name"
+    }
+}
+
+struct FileMoveRequest: Encodable, Equatable {
+    let sessionID: String
+    let path: String
+    let destDir: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case path
+        case destDir = "dest_dir"
+    }
+}
+
+struct FileCreateDirRequest: Encodable, Equatable {
+    let sessionID: String
+    let path: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case path
+    }
 }
 
 struct DirectoryListResponse: Decodable, Equatable {

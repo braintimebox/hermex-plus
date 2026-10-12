@@ -56,6 +56,14 @@ enum Endpoint {
     case workspaceRename
     case workspaceReorder
     case directoryList(sessionID: String, path: String?)
+    // HERMEX-FORK: the server has carried these since long before the app knew
+    // about them (api/routes.py:15451-15472); the client only ever read files.
+    // Manual file management is client work — the contract is already there.
+    case fileDelete(sessionID: String, path: String)
+    case fileCreate(sessionID: String, path: String, content: String)
+    case fileRename(sessionID: String, path: String, newName: String)
+    case fileMove(sessionID: String, path: String, destDir: String)
+    case fileCreateDir(sessionID: String, path: String)
     case file(sessionID: String, path: String)
     case rawFile(sessionID: String, path: String)
     case media(sessionID: String, path: String)
@@ -249,6 +257,17 @@ enum Endpoint {
             return "/api/workspaces/reorder"
         case .directoryList:
             return "/api/list"
+        // HERMEX-FORK: paths the server already routes (api/routes.py:15451-15472).
+        case .fileDelete:
+            return "/api/file/delete"
+        case .fileCreate:
+            return "/api/file/create"
+        case .fileRename:
+            return "/api/file/rename"
+        case .fileMove:
+            return "/api/file/move"
+        case .fileCreateDir:
+            return "/api/file/create-dir"
         case .file:
             return "/api/file"
         case .rawFile:
