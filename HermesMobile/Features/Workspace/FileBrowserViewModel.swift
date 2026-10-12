@@ -95,7 +95,9 @@ final class FileBrowserViewModel {
     private func runFileMutation(_ operation: () async throws -> FileMutationResponse, reloading path: String) async {
         do {
             let response = try await operation()
-            if let response, response.ok == false {
+            // The routes answer 200 with `ok: false` when they refuse, so the
+            // body is what decides, not the status code.
+            if response.ok == false {
                 lastError = FileMutationRejection(serverMessage: response.error)
             }
         } catch {

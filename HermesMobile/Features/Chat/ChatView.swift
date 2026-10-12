@@ -3721,7 +3721,7 @@ struct ChatView: View {
         // Every saved row of this chat gets the flag it currently deserves, so
         // unpinning is recorded too and not just pinning. The server string is
         // read into a local first: `#Predicate` cannot evaluate it inline.
-        var descriptor = FetchDescriptor<SavedMessage>(
+        let descriptor = FetchDescriptor<SavedMessage>(
             predicate: #Predicate { $0.sessionId == sessionID && $0.serverURLString == serverKey }
         )
         let rows = (try? modelContext.fetch(descriptor)) ?? []
