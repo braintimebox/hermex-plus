@@ -1760,7 +1760,7 @@ final class ChatViewModel {
 
         do {
             let networkStart = Date()
-            let response = try await clientSessionWithRetry(sessionID: sessionID)
+            let (response, loadAttempts) = try await clientSessionWithRetry(sessionID: sessionID)
             let networkMs = Int(Date().timeIntervalSince(networkStart) * 1000)
             let session = response.session
             let loadedMessages = session?.messages ?? []
@@ -1768,7 +1768,13 @@ final class ChatViewModel {
                 type: "event",
                 screen: "ChatView",
                 message: "loadMessages network",
-                extras: ["networkMs": networkMs, "messageCount": loadedMessages.count]
+                extras: [
+                    "networkMs": networkMs,
+                    "messageCount": loadedMessages.count,
+                    // HERMEX-FORK: 1 = clean fetch; >1 = the retry ladder ran. Lets
+                    // the log reader separate retry ladders from independent loads.
+                    "attempts": loadAttempts,
+                ]
             )
             let loadedActiveStreamID = session?.activeStreamId?.trimmingCharacters(in: .whitespacesAndNewlines)
             var reloadedMessages = loadedMessages
@@ -1937,19 +1943,23 @@ final class ChatViewModel {
     /// "Could not connect" with no self-recovery. Only retries failures the cache
     /// policy classes as connectivity/transient (GET, no side effect to duplicate);
     /// auth, decoding, and real 5xx errors fall straight through to the catch.
-    private func clientSessionWithRetry(sessionID: String) async throws -> SessionResponse {
+    /// HERMEX-FORK: retry-aware so the `loadMessages network` telemetry
+    /// line can distinguish a clean single fetch from a fetch that survived
+    /// retries. Without the attempt count, two telemetry lines 1-8 s apart from
+    /// the retry ladder are indistinguishable from two independent loads —
+    /// exactly the ambiguity found in the 3.9.47 telemetry (51 pairs <90 s).
+    private func clientSessionWithRetry(sessionID: String) async throws -> (response: SessionResponse, attempts: Int) {
         var attempt = 0
         let maxAttempts = 5
         while true {
             do {
-                return try await client.session(
+                let response = try await client.session(
                     id: sessionID,
                     includeMessages: true,
                     messageLimit: Self.messagePageLimit,
-                    // Cold load only: widen the window to renderable-dense (upstream #3790) so a
-                    // tool-heavy session opens populated. "Load earlier" keeps the raw cap.
                     expandRenderable: true
                 )
+                return (response, attempt + 1)
             } catch {
                 guard CacheFallbackPolicy.shouldUseCache(for: error),
                       attempt < maxAttempts - 1,
@@ -1957,10 +1967,6 @@ final class ChatViewModel {
                     throw error
                 }
                 attempt += 1
-                // Exponential backoff (1s, 2s, 4s, 8s ≈ 15s total), mirroring the
-                // session-list retry so a still-coming-up tunnel gets time to connect.
-                // HERMEX-FORK: shared, so tests can zero the wait without
-                // changing the attempt count or the production schedule.
                 await HermesRetryBackoff.sleep(attempt: attempt)
             }
         }

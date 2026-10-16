@@ -348,7 +348,18 @@ final class StreamCommitTelemetry {
     /// The short streams in that session (1-7 batches) never crossed it.
     func endStream() {
         let now = Date()
-        queue.sync { flushLocked(at: now) }
+        queue.sync {
+            flushLocked(at: now)
+            // HERMEX-FORK: clearing the last-commit stamp on stream end, not just
+            // on a gap flush. Without this, the first commit of the NEXT stream
+            // measured its interval from the previous stream's last commit —
+            // across minutes of app background, that produced intervalMaxMs of
+            // thousands of seconds in windows whose own frameAvg was a healthy
+            // 16.7 ms (verified 125/125 anomalous windows in the 3.9.47
+            // telemetry). The gap flush inside recordCommit handles its own
+            // interval; endStream only needs to stop the clock between streams.
+            lastCommitAt = nil
+        }
     }
 
     private func flushLocked(at now: Date) {
