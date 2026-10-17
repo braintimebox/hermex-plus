@@ -401,6 +401,12 @@ def emit(dst: Path, digest: str, rid: str, version: str) -> None:
     print("\n=== DELIVER ===")
     print(f"  ipa : {dst}")
     print(f"  sha256 : {digest}")
+    # HERMEX-FORK: the chat delivery contract is mechanical, not remembered.
+    # This line is copied VERBATIM as the last line of the release message in
+    # the chat — the agent does not retype the path and does not append
+    # anything after it (a MEDIA: line buried mid-message did not attach on
+    # 3.9.49; as the message's final line it does).
+    print(f"  MEDIA : MEDIA:{dst}")
     print(f"  in-app : {url}")
     if has_asset:
         print(f"  release: {rel_url}")
