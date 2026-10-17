@@ -137,7 +137,10 @@ struct StreamingMarkdownRenderer: View {
                     reason: fallbackReason
                 )
             } else {
-                // HERMEX-FORK: 3.9.39 — доля ветки light.
+                // HERMEX-FORK: 3.9.39 — branch share. Since 3.9.49 (variant A)
+                // this branch is the live block pipeline, not the retired
+                // plain-Text engine; the Light Render phase name stays so the
+                // long history keeps comparing against its own baseline.
                 let _ = PhaseTelemetry.shared.record(.lightRender, milliseconds: 0, context: [
                     "branchLight": 1,
                     "chars": displayedContent.count
@@ -183,10 +186,19 @@ struct StreamingMarkdownRenderer: View {
 
     @ViewBuilder
     private var streamingMarkdownContent: some View {
-        // NEW ENGINE (3.4.0): plain-text live renderer. No MarkdownUI re-parse
-        // of the accumulated body per commit — O(1) per token. Formatting and
-        // math appear when the stream settles (markdownContent path).
-        LightStreamingRenderer(content: displayedContent)
+        // HERMEX-FORK 3.9.49 (variant A): live markdown is back. The 3.4.0
+        // plain-Text(verbatim) engine deferred ALL formatting until the stream
+        // settled — the user read a wall of raw glyphs for the whole reply and
+        // the formatted reply popped in at completion. The block pipeline
+        // (StreamingMarkdownChunkedView) renders settled markdown blocks live
+        // and only re-renders the still-growing active block, coalesced to one
+        // scan per frame — the O(N²) per-token re-parse that froze 3.3.x was
+        // already removed here by the frame-coalesced fade window.
+        StreamingMarkdownChunkedView(
+            content: displayedContent,
+            colorScheme: colorScheme,
+            forceFadeDisabled: forceFadeDisabled
+        )
     }
 
 }
@@ -1463,31 +1475,11 @@ private extension Logger {
 }
 
 
-// MARK: - LightStreamingRenderer (NEW ENGINE 3.4.0)
-// Lightweight live-streaming text renderer. Replaces StreamingMarkdownChunkedView
-// on the live path: MarkdownUI re-parses and re-lays-out the entire accumulated
-// text through CoreText on the main thread on every content commit — quadratic in
-// reply length, the verified long-answer CTLineCreate… freeze driver. This engine
-// renders the growing assistant text as plain Text(verbatim:): O(1) per token, no
-// re-parse, no per-glyph fade, no TimelineView frame clock. When the stream
-// settles, the outer MarkdownRenderer switches to the settled markdownContent
-// (MarkdownUI + math), so formatting appears on completion but the hot streaming
-// path never pays for it.
-struct LightStreamingRenderer: View {
-    let content: String
-
-    var body: some View {
-        // P0 (3.4.8): removed .fixedSize(horizontal:false,vertical:true) —
-        // it forces SwiftUI to compute full text height on every token update,
-        // which is expensive for long streaming text. Without it, Text uses
-        // the proposed height from the parent (available width from maxWidth frame),
-        // which is O(1). Markdown formatting appears when stream settles.
-        Text(verbatim: content)
-            .font(.body)
-            .foregroundStyle(.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
+// HERMEX-FORK: LightStreamingRenderer (the 3.4.0 plain-Text streaming engine)
+// retired in 3.9.49 (variant A): the block pipeline StreamingMarkdownChunkedView
+// renders formatting live and its per-frame coalescing keeps the hot path
+// O(token) instead of the O(N²) re-parse that motivated the 3.4.0 switch.
+// Full comment history in git (commit 2b1271b).
 
 /// Matches MarkdownUI's GitHub heading metrics, registering only the text label.
 private struct SelectableMarkdownHeading: View {
