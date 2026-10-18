@@ -166,7 +166,7 @@ final class ModelPickerHierarchyTests: XCTestCase {
         let providers = ModelPickerCatalogBuilder.providers(from: nousGroups)
         let kinds = providers.first?.groups.map(\.kind) ?? []
 
-        XCTAssertEqual(kinds, [.all, .free, .latest])
+        XCTAssertEqual(kinds, [.all, .free, .latest] as [ModelPickerGroupKind])
         XCTAssertEqual(providers.first?.groups.first?.count, 4)
     }
 
@@ -223,18 +223,18 @@ final class ModelPickerHierarchyTests: XCTestCase {
     func testFreeWinsOverLatestForAnIdThatIsBoth() {
         XCTAssertEqual(
             ModelPickerGroupKind.classify("@openrouter:vendor/model:free"),
-            [.free]
+            [ModelPickerGroupKind.free]
         )
         XCTAssertEqual(
             ModelPickerGroupKind.classify("@openrouter:vendor/model:free-latest"),
-            [.free]
+            [ModelPickerGroupKind.free]
         )
     }
 
     func testContributorAndLatestAreClassifiedLikeTelegramsBuckets() {
-        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-latest"), [.latest])
-        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-contributor"), [.contributor])
-        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model"), [])
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-latest"), [ModelPickerGroupKind.latest])
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-contributor"), [ModelPickerGroupKind.contributor])
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model"), [ModelPickerGroupKind]())
     }
 
     func testProviderRowTitlePrefersThePlainGroupName() {

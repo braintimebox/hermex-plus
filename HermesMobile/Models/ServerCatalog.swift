@@ -1069,7 +1069,7 @@ enum ModelPickerCatalogBuilder {
                         title: family.title,
                         memberProviderIDs: members,
                         memberTitles: members.map { titleByProvider[$0] ?? $0 },
-                        groups: groups(for: familyModels)
+                        groups: makeGroups(for: familyModels)
                     )
                 )
                 continue
@@ -1092,12 +1092,12 @@ enum ModelPickerCatalogBuilder {
             title: title,
             memberProviderIDs: [id],
             memberTitles: [title],
-            groups: groups(for: models)
+            groups: makeGroups(for: models)
         )
     }
 
     /// `Все модели` plus every non-empty special bucket, in Telegram's order.
-    static func groups(for models: [ModelCatalogOption]) -> [ModelPickerGroup] {
+    static func makeGroups(for models: [ModelCatalogOption]) -> [ModelPickerGroup] {
         guard !models.isEmpty else { return [] }
         return ModelPickerGroupKind.allCases.compactMap { kind in
             let matching: [ModelCatalogOption]

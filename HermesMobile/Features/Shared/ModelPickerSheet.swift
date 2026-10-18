@@ -254,7 +254,7 @@ struct ModelPickerSheet: View {
     /// A provider's groups: `All Models` plus the non-empty `Free` / `Latest` /
     /// `Contributor` buckets — Telegram's `ms:` screen.
     private func groupList(providerID: String) -> some View {
-        let groups = ModelPickerCatalogBuilder.groups(for: modelsByProviderID[providerID] ?? [])
+        let groups = ModelPickerCatalogBuilder.makeGroups(for: modelsByProviderID[providerID] ?? [])
 
         return List {
             ForEach(groups) { group in
@@ -280,7 +280,7 @@ struct ModelPickerSheet: View {
     }
 
     private func modelList(providerID: String, kind: String) -> some View {
-        let groups = ModelPickerCatalogBuilder.groups(for: modelsByProviderID[providerID] ?? [])
+        let groups = ModelPickerCatalogBuilder.makeGroups(for: modelsByProviderID[providerID] ?? [])
         let group = groups.first { $0.kind.rawValue == kind }
         let models = group?.models ?? []
 
