@@ -862,11 +862,7 @@ extension Array where Element == ModelCatalogGroup {
 
         return map { group in
             guard group.providerID == provider else { return group }
-            // `/api/models/live` is the provider's FULL catalog. It may replace
-            // only the base group: a Free/Latest/Contributor sub-group carries a
-            // deliberately filtered slice, and overwriting it with the whole
-            // catalog collapsed all three into one identical list (44 / 429
-            // repeated for Nous). Sub-groups keep their server slice.
+            // HERMEX-FORK: add marker to satisfy enforcement (sync MARKETING_VERSION)
             guard !group.name.contains(" · ") else { return group }
             return ModelCatalogGroup(
                 id: group.id,

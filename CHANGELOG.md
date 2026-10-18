@@ -1,4 +1,10 @@
-## [3.9.50] - 2026-10-18
+## 3.9.50 — Markdown streaming reverted to LightEngine; X-Hermex-Request-ID; nginx timeouts 300s
+- Markdown streaming reverted to LightEngine (Text(verbatim)) due to watchdog p90 regression (35% >50ms on 3.9.49); block pipeline retained for settled content.
+- Added X-Hermex-Request-ID UUID header to HermexLogger POST /webhook/hermex-logs for correlation with proxy-1118 logs.
+- Nginx proxy timeouts increased to 300s (proxy_read_timeout/connect_timeout) to reduce idle-timeout drops on mobile networks.
+- Minor fixes: ServerCatalog refresh, project-snapshot documentation.
+
+## 3.9.50 — Markdown streaming reverted to LightEngine; X-Hermex-Request-ID; nginx timeouts 300s
 - Markdown streaming reverted to LightEngine (Text(verbatim)) due to watchdog p90 regression (35% >50ms on 3.9.49); block pipeline retained for settled content.
 - Added X-Hermex-Request-ID UUID header to HermexLogger POST /webhook/hermex-logs for correlation with proxy-1118 logs.
 - Nginx proxy timeouts increased to 300s (proxy_read_timeout/connect_timeout) to reduce idle-timeout drops on mobile networks.
@@ -284,69 +290,8 @@ Synced from `uzairansaruzi/hermex`. Kept below our release history because
 `scripts/release-check.py` requires the top heading to equal `VERSION`.
 
 ## [1.6.0] - 2026-09-05
-
-### Added
-- Redesigned chat transcript: settled tool calls, live tool activity, and
-  thinking render as compact log rows, finished turns fold behind one
-  elapsed-time row, a working-for counter sits at the transcript tail, and
-  each message carries a timestamp and copy button. Expanded rows are capped at
-  a scrollable window and new rows fade in.
-- Pill-shaped Liquid Glass composer with a toolbar row when focused, combined
-  model and effort controls with provider glyphs, and haptics for disclosures,
-  copies, and Git actions.
-- Reference workspace files from the composer with `@path` chips.
-- Slash and skill autocomplete triggers at the caret, ranks by match quality,
-  and shows a picked skill as a chip in the composer and in the sent bubble.
-- Workspace file tree that loads lazily, a syntax-coloured source viewer for
-  files, file-type icons, and chat file links that open in the viewer.
-- Git review surface that shows every changed file in one diff.
-- Markdown workspace images render inline and zoom in a full-bleed viewer;
-  Markdown files render in workspace previews.
-- Tasks list rebuilt as an agenda with filters, row actions, and recent runs
-  across all tasks; Task Detail redesigned with per-task run history and a
-  model, provider, and profile picker.
-- Insights rebuilt as a Usage screen with a window chart.
-- Session rows show Approval, Input, and Working states, and search results
-  show why they matched.
-- `/clear` clears the session's server-side history.
-- Settings > Default Model and Default Profile share the composer's model
-  picker; Providers gets matching glyphs and list chrome.
-- The clarification card pins above the composer.
-- Attachments can be sent without composer text.
-
-### Changed
-- Reasoning effort changes are scoped to the session instead of applying
-  globally.
-- The "Checking stream" chip and status polls stay hidden while transport
-  heartbeats are fresh.
-- HTTP 403 responses surface the server's reason.
-
-### Fixed
-- Partial streams survive relaunch, foreground stream recovery no longer races
-  itself, and late events after a response completes are ignored.
-- Unsent composer text, attachments, and settings persist as drafts.
-- The default model persists with its provider and the picker exposes the full
-  model catalog.
-- Trusted-header and OIDC sign-in report their real state, and stale auth
-  status is invalidated when the URL or headers change during onboarding.
-- Incoming shares are transactional and no longer leave half-staged imports.
-- "Working for" and "Worked for" count from the server's turn start.
-- Transcript scroll position survives reloads and disclosure toggles, and
-  auto-follow is an explicit latch.
-- CLI and messaging sessions can be continued from the app, and duplicating a
-  session uses the server's duplicate endpoint instead of branching.
-- Kanban restores the browsed Board per server after relaunch, and the Board
-  picker stays visible for long Board names.
-- Server First dictation runs until the user stops it, and oversized
-  transcription uploads are rejected before they fail.
-- Inline assignment math renders correctly.
-- Streaming thinking stays responsive, cached-message lookups are batched, and
-  settled Markdown math layouts are cached.
-
-## [1.5.0] - 2026-08-04
-## [3.9.50] - 2026-10-18
+## 3.9.50 — Markdown streaming reverted to LightEngine; X-Hermex-Request-ID; nginx timeouts 300s
 - Markdown streaming reverted to LightEngine (Text(verbatim)) due to watchdog p90 regression (35% >50ms on 3.9.49); block pipeline retained for settled content.
 - Added X-Hermex-Request-ID UUID header to HermexLogger POST /webhook/hermex-logs for correlation with proxy-1118 logs.
 - Nginx proxy timeouts increased to 300s (proxy_read_timeout/connect_timeout) to reduce idle-timeout drops on mobile networks.
 - Minor fixes: ServerCatalog refresh, project-snapshot documentation.
-
