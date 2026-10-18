@@ -48,12 +48,15 @@ struct ModelPickerSheet: View {
     @State private var customProviderID = ""
     @State private var sectionExpansion = ComposerModelPickerSectionExpansionState()
     @State private var overflowExpansion = ModelPickerOverflowExpansionState()
+    // HERMEX-FORK: picker walks provider → groups → models like Telegram's
+    // /model picker; `path` is that navigation stack. Empty = provider list.
+    @State private var path: [ModelPickerRoute] = []
 
     private let currentCustomGroupID = "current-custom-model"
     private let savedCustomGroupID = "saved-custom-models"
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 if let errorMessage {
                     Text(verbatim: errorMessage)
@@ -70,10 +73,27 @@ struct ModelPickerSheet: View {
                         .listRowSeparator(.hidden)
                 }
 
-                ForEach(filteredModelGroups) { group in
-                    modelGroupDisclosure(group)
-                        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
-                        .listRowSeparator(.hidden)
+                if trimmedSearchQuery.isEmpty {
+                    // Telegram's shape: providers first, then the provider's
+                    // groups, then its models. Searching stays flat — a hit list
+                    // is what a query asks for.
+                    ForEach(customModelGroups) { group in
+                        modelGroupDisclosure(group)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                            .listRowSeparator(.hidden)
+                    }
+
+                    ForEach(providers) { provider in
+                        providerRow(provider)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                            .listRowSeparator(.hidden)
+                    }
+                } else {
+                    ForEach(Self.filteredGroups(modelGroups, query: trimmedSearchQuery)) { group in
+                        modelGroupDisclosure(group)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                            .listRowSeparator(.hidden)
+                    }
                 }
 
                 customModelEntry
@@ -112,6 +132,10 @@ struct ModelPickerSheet: View {
                     }
                 }
             }
+            // HERMEX-FORK: drill-down screens (provider → groups → models).
+            .navigationDestination(for: ModelPickerRoute.self) { route in
+                destination(for: route)
+            }
         }
         .adaptiveFormPresentation()
         .transaction { transaction in
@@ -141,6 +165,176 @@ struct ModelPickerSheet: View {
         } else if filteredModelGroups.isEmpty, !trimmedSearchQuery.isEmpty {
             ContentUnavailableView.search(text: searchText)
         }
+    }
+
+    // HERMEX-FORK: Telegram-shaped hierarchy (see ModelPickerCatalogBuilder).
+    // MARK: - Provider → groups → models
+
+    private var providers: [ModelPickerProvider] {
+        ModelPickerCatalogBuilder.providers(from: modelGroups)
+    }
+
+    /// Models per provider id, so a group or model screen can be rebuilt from
+    /// its id alone after a catalog refresh replaced the whole array.
+    private var modelsByProviderID: [String: [ModelCatalogOption]] {
+        var result: [String: [ModelCatalogOption]] = [:]
+        for group in modelGroups {
+            guard let providerID = group.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !providerID.isEmpty else { continue }
+            result[providerID, default: []].append(contentsOf: group.allModels)
+        }
+        return result
+    }
+
+    private func providerTitle(for providerID: String) -> String {
+        for provider in providers where provider.memberProviderIDs.contains(providerID) {
+            if let index = provider.memberProviderIDs.firstIndex(of: providerID),
+               index < provider.memberTitles.count {
+                return provider.memberTitles[index]
+            }
+        }
+        return providerID
+    }
+
+    /// One provider (or provider family) on the first screen. A family row is
+    /// the fold Telegram shows as `OpenCode ▸ (54)`.
+    private func providerRow(_ provider: ModelPickerProvider) -> some View {
+        NavigationLink(value: ModelPickerRoute.provider(provider.id)) {
+            pickerNavigationRow(
+                title: provider.title,
+                providerID: provider.memberProviderIDs.first,
+                count: provider.count,
+                isCurrent: provider.allModels.contains(where: isSelected)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func destination(for route: ModelPickerRoute) -> some View {
+        switch route {
+        case .provider(let providerID):
+            if let provider = providers.first(where: { $0.id == providerID }), provider.isFamily {
+                memberList(provider)
+            } else {
+                groupList(providerID: providerID)
+            }
+        case .groups(let providerID):
+            groupList(providerID: providerID)
+        case .models(let providerID, let kind):
+            modelList(providerID: providerID, kind: kind)
+        }
+    }
+
+    /// A family's members — Telegram's `mpg:` screen — each opening its groups.
+    private func memberList(_ provider: ModelPickerProvider) -> some View {
+        List {
+            ForEach(provider.memberProviderIDs, id: \.self) { memberID in
+                let models = modelsByProviderID[memberID] ?? []
+                let index = provider.memberProviderIDs.firstIndex(of: memberID) ?? 0
+                NavigationLink(value: ModelPickerRoute.groups(memberID)) {
+                    pickerNavigationRow(
+                        title: index < provider.memberTitles.count ? provider.memberTitles[index] : memberID,
+                        providerID: memberID,
+                        count: models.count,
+                        isCurrent: models.contains(where: isSelected)
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .navigationTitle(provider.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// A provider's groups: `All Models` plus the non-empty `Free` / `Latest` /
+    /// `Contributor` buckets — Telegram's `ms:` screen.
+    private func groupList(providerID: String) -> some View {
+        let groups = ModelPickerCatalogBuilder.groups(for: modelsByProviderID[providerID] ?? [])
+
+        return List {
+            ForEach(groups) { group in
+                NavigationLink(
+                    value: ModelPickerRoute.models(providerID: providerID, kind: group.kind.rawValue)
+                ) {
+                    pickerNavigationRow(
+                        title: group.kind.title,
+                        providerID: nil,
+                        count: group.count,
+                        isCurrent: group.models.contains(where: isSelected)
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .navigationTitle(providerTitle(for: providerID))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func modelList(providerID: String, kind: String) -> some View {
+        let groups = ModelPickerCatalogBuilder.groups(for: modelsByProviderID[providerID] ?? [])
+        let group = groups.first { $0.kind.rawValue == kind }
+        let models = group?.models ?? []
+
+        return List {
+            ForEach(models) { option in
+                modelOptionRow(option, allowsDelete: false)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                    .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .navigationTitle(group?.kind.title ?? providerTitle(for: providerID))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Shared geometry for the three navigation rows above, so a provider, a
+    /// member and a group read as the same kind of step.
+    private func pickerNavigationRow(
+        title: String,
+        providerID: String?,
+        count: Int,
+        isCurrent: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            if ProviderGlyphKind.resolve(providerID: providerID) != nil {
+                ProviderGlyph(providerID: providerID)
+                    .frame(width: 20, height: 20)
+            }
+
+            Text(title)
+                .font(.body)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if isCurrent {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+
+            Text("\(count)")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(.tertiaryLabel))
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, minHeight: PickerRowMetrics.minHeight, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     /// The clear row wears the same pill and checkmark as a model row, because
@@ -704,10 +898,13 @@ struct ModelPickerSheet: View {
 
     private var selectedModelOption: ModelCatalogOption? {
         guard let selectedModelID, !selectedModelID.isEmpty else { return nil }
-        return modelGroups.flatMap(\.allModels).firstMatchingSelection(
+        if let match = modelGroups.flatMap(\.allModels).firstMatchingSelection(
             modelID: selectedModelID,
             providerID: selectedModelProviderID
-        ) ?? ModelCatalogOption(
+        ) {
+            return match
+        }
+        return ModelCatalogOption(
             id: selectedModelID,
             displayName: selectedModelID,
             providerID: selectedModelProviderID
@@ -724,6 +921,19 @@ struct ModelPickerSheet: View {
 private struct ModelProviderChoice: Identifiable, Hashable {
     let id: String
     let name: String
+}
+
+/// HERMEX-FORK: navigation routes for the picker hierarchy.
+/// Where the picker can navigate. The payload is rebuilt from the live catalog
+/// on every screen, so a route carries ids rather than model arrays: a catalog
+/// refresh while the sheet is open must not leave a stale copy on screen.
+private enum ModelPickerRoute: Hashable {
+    /// A first-screen row: a provider, or a provider family to unfold.
+    case provider(String)
+    /// A provider's groups (`All Models` / `Free` / `Latest` / `Contributor`).
+    case groups(String)
+    /// One group's models.
+    case models(providerID: String, kind: String)
 }
 
 /// Field chrome for the custom-model entry, matching the model rows' geometry.

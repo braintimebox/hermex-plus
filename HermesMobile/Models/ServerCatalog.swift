@@ -934,3 +934,180 @@ private enum ModelCatalogParser {
         return trimmed.isEmpty ? nil : trimmed
     }
 }
+
+// HERMEX-FORK: picker hierarchy types; the fork shows providers → groups →
+// models like Telegram instead of every server group as a top-level section.
+// MARK: - Picker hierarchy (provider → group → models)
+
+/// Telegram's `/model` picker is three taps deep: a provider list, then that
+/// provider's groups (`Все модели` / `Free` / `Latest` / `Contributor`, only the
+/// non-empty ones), then the models. Hermex used to render every group the
+/// server sent as its own top-level section, so a single provider showed up
+/// three times ("Nous Portal", "Nous Portal · Latest", "Nous Portal · Free")
+/// and the picker read as a wall of uppercase headers instead of a menu.
+///
+/// These types rebuild the Telegram shape from the same `/api/models` payload.
+/// The classification mirrors `TelegramAdapter._model_buckets()`, which mirrors
+/// `_is_free_model_id` / `_is_latest_model_id` / `_is_contributor_model_id` in
+/// `hermes-webui/api/config.py`: one catalog must classify identically on every
+/// surface, or the same model shows up as "Free" in Telegram and as a plain
+/// model in Hermex.
+enum ModelPickerGroupKind: String, CaseIterable, Identifiable, Sendable {
+    case all
+    case free
+    case latest
+    case contributor
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return String(localized: "All Models")
+        case .free: return String(localized: "Free")
+        case .latest: return String(localized: "Latest")
+        case .contributor: return String(localized: "Contributor")
+        }
+    }
+
+    /// Free first: an id that is both free and a contributor variant belongs to
+    /// Free, exactly as `_model_buckets()` orders the predicates.
+    static func classify(_ modelID: String) -> [ModelPickerGroupKind] {
+        let low = modelID.lowercased()
+        if low.hasSuffix(":free") { return [.free] }
+        if low.hasSuffix("-latest") { return [.latest] }
+        if low.contains("-contributor") { return [.contributor] }
+        return []
+    }
+}
+
+struct ModelPickerGroup: Identifiable, Equatable, Sendable {
+    let kind: ModelPickerGroupKind
+    let models: [ModelCatalogOption]
+
+    var id: String { kind.rawValue }
+    var count: Int { models.count }
+}
+
+/// One row of the picker's first screen: a provider, or a family of providers
+/// folded together the way Telegram folds them.
+struct ModelPickerProvider: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    /// Providers folded into this row — a single entry unless this is a family.
+    let memberProviderIDs: [String]
+    let memberTitles: [String]
+    let groups: [ModelPickerGroup]
+
+    var allModels: [ModelCatalogOption] {
+        groups.first(where: { $0.kind == .all })?.models ?? []
+    }
+
+    var count: Int { allModels.count }
+    var isFamily: Bool { memberProviderIDs.count > 1 }
+}
+
+enum ModelPickerCatalogBuilder {
+    /// Mirror of `PROVIDER_GROUPS` in `hermes_cli/models_catalog_static.py`:
+    /// the provider families Telegram folds behind one `mpg:` row. A provider
+    /// missing here shows up as its own row in Hermex and as part of a family in
+    /// Telegram, which is the desync this whole file exists to avoid.
+    static let families: [(id: String, title: String, members: [String])] = [
+        (id: "opencode", title: "OpenCode", members: ["opencode-zen", "opencode-go", "opencode-free"]),
+    ]
+
+    private static let groupNameSeparator = " · "
+
+    /// Providers in catalog order, families folded into one row.
+    static func providers(from groups: [ModelCatalogGroup]) -> [ModelPickerProvider] {
+        var order: [String] = []
+        var modelsByProvider: [String: [ModelCatalogOption]] = [:]
+        var titleByProvider: [String: String] = [:]
+
+        for group in groups {
+            guard let rawProviderID = group.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !rawProviderID.isEmpty else { continue }
+
+            if modelsByProvider[rawProviderID] == nil { order.append(rawProviderID) }
+            modelsByProvider[rawProviderID, default: []].append(contentsOf: group.allModels)
+
+            // Prefer the plain group name ("OpenCode Go") over a bucket-suffixed
+            // one ("OpenCode Go · Contributor") for the provider's row title.
+            let isBucketName = group.name.contains(groupNameSeparator)
+            if titleByProvider[rawProviderID] == nil || !isBucketName {
+                titleByProvider[rawProviderID] = group.name
+            }
+        }
+
+        let familiesByMember = Dictionary(
+            uniqueKeysWithValues: families.flatMap { family in
+                family.members.map { ($0, family) }
+            }
+        )
+
+        var emittedFamilies = Set<String>()
+        var result: [ModelPickerProvider] = []
+
+        for providerID in order {
+            if let family = familiesByMember[providerID] {
+                guard emittedFamilies.insert(family.id).inserted else { continue }
+                let members = family.members.filter { modelsByProvider[$0] != nil }
+                guard !members.isEmpty else { continue }
+
+                if members.count == 1, let only = members.first {
+                    // A family down to one present member is not worth a tap:
+                    // render the member itself, exactly as `group_providers()`
+                    // collapses a one-member fold back to a single row.
+                    result.append(makeProvider(id: only, title: titleByProvider[only] ?? only,
+                                               models: modelsByProvider[only] ?? []))
+                    continue
+                }
+
+                let familyModels = members.flatMap { modelsByProvider[$0] ?? [] }
+                result.append(
+                    ModelPickerProvider(
+                        id: family.id,
+                        title: family.title,
+                        memberProviderIDs: members,
+                        memberTitles: members.map { titleByProvider[$0] ?? $0 },
+                        groups: groups(for: familyModels)
+                    )
+                )
+                continue
+            }
+
+            result.append(makeProvider(id: providerID, title: titleByProvider[providerID] ?? providerID,
+                                       models: modelsByProvider[providerID] ?? []))
+        }
+
+        return result
+    }
+
+    private static func makeProvider(
+        id: String,
+        title: String,
+        models: [ModelCatalogOption]
+    ) -> ModelPickerProvider {
+        ModelPickerProvider(
+            id: id,
+            title: title,
+            memberProviderIDs: [id],
+            memberTitles: [title],
+            groups: groups(for: models)
+        )
+    }
+
+    /// `Все модели` plus every non-empty special bucket, in Telegram's order.
+    static func groups(for models: [ModelCatalogOption]) -> [ModelPickerGroup] {
+        guard !models.isEmpty else { return [] }
+        return ModelPickerGroupKind.allCases.compactMap { kind in
+            let matching: [ModelCatalogOption]
+            switch kind {
+            case .all:
+                matching = models
+            default:
+                matching = models.filter { ModelPickerGroupKind.classify($0.id).contains(kind) }
+            }
+            return matching.isEmpty ? nil : ModelPickerGroup(kind: kind, models: matching)
+        }
+    }
+}
