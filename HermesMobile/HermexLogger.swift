@@ -59,6 +59,7 @@ final class HermexLogger {
                 "ts": now,
                 "message": message,
                 "appVersion": appVersion,
+                "requestId": UUID().uuidString,
             ]
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
@@ -91,7 +92,8 @@ final class HermexLogger {
         var request = URLRequest(url: webhook)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Hermex-Request-ID")  # HERMEX-FORK: request-id for log correlation
+        // HERMEX-FORK: request-id for log correlation
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Hermex-Request-ID")
         request.httpBody = try? JSONSerialization.data(withJSONObject: events)
         request.timeoutInterval = 10
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()

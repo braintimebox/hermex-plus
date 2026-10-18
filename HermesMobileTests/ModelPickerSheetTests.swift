@@ -115,3 +115,132 @@ final class ModelPickerSheetTests: XCTestCase {
         }
     }
 }
+
+// HERMEX-FORK: tests for the fork's Telegram-shaped picker hierarchy.
+/// Pins the Telegram shape of the picker: one row per provider (or per provider
+/// family), the provider's groups behind it, its models behind those. The
+/// failure this guards against is the one the user reported: every server group
+/// rendered as its own top-level section, so one provider appeared three times
+/// ("Nous Portal", "Nous Portal · Latest", "Nous Portal · Free").
+final class ModelPickerHierarchyTests: XCTestCase {
+    private func option(_ id: String, provider: String?) -> ModelCatalogOption {
+        ModelCatalogOption(id: id, displayName: id, providerID: provider)
+    }
+
+    private var nousGroups: [ModelCatalogGroup] {
+        [
+            ModelCatalogGroup(
+                id: "nous-free",
+                name: "Nous Portal · Free",
+                providerID: "nous",
+                models: [option("@nous:meituan/longcat-2.5-preview:free", provider: "nous")]
+            ),
+            ModelCatalogGroup(
+                id: "nous-latest",
+                name: "Nous Portal · Latest",
+                providerID: "nous",
+                models: [option("@nous:anthropic/claude-sonnet-4.6-latest", provider: "nous")]
+            ),
+            ModelCatalogGroup(
+                id: "nous",
+                name: "Nous Portal",
+                providerID: "nous",
+                models: [
+                    option("@nous:anthropic/claude-sonnet-4.6", provider: "nous"),
+                    option("@nous:stealth/missingno", provider: "nous"),
+                ]
+            ),
+        ]
+    }
+
+    func testOneProviderBecomesOneRowWhateverTheServerSplit() {
+        let providers = ModelPickerCatalogBuilder.providers(from: nousGroups)
+
+        XCTAssertEqual(providers.count, 1)
+        XCTAssertEqual(providers.first?.title, "Nous Portal")
+        XCTAssertEqual(providers.first?.count, 4)
+        XCTAssertFalse(providers.first?.isFamily ?? true)
+    }
+
+    func testGroupsAreAllModelsPlusEveryNonEmptyBucket() {
+        let providers = ModelPickerCatalogBuilder.providers(from: nousGroups)
+        let kinds = providers.first?.groups.map(\.kind) ?? []
+
+        XCTAssertEqual(kinds, [.all, .free, .latest] as [ModelPickerGroupKind])
+        XCTAssertEqual(providers.first?.groups.first?.count, 4)
+    }
+
+    func testAnEmptyBucketIsNotOffered() {
+        let providers = ModelPickerCatalogBuilder.providers(from: nousGroups)
+        let kinds = Set(providers.first?.groups.map(\.kind) ?? [])
+
+        XCTAssertFalse(kinds.contains(.contributor))
+    }
+
+    func testOpenCodeFoldsIntoOneFamilyRowLikeTelegram() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "opencode-go",
+                name: "OpenCode Go",
+                providerID: "opencode-go",
+                models: [option("mimo-v2.6-flash", provider: "opencode-go")]
+            ),
+            ModelCatalogGroup(
+                id: "opencode-free",
+                name: "OpenCode Free",
+                providerID: "opencode-free",
+                models: [option("@opencode-free:longcat-2.5-preview-free", provider: "opencode-free")]
+            ),
+        ]
+
+        let providers = ModelPickerCatalogBuilder.providers(from: groups)
+
+        XCTAssertEqual(providers.count, 1)
+        XCTAssertEqual(providers.first?.id, "opencode")
+        XCTAssertEqual(providers.first?.title, "OpenCode")
+        XCTAssertTrue(providers.first?.isFamily ?? false)
+        XCTAssertEqual(providers.first?.memberProviderIDs, ["opencode-go", "opencode-free"])
+        XCTAssertEqual(providers.first?.count, 2)
+    }
+
+    func testAFamilyDownToOnePresentMemberIsNotAFold() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "opencode-go",
+                name: "OpenCode Go",
+                providerID: "opencode-go",
+                models: [option("mimo-v2.6-flash", provider: "opencode-go")]
+            ),
+        ]
+
+        let providers = ModelPickerCatalogBuilder.providers(from: groups)
+
+        XCTAssertEqual(providers.count, 1)
+        XCTAssertEqual(providers.first?.id, "opencode-go")
+        XCTAssertFalse(providers.first?.isFamily ?? true)
+    }
+
+    func testFreeWinsOverLatestForAnIdThatIsBoth() {
+        XCTAssertEqual(
+            ModelPickerGroupKind.classify("@openrouter:vendor/model:free"),
+            [ModelPickerGroupKind.free]
+        )
+        XCTAssertEqual(
+            ModelPickerGroupKind.classify("@openrouter:vendor/model:free-latest"),
+            [ModelPickerGroupKind.free]
+        )
+    }
+
+    func testContributorAndLatestAreClassifiedLikeTelegramsBuckets() {
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-latest"), [ModelPickerGroupKind.latest])
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model-contributor"), [ModelPickerGroupKind.contributor])
+        XCTAssertEqual(ModelPickerGroupKind.classify("vendor/model"), [ModelPickerGroupKind]())
+    }
+
+    func testProviderRowTitlePrefersThePlainGroupName() {
+        // "Nous Portal · Free" must not become the provider's row title.
+        let title = ModelPickerCatalogBuilder.providers(from: nousGroups).first?.title
+
+        XCTAssertEqual(title, "Nous Portal")
+    }
+}
