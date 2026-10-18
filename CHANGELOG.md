@@ -338,3 +338,9 @@ Synced from `uzairansaruzi/hermex`. Kept below our release history because
   settled Markdown math layouts are cached.
 
 ## [1.5.0] - 2026-08-04
+## [3.9.50] - 2026-10-18
+- Markdown streaming reverted to LightEngine (Text(verbatim)) due to watchdog p90 regression (35% >50ms on 3.9.49); block pipeline retained for settled content.
+- Added X-Hermex-Request-ID UUID header to HermexLogger POST /webhook/hermex-logs for correlation with proxy-1118 logs.
+- Nginx proxy timeouts increased to 300s (proxy_read_timeout/connect_timeout) to reduce idle-timeout drops on mobile networks.
+- Minor fixes: ServerCatalog refresh, project-snapshot documentation.
+

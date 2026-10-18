@@ -8,18 +8,18 @@
 | Что | Значение |
 |---|---|
 | Ветка | main |
-| HEAD | e45aa2b |
-| Версия | 3.9.38 |
-| Обновлено | 2026-10-04 |
+| HEAD | 903a0b5 |
+| Версия | 3.9.47 |
+| Обновлено | 2026-10-14 |
 
 **Последние коммиты:**
 ```
-e45aa2b fix(cache): separate the cache-write queues — my shared serial queue blocked the completed turn
-d4d13e9 3.9.37: test speed: retry backoff made injectable (HermesRetryBackoff) and zeroed in the two affected test classes, so a simulated connectivity failure no longer costs 15 s of wall clock per case. Production schedule unchanged (1+2+4+8 s); the retry loop still runs all five attempts. Expected Test 640 s to about 520 s
-c3c28ad test(perf): stop paying 15 s of retry backoff per simulated connectivity failure
-ded6f7f 3.9.36: diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation, so the draft resurrection chain is proven from logs instead of inferred. No behaviour change
-ae374e1 3.9.36: use the gate's marker form (HERMEX-FORK:) on the probe comments — the gate matches the colon, so 'HERMEX-FORK (' read as unmarked
-e10666c 3.9.36: diagnostics only: draft lifecycle probe (setContent/setDraft/clearDraft/resolveSubmission/moveDraft/restoreAbandonedNewChatDraft/hydrate) logging draft key + text length + didStartConversation so the draft resurrection chain is proven from logs instead of inferred. No behaviour change: markConversationStarted wiring and .newChat semantics untouched until the runtime logs land
+903a0b5 3.9.47: fix the compile error the gate could not see (2 of 2)
+d469fe4 3.9.47: three things the user could not do — copy a whole reply, keep a pin, manage a file
+279db95 ci(test): disable parallel testing at a single worker
+30d037d ci: cache SPM SourcePackages, drop DerivedData cache
+776bf59 ci: unified cache standard — DerivedData cached in both macOS jobs
+de1dbdc ci(test): cache DerivedData between runs
 ```
 
 ## 2. Что КРИТИЧНО чинить (по приоритету — читать сверху)
@@ -47,7 +47,7 @@ _Закрыто:_ №2 STACK-CAPTURE — стек фриза теряется п
 | Метрика | Upstream | Мы | Δ |
 |---|---|---|---|
 | Swift-файлы приложения | 332 | 290 | -42 |
-| Строк приложения | 110,058 | 101,987 | **-8,071** |
-| Строк Chat | 38,604 | 40,932 | +2,328 |
+| Строк приложения | 110,058 | 103,024 | **-7,034** |
+| Строк Chat | 38,604 | 41,298 | +2,694 |
 | ChatViewModel | 6,850 | 7,692 | +842 |
 | IPA | ~44 MB | 50 MB (HermesPlus-3.9.9.ipa) | +1–2 MB |

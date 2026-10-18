@@ -862,6 +862,12 @@ extension Array where Element == ModelCatalogGroup {
 
         return map { group in
             guard group.providerID == provider else { return group }
+            // `/api/models/live` is the provider's FULL catalog. It may replace
+            // only the base group: a Free/Latest/Contributor sub-group carries a
+            // deliberately filtered slice, and overwriting it with the whole
+            // catalog collapsed all three into one identical list (44 / 429
+            // repeated for Nous). Sub-groups keep their server slice.
+            guard !group.name.contains(" · ") else { return group }
             return ModelCatalogGroup(
                 id: group.id,
                 name: group.name,
@@ -887,7 +893,15 @@ private enum ModelCatalogParser {
             guard !models.isEmpty else { return nil }
 
             return ModelCatalogGroup(
-                id: providerID ?? "\(name)-\(index)",
+                // `id` MUST be unique per row: a provider now yields several
+                // groups (base + Free/Latest/Contributor), all sharing
+                // `provider_id`. Keying the id on providerID alone made every
+                // sibling collide, and SwiftUI's ForEach then rendered the same
+                // group several times (and merged their expansion state).
+                // providerID + display name is stable across refreshes and
+                // unique within a provider; the index is the last-resort
+                // tiebreaker for a server that repeats a label.
+                id: "\(providerID ?? "group"):\(name):\(index)",
                 name: name,
                 providerID: providerID,
                 models: models,

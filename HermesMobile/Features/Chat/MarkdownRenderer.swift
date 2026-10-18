@@ -186,19 +186,12 @@ struct StreamingMarkdownRenderer: View {
 
     @ViewBuilder
     private var streamingMarkdownContent: some View {
-        // HERMEX-FORK 3.9.49 (variant A): live markdown is back. The 3.4.0
-        // plain-Text(verbatim) engine deferred ALL formatting until the stream
-        // settled — the user read a wall of raw glyphs for the whole reply and
-        // the formatted reply popped in at completion. The block pipeline
-        // (StreamingMarkdownChunkedView) renders settled markdown blocks live
-        // and only re-renders the still-growing active block, coalesced to one
-        // scan per frame — the O(N²) per-token re-parse that froze 3.3.x was
-        // already removed here by the frame-coalesced fade window.
-        StreamingMarkdownChunkedView(
-            content: displayedContent,
-            colorScheme: colorScheme,
-            forceFadeDisabled: forceFadeDisabled
-        )
+        // HERMEX-FORK 3.9.50 — reverted to LightEngine (3.4.0 plain Text(verbatim:))
+        // for live streaming. Block pipeline StreamingMarkdownChunkedView
+        // stays for settled (markdownContent, isStreaming=false). Watchdog
+        // p90 >50ms at 35% (2.19× baseline) caused by O(N) splitters per
+        // coalesced frame on long answers. Rebuild + 24h watchdog needed.
+        Text(verbatim: displayedContent)
     }
 
 }
