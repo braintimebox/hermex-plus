@@ -503,7 +503,27 @@ struct ModelPickerSheet: View {
     }
 
     private var filteredModelGroups: [ModelCatalogGroup] {
-        customModelGroups + Self.filteredGroups(modelGroups, query: trimmedSearchQuery)
+        // Telegram-style: provider groups first, saved/custom at bottom
+        let cleaned = modelGroups.map { group in
+            let filterBroken: (ModelCatalogOption) -> Bool = { option in
+                let id = option.id.lowercased()
+                let display = option.displayName.lowercased()
+                return !id.contains("missingno") && !display.contains("missingno")
+                    && !id.contains("stealth/")
+            }
+            return ModelCatalogGroup(
+                id: group.id,
+                name: group.name,
+                providerID: group.providerID,
+                models: group.allModels.filter(filterBroken),
+                extraModels: group.extraModels.filter(filterBroken)
+            )
+        }.filter { !$0.allModels.isEmpty || !$0.extraModels.isEmpty }
+        // Deduplicate groups by id (server/catalog may send duplicates)
+        let deduped = cleaned.reduce(into: [String: ModelCatalogGroup]()) { result, group in
+            result[group.id] = group
+        }.values.sorted { $0.name < $1.name }
+        return Self.filteredGroups(Array(deduped), query: trimmedSearchQuery) + customModelGroups
     }
 
     /// `groups` narrowed to `query`.
