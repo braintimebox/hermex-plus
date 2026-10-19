@@ -255,7 +255,7 @@ final class ModelPickerSheetTests: XCTestCase {
         let sections = ModelPickerSheet.sectionedGroups(groups)
 
         XCTAssertEqual(sections.map(\.section), [.free, .latest, .contributor, .other])
-        XCTAssertEqual(sections[0].groups.map(\.name), ["Nous Portal · Free", "OpenCode Free", "OpenRouter · Free"])
+        XCTAssertEqual(sections[0].groups.map(\.name), ["OpenCode Free", "OpenRouter · Free", "Nous Portal · Free"])
         XCTAssertEqual(sections[1].groups.map(\.name), ["OpenRouter · Latest"])
         XCTAssertEqual(sections[2].groups.map(\.name), ["Gemini · Contributor"])
         // "OpenCode Free" is a provider catalog whose own name ends with the
@@ -289,7 +289,7 @@ final class ModelPickerSheetTests: XCTestCase {
         // A provider's own catalog is reachable from FREE and from the full list.
         XCTAssertEqual(flattened.filter { $0.name == "OpenCode Free" }.count, 2)
         XCTAssertEqual(sections.first(where: { $0.section == .free })?.groups.map(\.name),
-                       ["Nous Portal · Free", "OpenCode Free", "OpenRouter · Free"])
+                       ["OpenCode Free", "OpenRouter · Free", "Nous Portal · Free"])
         XCTAssertTrue(sections.first(where: { $0.section == .other })?.groups.map(\.name).contains("OpenCode Free") ?? false)
     }
 
@@ -337,5 +337,55 @@ final class ModelPickerSheetTests: XCTestCase {
 
         XCTAssertEqual(group.allModels.count, ids.count)
         XCTAssertEqual(Set(group.allModels.map(\.id)).count, group.allModels.count)
+    }
+
+    // MARK: FREE order and search
+
+    /// The agreed mock fixes FREE as OpenCode Free → OpenRouter · Free →
+    /// Nous Portal · Free, whatever order the catalog arrives in. A provider
+    /// that is not in the list keeps its alphabetical place after them.
+    func testFreeSectionFollowsAgreedOrder() {
+        let groups = [
+            sectionGroup("Nous Portal · Free", provider: "nous"),
+            sectionGroup("OpenRouter · Free", provider: "openrouter"),
+            sectionGroup("OpenCode Free", provider: "opencode-free"),
+            sectionGroup("Acme · Free", provider: "acme")
+        ]
+
+        let free = ModelPickerSheet.sectionedGroups(groups).first { $0.section == .free }
+
+        XCTAssertEqual(
+            free?.groups.map(\.name),
+            ["OpenCode Free", "OpenRouter · Free", "Nous Portal · Free", "Acme · Free"]
+        )
+    }
+
+    /// Outside FREE the blocks stay alphabetical.
+    func testOtherSectionsStayAlphabetical() {
+        let groups = [
+            sectionGroup("OpenRouter · Latest", provider: "openrouter"),
+            sectionGroup("Nous Portal · Latest", provider: "nous"),
+            sectionGroup("Gemini · Latest", provider: "gemini")
+        ]
+
+        let latest = ModelPickerSheet.sectionedGroups(groups).first { $0.section == .latest }
+
+        XCTAssertEqual(latest?.groups.map(\.name), [
+            "Gemini · Latest", "Nous Portal · Latest", "OpenRouter · Latest"
+        ])
+    }
+
+    /// Searching narrows models inside a category but keeps the category, so a
+    /// hit still says which provider and block it belongs to.
+    func testSearchKeepsTheCategoryForMatchingModels() {
+        let groups = [
+            sectionGroup("OpenRouter · Free", provider: "openrouter", models: 3),
+            sectionGroup("Nous Portal · Free", provider: "nous", models: 3)
+        ]
+
+        let filtered = ModelPickerSheet.filteredGroups(groups, query: "openrouter/m1")
+
+        XCTAssertEqual(filtered.map(\.name), ["OpenRouter · Free"])
+        XCTAssertEqual(filtered.first?.allModels.map(\.id), ["openrouter/m1"])
     }
 }

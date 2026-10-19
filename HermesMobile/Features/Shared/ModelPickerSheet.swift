@@ -911,10 +911,35 @@ struct ModelPickerSheet: View {
 
         return ModelPickerCatalogSection.allCases.compactMap { section in
             guard let rows = buckets[section], !rows.isEmpty else { return nil }
-            let sorted = rows.sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            return ModelPickerGroupSection(section: section, groups: ordered(rows, in: section))
+        }
+    }
+
+    /// The agreed mock fixes the FREE order explicitly; every other block sorts
+    /// alphabetically by provider name. A FREE row that is not in the list keeps
+    /// its alphabetical place after the named ones, so a new provider can never
+    /// be pushed out of the block.
+    static let freeSectionOrder = ["OpenCode Free", "OpenRouter · Free", "Nous Portal · Free"]
+
+    static func ordered(
+        _ rows: [ModelCatalogGroup],
+        in section: ModelPickerCatalogSection
+    ) -> [ModelCatalogGroup] {
+        let alphabetical = rows.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        guard section == .free else { return alphabetical }
+
+        let rank = Dictionary(
+            uniqueKeysWithValues: freeSectionOrder.enumerated().map { ($1.lowercased(), $0) }
+        )
+        return alphabetical.sorted { lhs, rhs in
+            let left = rank[lhs.name.lowercased()] ?? Int.max
+            let right = rank[rhs.name.lowercased()] ?? Int.max
+            guard left != right else {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
-            return ModelPickerGroupSection(section: section, groups: sorted)
+            return left < right
         }
     }
 }
