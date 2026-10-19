@@ -190,4 +190,29 @@ final class ModelPickerSheetTests: XCTestCase {
 
         XCTAssertEqual(ModelPickerSheet.deduplicatedGroups(groups).count, 1)
     }
+
+    /// A colliding row is MERGED, never dropped: a repeated payload carrying
+    /// extra models must keep every model it brought.
+    func testCollidingRowsMergeTheirModelsWithoutLoss() {
+        let first = ModelCatalogGroup(
+            id: "openrouter:OpenRouter · Free:0",
+            name: "OpenRouter · Free",
+            providerID: "openrouter",
+            models: [option("a/free-model", provider: "openrouter")]
+        )
+        let second = ModelCatalogGroup(
+            id: "openrouter:OpenRouter · Free:7",
+            name: "OpenRouter · Free",
+            providerID: "openrouter",
+            models: [
+                option("a/free-model", provider: "openrouter"),   // duplicate model
+                option("b/free-model", provider: "openrouter")    // new model
+            ]
+        )
+
+        let deduped = ModelPickerSheet.deduplicatedGroups([first, second])
+
+        XCTAssertEqual(deduped.count, 1)
+        XCTAssertEqual(deduped.first?.models.map(\.id), ["a/free-model", "b/free-model"])
+    }
 }

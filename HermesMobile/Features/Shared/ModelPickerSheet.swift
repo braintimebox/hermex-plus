@@ -534,16 +534,41 @@ struct ModelPickerSheet: View {
     /// category of a provider. Identity = (provider_id, trimmed display name):
     /// "OpenRouter · Free" and "OpenRouter · Latest" share a provider but are
     /// different categories; two identical "OpenRouter · Latest" rows are one.
+    /// Colliding rows are MERGED (union of models), never dropped — a repeated
+    /// payload must not silently delete legitimate models.
     static func deduplicatedGroups(_ groups: [ModelCatalogGroup]) -> [ModelCatalogGroup] {
-        var seen = Set<String>()
-        var result: [ModelCatalogGroup] = []
+        var order: [String] = []
+        var merged: [String: ModelCatalogGroup] = [:]
         for group in groups {
             let provider = (group.providerID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let identity = "\(provider)|\(name)"
-            if seen.insert(identity).inserted {
-                result.append(group)
+            guard let existing = merged[identity] else {
+                merged[identity] = group
+                order.append(identity)
+                continue
             }
+            merged[identity] = ModelCatalogGroup(
+                id: existing.id,
+                name: existing.name,
+                providerID: existing.providerID,
+                models: Self.unionModels(existing.models, group.models),
+                extraModels: Self.unionModels(existing.extraModels, group.extraModels)
+            )
+        }
+        return order.compactMap { merged[$0] }
+    }
+
+    /// Preserve first-seen order, append only options not already present
+    /// (identity = model id + provider id, the same key favorites use).
+    private static func unionModels(
+        _ lhs: [ModelCatalogOption],
+        _ rhs: [ModelCatalogOption]
+    ) -> [ModelCatalogOption] {
+        var seen = Set(lhs.map(\.favoriteKey))
+        var result = lhs
+        for option in rhs where seen.insert(option.favoriteKey).inserted {
+            result.append(option)
         }
         return result
     }
