@@ -288,4 +288,42 @@ final class ModelPickerSheetTests: XCTestCase {
 
         XCTAssertEqual(sections.map(\.section), [.other])
     }
+
+    // MARK: Catalog counter (P0: Nous Portal 44 → 399)
+
+    /// The header's total is `allModels.count`, so a model listed in both the
+    /// visible slice and the overflow tail must be counted once. Duplicates
+    /// across the two buckets are what would inflate a provider close to double.
+    func testAllModelsDeduplicatesVisibleAndOverflow() {
+        let a = ModelCatalogOption(id: "vendor/a", displayName: "A", providerID: "nous")
+        let b = ModelCatalogOption(id: "vendor/b", displayName: "B", providerID: "nous")
+        let c = ModelCatalogOption(id: "vendor/c", displayName: "C", providerID: "nous")
+        let group = ModelCatalogGroup(
+            id: "nous:Nous Portal:0",
+            name: "Nous Portal",
+            providerID: "nous",
+            models: [a, b],
+            extraModels: [b, c]
+        )
+
+        XCTAssertEqual(group.allModels.map(\.id), ["vendor/a", "vendor/b", "vendor/c"])
+        XCTAssertEqual(group.allModels.count, 3)
+    }
+
+    /// The counter must never exceed the number of distinct ids the group holds,
+    /// and it must reach every id in the overflow tail.
+    func testAllModelsCountCoversEveryDistinctId() {
+        let ids = (0..<40).map { "vendor/m\($0)" }
+        let options = ids.map { ModelCatalogOption(id: $0, displayName: $0, providerID: "nous") }
+        let group = ModelCatalogGroup(
+            id: "nous:Nous Portal:0",
+            name: "Nous Portal",
+            providerID: "nous",
+            models: Array(options.prefix(15)),
+            extraModels: Array(options.dropFirst(15))
+        )
+
+        XCTAssertEqual(group.allModels.count, ids.count)
+        XCTAssertEqual(Set(group.allModels.map(\.id)).count, group.allModels.count)
+    }
 }
