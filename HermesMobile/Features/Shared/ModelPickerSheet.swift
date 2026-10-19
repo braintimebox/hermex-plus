@@ -78,11 +78,7 @@ struct ModelPickerSheet: View {
                     }
 
                     ForEach(Array(catalogSections.enumerated()), id: \.element.section) { index, entry in
-                        if index > 0 {
-                            sectionDivider
-                        }
-
-                        sectionHeaderRow(entry.section)
+                        sectionHeaderRow(entry.section, showsSeparator: index > 0)
 
                         ForEach(entry.groups) { group in
                             modelGroupDisclosure(group)
@@ -118,13 +114,12 @@ struct ModelPickerSheet: View {
             )
             .onAppear {
                 initializeCustomProviderIfNeeded()
-                expandPrimaryProviderSections()
+                // Groups start collapsed on every appearance: expansion is the
+                // user's action, never the catalog's. There is deliberately no
+                // pass that reopens a "primary" provider or the group holding
+                // the current selection — the sheet is reopened often and each
+                // time it must open quiet.
                 sectionExpansion.updateSearchText(searchText)
-            }
-            .onChange(of: modelGroups) {
-                // Settings loads its catalog while the sheet is already on
-                // screen, so the first pass above ran against an empty list.
-                expandPrimaryProviderSections()
             }
             .onChange(of: searchText) { _, newValue in
                 sectionExpansion.updateSearchText(newValue)
@@ -604,23 +599,28 @@ struct ModelPickerSheet: View {
         return Self.sectionedGroups(catalog)
     }
 
-    /// Thin separator between blocks; `List`'s own row separators are hidden.
-    private var sectionDivider: some View {
-        Divider()
-            .padding(.leading, 16)
-            .padding(.vertical, 4)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .accessibilityHidden(true)
-    }
-
-    private func sectionHeaderRow(_ section: ModelPickerCatalogSection) -> some View {
+    /// Section header, with the block separator drawn on its top edge.
+    ///
+    /// The separator used to be its own `List` row. A row is the most expensive
+    /// way to draw one hairline: it pays the style's row height on every block
+    /// boundary, which is what read as a hole after LATEST and CONTRIBUTOR.
+    /// Drawing the line in the header's own overlay costs no extra row, and the
+    /// 4pt top padding is the whole gap between blocks.
+    private func sectionHeaderRow(
+        _ section: ModelPickerCatalogSection,
+        showsSeparator: Bool
+    ) -> some View {
         Text(section.title)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 6)
+            .padding(.top, 4)
+            .overlay(alignment: .top) {
+                if showsSeparator {
+                    Divider()
+                }
+            }
             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 12))
             .listRowSeparator(.hidden)
             .accessibilityAddTraits(.isHeader)
@@ -854,15 +854,6 @@ struct ModelPickerSheet: View {
         guard configuration.requiresCustomProviderID else { return }
         guard customProviderID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         customProviderID = selectedModelProviderID ?? providerChoices.first?.id ?? ""
-    }
-
-    private func expandPrimaryProviderSections() {
-        for group in modelGroups {
-            let isPrimary = ProviderGlyphKind.resolve(providerID: group.providerID)?.isPrimaryCatalog == true
-            if isPrimary || group.allModels.contains(where: isSelected) {
-                sectionExpansion.setExpanded(true, groupID: group.id)
-            }
-        }
     }
 
     private var selectedModelOption: ModelCatalogOption? {
