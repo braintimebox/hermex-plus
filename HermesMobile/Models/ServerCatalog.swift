@@ -934,3 +934,113 @@ private enum ModelCatalogParser {
         return trimmed.isEmpty ? nil : trimmed
     }
 }
+
+// MARK: - Endpoint families (base model vs :batch / :US variants)
+
+/// One row exactly as a provider's `/v1/models` returns it.
+///
+/// `id` is the routable identity and is never rewritten: selecting a variant
+/// must commit that variant's id, not a normalized base id, or a saved favourite
+/// would silently resolve to a different endpoint.
+struct ModelEndpointRow: Equatable, Hashable {
+    let id: String
+    let name: String
+    /// Provider's own model identity (`canonical_slug`). Two ids that share it
+    /// serve the same model on different endpoints.
+    let canonicalSlug: String?
+
+    init(id: String, name: String? = nil, canonicalSlug: String? = nil) {
+        self.id = id
+        self.name = name ?? id
+        self.canonicalSlug = canonicalSlug
+    }
+
+    var kind: ModelEndpointKind { ModelEndpointKind(id: id) }
+
+    /// Identity of the underlying model, independent of the endpoint it is
+    /// served on. Only endpoint suffixes are stripped — a dated snapshot
+    /// (`-0813`) or a different size (`-pro`) stays a different model.
+    var familyKey: String {
+        let raw = canonicalSlug?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let basis = (raw?.isEmpty == false ? raw! : id)
+        return ModelEndpointRow.strippingEndpointSuffix(from: basis).lowercased()
+    }
+
+    static func strippingEndpointSuffix(from value: String) -> String {
+        for suffix in ModelEndpointKind.endpointSuffixes where value.lowercased().hasSuffix(suffix) {
+            return String(value.dropLast(suffix.count))
+        }
+        return value
+    }
+}
+
+/// How a catalog id is served. Only the suffixes a provider actually uses are
+/// treated as endpoints; everything else is a chat model in its own right.
+enum ModelEndpointKind: String {
+    case chat
+    case batch
+    case regional
+
+    static let endpointSuffixes = [":batch", ":us"]
+
+    init(id: String) {
+        let lowered = id.lowercased()
+        if lowered.hasSuffix(":batch") {
+            self = .batch
+        } else if lowered.hasSuffix(":us") {
+            self = .regional
+        } else {
+            self = .chat
+        }
+    }
+}
+
+/// A base model plus every endpoint variant the provider offers for it.
+struct ModelEndpointFamily: Equatable {
+    let key: String
+    let base: ModelEndpointRow
+    let variants: [ModelEndpointRow]
+
+    /// Every row of this family, base first, each keeping its exact id.
+    var rows: [ModelEndpointRow] { [base] + variants }
+}
+
+enum ModelEndpointCatalog {
+    /// Group catalog rows into families without dropping, renaming or merging
+    /// ids. Order is first-seen, so a provider's own ordering survives.
+    ///
+    /// - Base row: the first row of a family that is not an endpoint variant;
+    ///   when a family has only variants, its first variant acts as the base, so
+    ///   a provider that stops returning the plain id loses nothing.
+    static func families(from rows: [ModelEndpointRow]) -> [ModelEndpointFamily] {
+        var order: [String] = []
+        var grouped: [String: [ModelEndpointRow]] = [:]
+
+        for row in rows {
+            let key = row.familyKey
+            if grouped[key] == nil { order.append(key) }
+            grouped[key, default: []].append(row)
+        }
+
+        return order.compactMap { key in
+            guard let members = grouped[key], !members.isEmpty else { return nil }
+            let baseIndex = members.firstIndex { $0.kind == .chat } ?? 0
+            let base = members[baseIndex]
+            let variants = members.enumerated()
+                .filter { $0.offset != baseIndex }
+                .map(\.element)
+            return ModelEndpointFamily(key: key, base: base, variants: variants)
+        }
+    }
+
+    /// Number of distinct models a user is choosing between: one per family,
+    /// regardless of how many endpoints serve it.
+    static func modelCount(of rows: [ModelEndpointRow]) -> Int {
+        families(from: rows).count
+    }
+
+    /// Number of routable endpoints, variants included.
+    static func endpointCount(of rows: [ModelEndpointRow]) -> Int {
+        rows.count
+    }
+}
