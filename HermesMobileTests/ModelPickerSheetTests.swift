@@ -114,4 +114,80 @@ final class ModelPickerSheetTests: XCTestCase {
             )
         }
     }
+
+    // MARK: Duplicate category rows (#604/#2569)
+
+    private func group(_ id: String, _ name: String, provider: String?) -> ModelCatalogGroup {
+        ModelCatalogGroup(
+            id: id,
+            name: name,
+            providerID: provider,
+            models: [ModelCatalogOption(id: "\(id)-model", displayName: "\(id)-model", providerID: provider)]
+        )
+    }
+
+    /// Reproduced defect: the server payload repeats a category row (same
+    /// provider_id and display name, different synthetic id). The picker must
+    /// render it exactly once.
+    func testRepeatedCategoryRowsCollapseToOne() {
+        let groups = [
+            group("openrouter:OpenRouter · Latest:5", "OpenRouter · Latest", provider: "openrouter"),
+            group("openrouter:OpenRouter · Latest:9", "OpenRouter · Latest", provider: "openrouter")
+        ]
+
+        let deduped = ModelPickerSheet.deduplicatedGroups(groups)
+
+        XCTAssertEqual(deduped.count, 1)
+        XCTAssertEqual(deduped.first?.name, "OpenRouter · Latest")
+    }
+
+    /// The regression this must never reintroduce: Free / Latest / Contributor
+    /// and the base group share one provider_id but are DIFFERENT categories.
+    /// Dedup keyed on provider_id alone would keep only one of them.
+    func testDistinctCategoriesOfOneProviderAllSurvive() {
+        let groups = [
+            group("openrouter:OpenRouter:0", "OpenRouter", provider: "openrouter"),
+            group("openrouter:OpenRouter · Free:1", "OpenRouter · Free", provider: "openrouter"),
+            group("openrouter:OpenRouter · Latest:2", "OpenRouter · Latest", provider: "openrouter"),
+            group("openrouter:OpenRouter · Contributor:3", "OpenRouter · Contributor", provider: "openrouter")
+        ]
+
+        let deduped = ModelPickerSheet.deduplicatedGroups(groups)
+
+        XCTAssertEqual(deduped.count, 4)
+        XCTAssertEqual(
+            Set(deduped.map(\.name)),
+            ["OpenRouter", "OpenRouter · Free", "OpenRouter · Latest", "OpenRouter · Contributor"]
+        )
+    }
+
+    /// Same display name under two providers is two real categories, not a duplicate.
+    func testSameNameUnderDifferentProvidersSurvives() {
+        let groups = [
+            group("nous:Nous Portal · Latest:0", "Nous Portal · Latest", provider: "nous"),
+            group("openrouter:OpenRouter · Latest:1", "OpenRouter · Latest", provider: "openrouter")
+        ]
+
+        XCTAssertEqual(ModelPickerSheet.deduplicatedGroups(groups).count, 2)
+    }
+
+    /// Duplicate detection ignores casing and surrounding whitespace.
+    func testDuplicateIdentityIgnoresCasingAndWhitespace() {
+        let groups = [
+            group("a", "OpenRouter · Free", provider: "openrouter"),
+            group("b", "  openrouter · free ", provider: "OpenRouter")
+        ]
+
+        XCTAssertEqual(ModelPickerSheet.deduplicatedGroups(groups).count, 1)
+    }
+
+    /// A provider without a provider_id still deduplicates on its own name.
+    func testDuplicateIdentityWorksWithoutProviderID() {
+        let groups = [
+            group("a", "Saved Custom", provider: nil),
+            group("b", "Saved Custom", provider: nil)
+        ]
+
+        XCTAssertEqual(ModelPickerSheet.deduplicatedGroups(groups).count, 1)
+    }
 }

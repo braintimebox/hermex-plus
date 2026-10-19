@@ -519,11 +519,33 @@ struct ModelPickerSheet: View {
                 extraModels: group.extraModels.filter(filterBroken)
             )
         }.filter { !$0.allModels.isEmpty || !$0.extraModels.isEmpty }
-        // Deduplicate groups by id (server/catalog may send duplicates)
-        let deduped = cleaned.reduce(into: [String: ModelCatalogGroup]()) { result, group in
-            result[group.id] = group
-        }.values.sorted { $0.name < $1.name }
-        return Self.filteredGroups(Array(deduped), query: trimmedSearchQuery) + customModelGroups
+        // Deduplicate by LOGICAL category identity: (provider_id, display name).
+        // The server sends several sibling groups for one provider (base +
+        // "<Provider> · Free" + " · Latest" + " · Contributor"), all sharing
+        // provider_id but with distinct names. Keying on `id` alone is unsafe —
+        // a repeated payload can arrive with a different synthetic index, and a
+        // provider could also repeat a name. Keying on provider_id alone would
+        // collapse legitimate sibling categories into one (#604/#2569).
+        let deduped = Self.deduplicatedGroups(cleaned)
+        return Self.filteredGroups(deduped, query: trimmedSearchQuery) + customModelGroups
+    }
+
+    /// Collapse genuinely-repeated category rows while keeping every distinct
+    /// category of a provider. Identity = (provider_id, trimmed display name):
+    /// "OpenRouter · Free" and "OpenRouter · Latest" share a provider but are
+    /// different categories; two identical "OpenRouter · Latest" rows are one.
+    static func deduplicatedGroups(_ groups: [ModelCatalogGroup]) -> [ModelCatalogGroup] {
+        var seen = Set<String>()
+        var result: [ModelCatalogGroup] = []
+        for group in groups {
+            let provider = (group.providerID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let identity = "\(provider)|\(name)"
+            if seen.insert(identity).inserted {
+                result.append(group)
+            }
+        }
+        return result
     }
 
     /// `groups` narrowed to `query`.
