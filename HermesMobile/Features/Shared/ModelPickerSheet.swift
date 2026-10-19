@@ -885,12 +885,30 @@ struct ModelPickerSheet: View {
 
     /// Group catalog rows into the picker's blocks and sort each block by
     /// provider. Sections with no rows are dropped; no group is invented and no
-    /// group is dropped — the count of returned groups always equals the input.
+    /// group is dropped — every input group is preserved.
+    ///
+    /// A provider whose OWN catalog name already ends with a category keyword
+    /// ("OpenCode Free", 9 models) is listed in that block AND again under the
+    /// full catalogs, as the agreed design shows: the FREE block is a shortcut,
+    /// not a replacement for the provider row. A derived slice
+    /// ("OpenRouter · Free") appears in its block only — its models are already
+    /// reachable through that provider's full catalog.
     static func sectionedGroups(_ groups: [ModelCatalogGroup]) -> [ModelPickerGroupSection] {
         var buckets: [ModelPickerCatalogSection: [ModelCatalogGroup]] = [:]
+        var mirrored: [ModelCatalogGroup] = []
+
         for group in groups {
-            buckets[ModelPickerCatalogSection.resolve(groupName: group.name), default: []].append(group)
+            let section = ModelPickerCatalogSection.resolve(groupName: group.name)
+            buckets[section, default: []].append(group)
+
+            let isDerivedSlice = group.name.contains("·")
+            if section != .other, !isDerivedSlice {
+                mirrored.append(group)
+            }
         }
+
+        buckets[.other, default: []].append(contentsOf: mirrored)
+
         return ModelPickerCatalogSection.allCases.compactMap { section in
             guard let rows = buckets[section], !rows.isEmpty else { return nil }
             let sorted = rows.sorted {
