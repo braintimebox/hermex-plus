@@ -70,10 +70,34 @@ struct ModelPickerSheet: View {
                         .listRowSeparator(.hidden)
                 }
 
-                ForEach(filteredModelGroups) { group in
-                    modelGroupDisclosure(group)
-                        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
-                        .listRowSeparator(.hidden)
+                if trimmedSearchQuery.isEmpty {
+                    ForEach(quickGroups) { group in
+                        quickGroupRow(group)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                            .listRowSeparator(.hidden)
+                    }
+
+                    ForEach(Array(catalogSections.enumerated()), id: \.element.section) { index, entry in
+                        if index > 0 {
+                            sectionDivider
+                        }
+
+                        sectionHeaderRow(entry.section)
+
+                        ForEach(entry.groups) { group in
+                            modelGroupDisclosure(group)
+                                .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                                .listRowSeparator(.hidden)
+                        }
+                    }
+                } else {
+                    // A query answers with one flat list: section headers over a
+                    // filtered subset would be mostly empty and cost vertical space.
+                    ForEach(filteredModelGroups) { group in
+                        modelGroupDisclosure(group)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
+                            .listRowSeparator(.hidden)
+                    }
                 }
 
                 customModelEntry
@@ -155,6 +179,11 @@ struct ModelPickerSheet: View {
             }
         } label: {
             HStack(spacing: 12) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+
                 Text(clearAction.title)
                     .font(.body)
                     .lineLimit(2)
@@ -291,7 +320,7 @@ struct ModelPickerSheet: View {
         return isFavorite ? Color.primary : Color(.tertiaryLabel)
     }
 
-    private func modelGroupDisclosure(_ group: ModelCatalogGroup) -> some View {
+    private func modelGroupDisclosure(_ group: ModelCatalogGroup, quickIcon: String? = nil) -> some View {
         let displayedModels = overflowExpansion.displayedModels(in: group)
         let totalModelCount = group.allModels.count
 
@@ -323,6 +352,14 @@ struct ModelPickerSheet: View {
             .padding(.top, 4)
         } label: {
             HStack(spacing: 8) {
+                if let quickIcon {
+                    Image(systemName: quickIcon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 17, height: 17)
+                        .accessibilityHidden(true)
+                }
+
                 if ProviderGlyphKind.resolve(providerID: group.providerID) != nil {
                     ProviderGlyph(providerID: group.providerID)
                         .frame(width: 17, height: 17)
@@ -503,7 +540,11 @@ struct ModelPickerSheet: View {
     }
 
     private var filteredModelGroups: [ModelCatalogGroup] {
-        // Telegram-style: provider groups first, saved/custom at bottom
+        Self.filteredGroups(preparedGroups, query: trimmedSearchQuery) + customModelGroups
+    }
+
+    /// Catalog rows after filtering out unusable models and collapsing repeats.
+    private var preparedGroups: [ModelCatalogGroup] {
         let cleaned = modelGroups.map { group in
             let filterBroken: (ModelCatalogOption) -> Bool = { option in
                 let id = option.id.lowercased()
@@ -526,8 +567,63 @@ struct ModelPickerSheet: View {
         // a repeated payload can arrive with a different synthetic index, and a
         // provider could also repeat a name. Keying on provider_id alone would
         // collapse legitimate sibling categories into one (#604/#2569).
-        let deduped = Self.deduplicatedGroups(cleaned)
-        return Self.filteredGroups(deduped, query: trimmedSearchQuery) + customModelGroups
+        return Self.deduplicatedGroups(cleaned)
+    }
+
+    /// Pinned rows above the categorized catalog: Mixture of Agents (the server's
+    /// `moa` provider group) and the saved/current custom rows. Their icons are
+    /// what tells a user these are actions, not another provider catalog.
+    private var quickGroups: [ModelCatalogGroup] {
+        var groups: [ModelCatalogGroup] = []
+        if let moa = preparedGroups.first(where: {
+            ($0.providerID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "moa"
+        }) {
+            groups.append(moa)
+        }
+        groups.append(contentsOf: customModelGroups)
+        return groups
+    }
+
+    private func quickIcon(for group: ModelCatalogGroup) -> String {
+        if group.providerID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "moa" {
+            return "arrow.triangle.branch"
+        }
+        return group.id == savedCustomGroupID ? "star.fill" : "pencil"
+    }
+
+    private func quickGroupRow(_ group: ModelCatalogGroup) -> some View {
+        modelGroupDisclosure(group, quickIcon: quickIcon(for: group))
+    }
+
+    /// Catalog rows in presentation order: FREE, LATEST, CONTRIBUTOR, then every
+    /// remaining provider catalog. A section with no groups is omitted rather
+    /// than shown empty, and every group keeps its real identity.
+    private var catalogSections: [ModelPickerGroupSection] {
+        let quickIDs = Set(quickGroups.map(\.id))
+        let catalog = preparedGroups.filter { !quickIDs.contains($0.id) }
+        return Self.sectionedGroups(catalog)
+    }
+
+    /// Thin separator between blocks; `List`'s own row separators are hidden.
+    private var sectionDivider: some View {
+        Divider()
+            .padding(.leading, 16)
+            .padding(.vertical, 4)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .accessibilityHidden(true)
+    }
+
+    private func sectionHeaderRow(_ section: ModelPickerCatalogSection) -> some View {
+        Text(section.title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 12))
+            .listRowSeparator(.hidden)
+            .accessibilityAddTraits(.isHeader)
     }
 
     /// Collapse genuinely-repeated category rows while keeping every distinct
@@ -786,6 +882,64 @@ struct ModelPickerSheet: View {
             || option.id.localizedCaseInsensitiveContains(query)
             || (option.providerID?.localizedCaseInsensitiveContains(query) ?? false)
     }
+
+    /// Group catalog rows into the picker's blocks and sort each block by
+    /// provider. Sections with no rows are dropped; no group is invented and no
+    /// group is dropped — the count of returned groups always equals the input.
+    static func sectionedGroups(_ groups: [ModelCatalogGroup]) -> [ModelPickerGroupSection] {
+        var buckets: [ModelPickerCatalogSection: [ModelCatalogGroup]] = [:]
+        for group in groups {
+            buckets[ModelPickerCatalogSection.resolve(groupName: group.name), default: []].append(group)
+        }
+        return ModelPickerCatalogSection.allCases.compactMap { section in
+            guard let rows = buckets[section], !rows.isEmpty else { return nil }
+            let sorted = rows.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return ModelPickerGroupSection(section: section, groups: sorted)
+        }
+    }
+}
+
+/// Presentation block of the picker's catalog list.
+///
+/// The server names a provider's derived category "<Provider> · Free" (see
+/// hermes-webui `_split_aliases_and_free_groups`), so the text after the last
+/// "·" is the category. A provider whose own name ends with the keyword
+/// ("OpenCode Free") belongs to that block too — and keeps its full catalog in
+/// the list, because it is filtered, never moved or renamed.
+enum ModelPickerCatalogSection: String, CaseIterable {
+    case free
+    case latest
+    case contributor
+    case other
+
+    var title: String {
+        switch self {
+        case .free: return String(localized: "FREE")
+        case .latest: return String(localized: "LATEST")
+        case .contributor: return String(localized: "CONTRIBUTOR")
+        case .other: return String(localized: "Other Providers")
+        }
+    }
+
+    static func resolve(groupName: String) -> ModelPickerCatalogSection {
+        let name = groupName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let suffix = name
+            .split(separator: "·")
+            .last
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? name
+
+        if suffix == "free" || name.hasSuffix("free") { return .free }
+        if suffix == "latest" || name.hasSuffix("latest") { return .latest }
+        if suffix == "contributor" || name.hasSuffix("contributor") { return .contributor }
+        return .other
+    }
+}
+
+struct ModelPickerGroupSection {
+    let section: ModelPickerCatalogSection
+    let groups: [ModelCatalogGroup]
 }
 
 private struct ModelProviderChoice: Identifiable, Hashable {

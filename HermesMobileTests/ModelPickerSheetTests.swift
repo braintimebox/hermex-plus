@@ -215,4 +215,77 @@ final class ModelPickerSheetTests: XCTestCase {
         XCTAssertEqual(deduped.count, 1)
         XCTAssertEqual(deduped.first?.models.map(\.id), ["a/free-model", "b/free-model"])
     }
+
+    // MARK: Section order (FREE / LATEST / CONTRIBUTOR / others)
+
+    private func sectionGroup(_ name: String, provider: String, models: Int = 1) -> ModelCatalogGroup {
+        ModelCatalogGroup(
+            id: "\(provider):\(name):0",
+            name: name,
+            providerID: provider,
+            models: (0..<models).map {
+                ModelCatalogOption(id: "\(provider)/m\($0)", displayName: "m\($0)", providerID: provider)
+            }
+        )
+    }
+
+    /// The category is the text after the last "·", which is how hermes-webui
+    /// names a derived group ("OpenRouter · Free"). A provider whose own name
+    /// already ends with the keyword belongs to that block as well.
+    func testSectionResolvesDerivedCategoryFromGroupName() {
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "OpenRouter · Free"), .free)
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "Nous Portal · Latest"), .latest)
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "OpenCode Go · Contributor"), .contributor)
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "OpenCode Free"), .free)
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "DeepSeek"), .other)
+        XCTAssertEqual(ModelPickerCatalogSection.resolve(groupName: "OpenCode Go"), .other)
+    }
+
+    /// Fixed block order; providers inside a block sort alphabetically.
+    func testSectionsFollowDesignOrderAndSortByProviderName() {
+        let groups = [
+            sectionGroup("DeepSeek", provider: "deepseek"),
+            sectionGroup("OpenRouter · Free", provider: "openrouter"),
+            sectionGroup("Nous Portal · Free", provider: "nous"),
+            sectionGroup("OpenRouter · Latest", provider: "openrouter"),
+            sectionGroup("OpenCode Free", provider: "opencode-free"),
+            sectionGroup("Gemini · Contributor", provider: "gemini")
+        ]
+
+        let sections = ModelPickerSheet.sectionedGroups(groups)
+
+        XCTAssertEqual(sections.map(\.section), [.free, .latest, .contributor, .other])
+        XCTAssertEqual(sections[0].groups.map(\.name), ["Nous Portal · Free", "OpenCode Free", "OpenRouter · Free"])
+        XCTAssertEqual(sections[1].groups.map(\.name), ["OpenRouter · Latest"])
+        XCTAssertEqual(sections[2].groups.map(\.name), ["Gemini · Contributor"])
+        XCTAssertEqual(sections[3].groups.map(\.name), ["DeepSeek"])
+    }
+
+    /// Sectioning must be a reordering, never a filter: every category survives
+    /// once, including the Free/Latest/Contributor siblings of one provider.
+    func testSectioningKeepsEveryGroupExactlyOnce() {
+        let groups = [
+            sectionGroup("OpenRouter", provider: "openrouter"),
+            sectionGroup("OpenRouter · Free", provider: "openrouter"),
+            sectionGroup("OpenRouter · Latest", provider: "openrouter"),
+            sectionGroup("OpenRouter · Contributor", provider: "openrouter"),
+            sectionGroup("Nous Portal", provider: "nous"),
+            sectionGroup("Nous Portal · Free", provider: "nous"),
+            sectionGroup("Nous Portal · Latest", provider: "nous")
+        ]
+
+        let flattened = ModelPickerSheet.sectionedGroups(groups).flatMap(\.groups)
+
+        XCTAssertEqual(flattened.count, groups.count)
+        XCTAssertEqual(Set(flattened.map(\.name)), Set(groups.map(\.name)))
+        XCTAssertEqual(ModelPickerSheet.sectionedGroups(groups).map(\.section), [.free, .latest, .contributor, .other])
+    }
+
+    /// An empty block is omitted rather than rendered as a header with nothing
+    /// under it.
+    func testEmptySectionsAreOmitted() {
+        let sections = ModelPickerSheet.sectionedGroups([sectionGroup("DeepSeek", provider: "deepseek")])
+
+        XCTAssertEqual(sections.map(\.section), [.other])
+    }
 }
