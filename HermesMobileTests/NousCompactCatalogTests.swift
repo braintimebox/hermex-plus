@@ -77,4 +77,30 @@ final class NousCompactCatalogTests: XCTestCase {
         XCTAssertTrue(NousCompactCatalog.modelIDs.contains("upstage/solar-mini4:free"))
         XCTAssertTrue(NousCompactCatalog.modelIDs.contains("reflection/beam-1.0-501b-a23b:free"))
     }
+
+    /// Mirrors what the server actually sends: one base group plus the derived
+    /// `· Free` / `· Latest` slices. Compaction must shrink only the base group
+    /// and must not lose or duplicate a single model across the catalog.
+    func testCompactionPreservesTheWholeServerCatalog() {
+        let freeIDs = ["poolside/laguna-s-2.1:free", "upstage/solar-mini4:free"]
+        let latestIDs = Array(NousCompactCatalog.modelIDs.prefix(6))
+        let otherIDs = (1...40).map { "vendor/extra-\($0)" }
+
+        let base = group(name: "Nous Portal", ids: Array(NousCompactCatalog.modelIDs) + otherIDs)
+        let free = group(name: "Nous Portal · Free", ids: freeIDs)
+        let latest = group(name: "Nous Portal · Latest", ids: latestIDs)
+
+        let compactBase = NousCompactCatalog.compact(base)
+        let compactFree = NousCompactCatalog.compact(free)
+        let compactLatest = NousCompactCatalog.compact(latest)
+
+        XCTAssertEqual(compactBase.models.count, 59)
+        XCTAssertEqual(compactBase.extraModels.count, otherIDs.count)
+        XCTAssertEqual(compactFree.models.map(\.id), freeIDs, "derived slice must keep its models")
+        XCTAssertEqual(compactLatest.models.map(\.id), latestIDs, "derived slice must keep its models")
+
+        let before = Set(base.allModels.map(\.id)).union(free.allModels.map(\.id)).union(latest.allModels.map(\.id))
+        let after = Set(compactBase.allModels.map(\.id)).union(compactFree.allModels.map(\.id)).union(compactLatest.allModels.map(\.id))
+        XCTAssertEqual(before, after, "compaction must not lose or invent a model")
+    }
 }
