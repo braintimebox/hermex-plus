@@ -98,6 +98,9 @@ struct DecisionAnswer: Decodable, Equatable {
     let score: Double?
     let probabilities: [String: Double]?
     let confidence: Double?
+    /// Only for `.score`: level index → human label, as the API returns it.
+    /// Captured live on 2026-10-20: `{"0":"Cosmetic","1":"…","2":"Blocking"}`.
+    let legend: [String: String]?
 
     /// One line per answer, shaped for a dense results list.
     var summary: String {
@@ -111,10 +114,24 @@ struct DecisionAnswer: Decodable, Equatable {
             return choice
         case "score":
             guard let score else { return "—" }
+            // `score` is the expected level index (0-based), not a percentage:
+            // 0.83 over three levels means "between level 0 and 1, closest to 1".
+            if let label = legendLabel(for: score) {
+                return "\(label) · \(String(format: "%.2f", score))"
+            }
             return String(format: "%.2f", score)
         default:
             return type
         }
+    }
+
+    private func legendLabel(for score: Double) -> String? {
+        guard let legend, !legend.isEmpty else { return nil }
+        let keys = legend.keys.compactMap { Int($0) }.sorted()
+        guard let nearest = keys.min(by: { abs(Double($0) - score) < abs(Double($1) - score) }) else {
+            return nil
+        }
+        return legend[String(nearest)]
     }
 }
 

@@ -34,6 +34,9 @@ final class DecisionsViewModel {
     var questions: [EditableQuestion] = [EditableQuestion()]
     var models: [DecisionModelInfo] = []
     var result: DecisionResponse?
+    /// Question text per answer key, so the results list can show what was asked
+    /// instead of the positional key (`q1`) the API echoes back.
+    var questionTitles: [String: String] = [:]
     var errorMessage: String?
     var isRunning = false
 
@@ -59,7 +62,22 @@ final class DecisionsViewModel {
     func saveKey() {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        try? keychain.save(trimmed, forKey: .decisionsAPIKey)
+        do {
+            try keychain.save(trimmed, forKey: .decisionsAPIKey)
+        } catch {
+            errorMessage = String(
+                format: String(localized: "Could not save the key to Keychain: %@"),
+                error.localizedDescription
+            )
+        }
+    }
+
+    /// Explicit reload for the model list; the key may have changed since the
+    /// list was fetched.
+    func reloadModels() async {
+        models = []
+        errorMessage = nil
+        await loadModels()
     }
 
     func loadModels() async {
@@ -90,11 +108,13 @@ final class DecisionsViewModel {
         defer { isRunning = false }
 
         let request = DecisionRequest(model: model, state: state, questions: built)
+        questionTitles = built.mapValues(\.instructions)
         do {
             result = try await client.decide(request, apiKey: key)
             saveKey()
         } catch {
             result = nil
+            questionTitles = [:]
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }

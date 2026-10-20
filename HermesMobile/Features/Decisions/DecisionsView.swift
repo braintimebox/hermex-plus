@@ -31,6 +31,14 @@ struct DecisionsView: View {
                 }
                 .task { viewModel.loadSavedKey(); await viewModel.loadModels() }
 
+                Button {
+                    Task { await viewModel.reloadModels() }
+                } label: {
+                    Label("Reload model list", systemImage: "arrow.clockwise")
+                }
+                .disabled(viewModel.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isRunning)
+                .accessibilityHint("Fetches the decision models again with the current key.")
+
                 TextField("State — the text to decide about", text: $viewModel.state, axis: .vertical)
                     .lineLimit(3...8)
             }
@@ -87,9 +95,15 @@ struct DecisionsView: View {
                 Section("Answers") {
                     ForEach(result.answers.keys.sorted(), id: \.self) { key in
                         if let answer = result.answers[key] {
-                            LabeledContent(key) {
-                                Text(answer.summary).monospacedDigit()
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(viewModel.questionTitles[key] ?? key)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(answer.summary)
+                                    .font(.body.monospacedDigit())
                             }
+                            .padding(.vertical, 3)
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }

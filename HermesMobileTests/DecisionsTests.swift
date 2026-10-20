@@ -39,6 +39,28 @@ final class DecisionsClientTests: XCTestCase {
         XCTAssertNotNil(decoded.id)
     }
 
+    /// Verbatim response for a `score` question (three levels, captured live on
+    /// 2026-10-20). `score` is the expected level index; `legend` names the levels.
+    static let liveScoreResponse = """
+    {"model":"typesafe/jev-1.14-20261014","answers":{"severity":{"type":"score","score":0.83,"legend":{"0":"Cosmetic","1":"Degraded but workaround exists","2":"Blocking"},"probabilities":{"0":0.19,"1":0.8,"2":0.01},"confidence":0.7}},"usage":{"input_tokens":319,"output_tokens":17,"cost":1.3398e-05},"id":"gen-dec-1792511629-FixtureOnly","provider":"TypeSafe"}
+    """
+
+    func testScoreAnswerMapsIndexToLegendLabel() throws {
+        let decoded = try JSONDecoder().decode(DecisionResponse.self, from: Data(Self.liveScoreResponse.utf8))
+        let severity = try XCTUnwrap(decoded.answers["severity"])
+
+        XCTAssertEqual(severity.type, "score")
+        XCTAssertEqual(severity.legend?["2"], "Blocking")
+        // 0.83 sits closest to level 1 of {0,1,2}.
+        XCTAssertEqual(severity.summary, "Degraded but workaround exists · 0.83")
+    }
+
+    func testScoreAnswerWithoutLegendFallsBackToTheNumber() throws {
+        let json = #"{"answers":{"sev":{"type":"score","score":0.4}}}"#
+        let decoded = try JSONDecoder().decode(DecisionResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.answers["sev"]?.summary, "0.40")
+    }
+
     func testChoiceQuestionEncodesCriteriaAsOptionObject() throws {
         let request = DecisionRequest(
             model: "typesafe/jev-1.14",
@@ -309,6 +331,74 @@ final class DecisionsViewModelTests: XCTestCase {
         viewModel.loadSavedKey()
 
         XCTAssertEqual(viewModel.apiKey, "sk-saved")
+    }
+
+    private final class FailingKeychain: KeychainStoring {
+        struct SaveFailed: LocalizedError { var errorDescription: String? { "keychain is locked" } }
+        func save(_ value: String, forKey key: KeychainStore.Key) throws { throw SaveFailed() }
+        func load(_ key: KeychainStore.Key) throws -> String? { nil }
+        func delete(_ key: KeychainStore.Key) throws {}
+        func save(_ value: String, forKey key: KeychainStore.Key, scope: String) throws { throw SaveFailed() }
+        func load(_ key: KeychainStore.Key, scope: String) throws -> String? { nil }
+        func delete(_ key: KeychainStore.Key, scope: String) throws {}
+    }
+
+    @MainActor
+    func testKeychainFailureIsSurfacedInsteadOfSwallowed() {
+        let viewModel = DecisionsViewModel(client: DecisionsClient(session: session), keychain: FailingKeychain())
+        viewModel.apiKey = "sk-typed"
+
+        viewModel.saveKey()
+
+        XCTAssertEqual(viewModel.errorMessage, "Could not save the key to Keychain: keychain is locked")
+    }
+
+    @MainActor
+    func testAnswersAreTiedToTheirQuestions() async {
+        // The real API echoes the request keys, so the response below does too.
+        let echoed = #"{"answers":{"q1":{"type":"noul","noul":0.55},"q2":{"type":"choice","choice":"billing","confidence":1}}}"#
+        DecisionStubURLProtocol.respond(status: 200, body: echoed)
+        let viewModel = DecisionsViewModel(client: DecisionsClient(session: session), keychain: MemoryKeychain())
+        viewModel.apiKey = "k"
+        viewModel.state = "I was charged twice."
+        viewModel.questions = [
+            DecisionsViewModel.EditableQuestion(kind: .noul, instructions: "Asking for money back?"),
+            DecisionsViewModel.EditableQuestion(kind: .choice, instructions: "Which team?", choices: "billing, technical"),
+        ]
+
+        await viewModel.run()
+
+        // Positional keys are all the API echoes; the screen has to show the question.
+        XCTAssertEqual(viewModel.questionTitles["q1"], "Asking for money back?")
+        XCTAssertEqual(viewModel.questionTitles["q2"], "Which team?")
+        XCTAssertEqual(Set(viewModel.result?.answers.keys ?? []), Set(["q1", "q2"]))
+    }
+
+    @MainActor
+    func testReloadModelsRefetchesWithTheCurrentKey() async {
+        DecisionStubURLProtocol.respond(
+            status: 200,
+            body: #"{"data":[{"id":"typesafe/jev-1.14","name":"TypeSafe: Jev 1.14"}]}"#
+        )
+        let viewModel = DecisionsViewModel(client: DecisionsClient(session: session), keychain: MemoryKeychain())
+        viewModel.apiKey = "k"
+
+        await viewModel.reloadModels()
+
+        XCTAssertEqual(viewModel.models.map(\.id), ["typesafe/jev-1.14"])
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    @MainActor
+    func testEmptyModelListDoesNotFail() async {
+        DecisionStubURLProtocol.respond(status: 200, body: #"{"data":[]}"#)
+        let viewModel = DecisionsViewModel(client: DecisionsClient(session: session), keychain: MemoryKeychain())
+        viewModel.apiKey = "k"
+
+        await viewModel.reloadModels()
+
+        XCTAssertTrue(viewModel.models.isEmpty)
+        XCTAssertNil(viewModel.errorMessage)
     }
 }
 
