@@ -506,7 +506,6 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )
@@ -541,7 +540,6 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )
