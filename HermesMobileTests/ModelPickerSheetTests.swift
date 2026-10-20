@@ -259,14 +259,15 @@ final class ModelPickerSheetTests: XCTestCase {
         XCTAssertEqual(sections[1].groups.map(\.name), ["OpenRouter · Latest"])
         XCTAssertEqual(sections[2].groups.map(\.name), ["Gemini · Contributor"])
         // "OpenCode Free" is a provider catalog whose own name ends with the
-        // keyword: it appears in FREE and, mirrored, under the full catalogs.
-        XCTAssertEqual(sections[3].groups.map(\.name), ["DeepSeek", "OpenCode Free"])
+        // keyword: its row lives in FREE, so it is not repeated under the full
+        // catalogs.
+        XCTAssertEqual(sections[3].groups.map(\.name), ["DeepSeek"])
     }
 
-    /// Sectioning never loses a category: every input group is present, derived
-    /// slices exactly once, and a provider whose own name carries the keyword
-    /// also sits under the full catalogs (as the agreed design shows).
-    func testSectioningKeepsEveryGroupAndMirrorsOwnNameCatalogs() {
+    /// Sectioning never loses a category and never lists one twice: every input
+    /// group lands in exactly one block, including a provider whose own name
+    /// carries the keyword ("OpenCode Free").
+    func testSectioningListsEveryGroupExactlyOnce() {
         let groups = [
             sectionGroup("OpenRouter", provider: "openrouter"),
             sectionGroup("OpenRouter · Free", provider: "openrouter"),
@@ -281,16 +282,38 @@ final class ModelPickerSheetTests: XCTestCase {
         let sections = ModelPickerSheet.sectionedGroups(groups)
         let flattened = sections.flatMap(\.groups)
 
-        XCTAssertEqual(Set(flattened.map(\.name)), Set(groups.map(\.name)))
         XCTAssertEqual(sections.map(\.section), [.free, .latest, .contributor, .other])
+        XCTAssertEqual(flattened.map(\.name).sorted(), groups.map(\.name).sorted())
+        XCTAssertEqual(flattened.count, groups.count, "no group may be listed twice")
 
-        // A derived slice lives in its block only.
+        // A provider's own catalog appears once, in its own block.
+        XCTAssertEqual(flattened.filter { $0.name == "OpenCode Free" }.count, 1)
         XCTAssertEqual(flattened.filter { $0.name == "OpenRouter · Free" }.count, 1)
-        // A provider's own catalog is reachable from FREE and from the full list.
-        XCTAssertEqual(flattened.filter { $0.name == "OpenCode Free" }.count, 2)
         XCTAssertEqual(sections.first(where: { $0.section == .free })?.groups.map(\.name),
                        ["OpenCode Free", "OpenRouter · Free", "Nous Portal · Free"])
-        XCTAssertTrue(sections.first(where: { $0.section == .other })?.groups.map(\.name).contains("OpenCode Free") ?? false)
+        XCTAssertEqual(sections.first(where: { $0.section == .other })?.groups.map(\.name),
+                       ["Nous Portal", "OpenRouter"])
+    }
+
+    /// Removing the mirrored row must not cost a model: the provider row that
+    /// stays in FREE carries its whole catalog, overflow included.
+    func testOwnNameProviderKeepsItsWholeCatalogInOneRow() {
+        let options = (1...9).map { ModelCatalogOption(id: "free-\($0)", displayName: "Free \($0)", providerID: "opencode-free") }
+        let extra = [ModelCatalogOption(id: "free-10", displayName: "Free 10", providerID: "opencode-free")]
+        let group = ModelCatalogGroup(
+            id: "opencode-free",
+            name: "OpenCode Free",
+            providerID: "opencode-free",
+            models: options,
+            extraModels: extra
+        )
+
+        let sections = ModelPickerSheet.sectionedGroups([group])
+        let rows = sections.flatMap(\.groups)
+
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.allModels.count, 10)
+        XCTAssertEqual(Set(rows.first?.allModels.map(\.id) ?? []), Set((1...10).map { "free-\($0)" }))
     }
 
     /// An empty block is omitted rather than rendered as a header with nothing

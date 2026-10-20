@@ -875,30 +875,22 @@ struct ModelPickerSheet: View {
     }
 
     /// Group catalog rows into the picker's blocks and sort each block by
-    /// provider. Sections with no rows are dropped; no group is invented and no
-    /// group is dropped — every input group is preserved.
+    /// provider. Sections with no rows are dropped; no group is invented, no
+    /// group is dropped and no group is listed twice — every input group lands in
+    /// exactly one block.
     ///
     /// A provider whose OWN catalog name already ends with a category keyword
-    /// ("OpenCode Free", 9 models) is listed in that block AND again under the
-    /// full catalogs, as the agreed design shows: the FREE block is a shortcut,
-    /// not a replacement for the provider row. A derived slice
-    /// ("OpenRouter · Free") appears in its block only — its models are already
-    /// reachable through that provider's full catalog.
+    /// ("OpenCode Free") is *that* block's row: its full catalog, overflow
+    /// included, is the row itself, so it must not be repeated under the full
+    /// catalogs. A derived slice ("OpenRouter · Free") likewise appears in its
+    /// block only; its models stay reachable through the provider's own row.
     static func sectionedGroups(_ groups: [ModelCatalogGroup]) -> [ModelPickerGroupSection] {
         var buckets: [ModelPickerCatalogSection: [ModelCatalogGroup]] = [:]
-        var mirrored: [ModelCatalogGroup] = []
 
         for group in groups {
             let section = ModelPickerCatalogSection.resolve(groupName: group.name)
             buckets[section, default: []].append(group)
-
-            let isDerivedSlice = group.name.contains("·")
-            if section != .other, !isDerivedSlice {
-                mirrored.append(group)
-            }
         }
-
-        buckets[.other, default: []].append(contentsOf: mirrored)
 
         return ModelPickerCatalogSection.allCases.compactMap { section in
             guard let rows = buckets[section], !rows.isEmpty else { return nil }
