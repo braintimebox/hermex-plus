@@ -314,7 +314,8 @@ final class MainThreadWatchdog {
         isScrolledNearBottom: Bool? = nil,
         scrollOwner: String? = nil,
         displayedRowCount: Int? = nil,
-        isFollowingBottom: Bool? = nil
+        isFollowingBottom: Bool? = nil,
+        heavyOp: String? = nil
     ) {
         contextLock.lock()
         defer { contextLock.unlock() }
