@@ -26,6 +26,9 @@ struct KeychainStore: KeychainStoring {
         // lives in the Keychain, not UserDefaults (#15).
         case servers = "servers"
         case botConnection = "bot_connection"
+        // User-supplied OpenRouter key for the alpha Decisions screen. Optional:
+        // without it that screen stays read-only.
+        case decisionsAPIKey = "decisions_api_key"
     }
 
     private let keychain: Keychain
