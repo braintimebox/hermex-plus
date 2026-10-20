@@ -585,4 +585,96 @@ final class PersonalityAutocompleteTests: XCTestCase {
 
         XCTAssertEqual(response.slashAutocompleteNames, ["none", "mentor", "critic"])
     }
+
+    // MARK: - Picker refresh cost (perf: no-change opens must not rebuild the list)
+
+    /// A live payload that matches the cached group must not allocate a new array:
+    /// the composer assigns the result, and any assignment rebuilds every section
+    /// row and can jump the scroll — the jump users report on picker open.
+    func testMergingLiveModelsKeepsTheSameBufferWhenLiveMatchesCached() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "opencode-go",
+                name: "OpenCode Go",
+                providerID: "opencode-go",
+                models: [
+                    ModelCatalogOption(id: "kept-model", displayName: "Kept Model", providerID: "opencode-go"),
+                    ModelCatalogOption(id: "second-model", displayName: "Second Model", providerID: "opencode-go")
+                ],
+                extraModels: [
+                    ModelCatalogOption(id: "extra-model", displayName: "Extra Model", providerID: "opencode-go")
+                ]
+            )
+        ]
+        let live = ModelsLiveResponse(
+            provider: "opencode-go",
+            models: [
+                .object(["id": .string("kept-model"), "label": .string("Kept Model")]),
+                .object(["id": .string("second-model"), "label": .string("Second Model")])
+            ],
+            count: 2
+        )
+
+        let merged = groups.mergingLiveModels(from: live)
+
+        XCTAssertEqual(merged, groups)
+        XCTAssertEqual(
+            bufferAddress(of: merged),
+            bufferAddress(of: groups),
+            "unchanged live data must return the same array storage, not a rebuilt copy"
+        )
+    }
+
+    func testMergingLiveModelsRebuildsOnlyWhenLiveDiffers() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "opencode-go",
+                name: "OpenCode Go",
+                providerID: "opencode-go",
+                models: [
+                    ModelCatalogOption(id: "kept-model", displayName: "Kept Model", providerID: "opencode-go")
+                ]
+            )
+        ]
+        let live = ModelsLiveResponse(
+            provider: "opencode-go",
+            models: [.object(["id": .string("new-model"), "label": .string("New Model")])],
+            count: 1
+        )
+
+        let merged = groups.mergingLiveModels(from: live)
+
+        XCTAssertNotEqual(merged, groups)
+        XCTAssertEqual(merged.first?.models.map(\.id), ["new-model"])
+    }
+
+    func testCatalogRefreshScheduleAllowsOneRefreshPerInterval() {
+        var schedule = CatalogRefreshSchedule()
+        let start = Date(timeIntervalSince1970: 1_000_000)
+
+        XCTAssertTrue(schedule.claim(now: start))
+        XCTAssertFalse(schedule.claim(now: start.addingTimeInterval(1)))
+        XCTAssertFalse(schedule.claim(now: start.addingTimeInterval(CatalogRefreshSchedule.minimumInterval - 1)))
+        XCTAssertTrue(schedule.claim(now: start.addingTimeInterval(CatalogRefreshSchedule.minimumInterval)))
+    }
+
+    /// A denied claim must not extend the window, otherwise a user who opens the
+    /// picker repeatedly would never get a refresh at all.
+    func testCatalogRefreshScheduleMeasuresFromTheLastAllowedRefresh() {
+        var schedule = CatalogRefreshSchedule()
+        let start = Date(timeIntervalSince1970: 2_000_000)
+
+        XCTAssertTrue(schedule.claim(now: start))
+        for offset in stride(from: 30.0, to: CatalogRefreshSchedule.minimumInterval, by: 30.0) {
+            XCTAssertFalse(schedule.claim(now: start.addingTimeInterval(offset)))
+        }
+
+        XCTAssertTrue(schedule.claim(now: start.addingTimeInterval(CatalogRefreshSchedule.minimumInterval + 1)))
+    }
+
+    private func bufferAddress<Element>(of array: [Element]) -> UnsafeRawPointer? {
+        array.withUnsafeBufferPointer { buffer in
+            buffer.baseAddress.map { UnsafeRawPointer($0) }
+        }
+    }
 }

@@ -217,6 +217,12 @@ final class ChatViewModel {
     private var previousLastContent: String?
     private var previousMessageCount: Int = 0
 
+    /// Rate limit for the picker's background catalog refresh. The catalog the
+    /// chat already holds is good enough to choose a model from, so a refetch does
+    /// not belong in front of the user's first tap — and refetching on every open
+    /// both cost a network round trip and rebuilt the list mid-scroll.
+    private var catalogRefreshSchedule = CatalogRefreshSchedule()
+
     private(set) var messages: [ChatMessage] = [] {
         didSet {
             recomputeDisplayedTranscriptMessages()
@@ -1182,17 +1188,34 @@ final class ChatViewModel {
     /// (so the sheet stops pinning the chat-load-time snapshot), then overlay
     /// the active provider's live list from `/api/models/live`. Failures are
     /// silent by design — the picker keeps whatever it already shows.
+    ///
+    /// The sheet is usable the moment it appears: it renders the catalog the chat
+    /// already holds, so this refresh is deliberately background work. Two rules
+    /// keep it from disturbing the list under the user's finger:
+    /// - it runs at most once per `catalogRefreshSchedule.minimumInterval`, and
+    /// - it assigns only when the incoming catalog actually differs, because a
+    ///   no-op assignment still rebuilds every section row and jumps the scroll.
     func refreshModelCatalogForPickerOpen() async {
+        guard catalogRefreshSchedule.claim(now: Date()) else { return }
+
+        PhaseTelemetry.shared.begin(.pickerCatalogRefresh)
+        defer { PhaseTelemetry.shared.end(.pickerCatalogRefresh) }
+
         if let response = try? await client.models() {
-            let groups = response.catalogGroups
-            if !groups.isEmpty {
-                modelCatalogGroups = groups
-            }
+            applyCatalogGroupsIfChanged(response.catalogGroups)
         }
 
         if let live = try? await client.modelsLive() {
-            modelCatalogGroups = modelCatalogGroups.mergingLiveModels(from: live)
+            applyCatalogGroupsIfChanged(modelCatalogGroups.mergingLiveModels(from: live))
         }
+    }
+
+    /// Assigns the catalog only when it differs from what the picker is showing.
+    @discardableResult
+    private func applyCatalogGroupsIfChanged(_ groups: [ModelCatalogGroup]) -> Bool {
+        guard !groups.isEmpty, groups != modelCatalogGroups else { return false }
+        modelCatalogGroups = groups
+        return true
     }
 
     private var composerConfigurationState: ChatComposerConfigState {
@@ -7695,4 +7718,29 @@ final class ChatStreamState {
     var cacheFirstReconcileScrollToken = 0
     var responseCompletionHapticTrigger = 0
     var responseCompletionNeedsTranscriptRefresh = false
+}
+
+/// Rate limiter for the picker's background catalog refresh.
+///
+/// Kept as a value type with an injected `now` so the behaviour is testable
+/// without a clock seam in `ChatViewModel`: the refresh path is otherwise
+/// inseparable from `APIClient`.
+struct CatalogRefreshSchedule {
+    /// Five minutes. Long enough that reopening the picker a few times in a row is
+    /// free, short enough that a provider added on the server shows up in the same
+    /// working session.
+    static let minimumInterval: TimeInterval = 300
+
+    private var lastClaimAt: Date?
+
+    /// Returns true when a refresh is allowed now, and records the claim. Denied
+    /// calls do not move the window, so the interval is measured from the last
+    /// refresh that actually ran.
+    mutating func claim(now: Date) -> Bool {
+        if let lastClaimAt, now.timeIntervalSince(lastClaimAt) < Self.minimumInterval {
+            return false
+        }
+        lastClaimAt = now
+        return true
+    }
 }

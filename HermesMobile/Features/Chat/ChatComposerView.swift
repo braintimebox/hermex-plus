@@ -557,7 +557,11 @@ struct MessageComposerView: View {
                 onDeleteSavedCustom: { option in
                     favoriteModelKeys = ModelFavoritesStore.shared.removeFavorite(for: option)
                     recentModelKeys = ModelRecentsStore.shared.removeRecent(for: option)
-                }
+                },
+                // Closes the `Picker Open` phase started on the tap. Appearance —
+                // not the first committed frame — is what the sheet can observe;
+                // the number is named accordingly.
+                onDidAppear: { PhaseTelemetry.shared.end(.pickerOpen) }
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -1145,6 +1149,7 @@ struct MessageComposerView: View {
 
     private func showAllModels() {
         prepareForComposerPresentation()
+        PhaseTelemetry.shared.begin(.pickerOpen)
         showsAllModelsSheet = true
     }
 

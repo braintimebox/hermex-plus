@@ -40,6 +40,9 @@ struct ModelPickerSheet: View {
     var onCommitCustom: ((ModelCatalogOption) -> Void)?
     var onToggleFavorite: (ModelCatalogOption) -> Void = { _ in }
     var onDeleteSavedCustom: (ModelCatalogOption) -> Void = { _ in }
+    /// Fired from `onAppear`, once per presentation. The composer uses it to close
+    /// the `Picker Open` phase it starts on the tap; other surfaces leave it nil.
+    var onDidAppear: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -113,6 +116,7 @@ struct ModelPickerSheet: View {
                 prompt: "Search models"
             )
             .onAppear {
+                onDidAppear?()
                 initializeCustomProviderIfNeeded()
                 // Groups start collapsed on every appearance: expansion is the
                 // user's action, never the catalog's. There is deliberately no

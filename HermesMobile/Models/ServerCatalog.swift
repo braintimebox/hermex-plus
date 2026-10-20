@@ -860,6 +860,17 @@ extension Array where Element == ModelCatalogGroup {
         let liveModels = response.liveOptions
         guard !liveModels.isEmpty else { return self }
 
+        // Live data usually repeats what the cached catalog already holds. Building
+        // a new array for it cost a full SwiftUI diff of every section row on each
+        // picker open, so return `self` — the same instance — when no group would
+        // actually change.
+        let needsMerge = contains { group in
+            group.providerID == provider
+                && !group.name.contains(" · ")
+                && group.models != liveModels
+        }
+        guard needsMerge else { return self }
+
         return map { group in
             guard group.providerID == provider else { return group }
             // HERMEX-FORK: add marker to satisfy enforcement (sync MARKETING_VERSION)

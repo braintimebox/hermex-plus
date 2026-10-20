@@ -43,6 +43,13 @@ struct PhaseAggregator {
         case lightRender = "Light Render"
         case markdownParseSettled = "Markdown Parse (settled)"
         case markdownParseStream = "Markdown Parse (stream)"
+        // HERMEX-FORK: 3.9.52 — открытие пикера. Две фазы намеренно разделены:
+        // `pickerOpen` меряет только путь «тап → лист показан», а
+        // `pickerCatalogRefresh` — сеть плюс применение каталога, которое идёт
+        // уже после появления списка. Смешивать их в одну цифру нельзя:
+        // сетевое ожидание и задержка отрисовки — разные проблемы.
+        case pickerOpen = "Picker Open"
+        case pickerCatalogRefresh = "Picker Catalog Refresh"
     }
 
     /// One flush-window summary for a single phase.
