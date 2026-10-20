@@ -1,3 +1,9 @@
+## 3.9.51 — Diagnostics: correlation IDs, session tracking, query endpoint, telemetry improvements (freeze diagnostics, fault tree, server correlation)
+- HermexLogger: correlationId, seqNo, action log, ring buffer 100
+- MainThreadWatchdog: HeavyOperationTracker expanded (SSE, Cache, Decode, Markdown, Stream)
+- PhaseTelemetry: durationMs in phase aggregates
+- Server: correlation/session/seq tracking, /events query endpoint
+- Fault tree: docs/diagnostics-fault-tree.md
 ## 3.9.50 — Markdown streaming reverted to LightEngine; X-Hermex-Request-ID; nginx timeouts 300s
 - Markdown streaming reverted to LightEngine (Text(verbatim)) due to watchdog p90 regression (35% >50ms on 3.9.49); block pipeline retained for settled content.
 - Added X-Hermex-Request-ID UUID header to HermexLogger POST /webhook/hermex-logs for correlation with proxy-1118 logs.

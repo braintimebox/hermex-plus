@@ -26,6 +26,30 @@ enum HeavyOperationTracker {
         lock.unlock()
     }
 
+    /// HERMES-FORK: instrumented operation labels. Each label tells freeze
+    /// reports what was in flight, turning empty `heavyOp` into real evidence.
+    public enum Operation: String {
+        case transcriptFullRecompute = "transcriptMessages.fullRecompute"
+        case cacheWrite = "CacheStore.write"
+        case cacheRead = "CacheStore.read"
+        case sessionUpsert = "CacheStore.sessionUpsert"
+        case sseEventProcess = "SSE.eventProcess"
+        case messageDecode = "Message.decode"
+        case streamBatchApply = "Stream.batchApply"
+        case markdownParse = "Markdown.parse"
+        case transcriptApply = "Transcript.apply"
+    }
+
+    static func begin(_ operation: Operation) {
+        begin(operation.rawValue)
+    }
+
+    static func measure<T>(_ op: Operation, work: () throws -> T) rethrows -> T {
+        begin(op)
+        defer { end() }
+        return try work()
+    }
+
     /// "Label (123ms)" while an operation is in flight, else nil.
     static func snapshot() -> String? {
         lock.lock()
@@ -268,6 +292,9 @@ final class MainThreadWatchdog {
         /// only: nothing reads it to decide behaviour. Default matches
         /// `ChatScrollPolicy.FollowLatch.isFollowing = true`.
         var isFollowingBottom = true
+        /// HERMES-FORK: current HeavyOperationTracker label so jank/freeze
+        /// events can name what was in flight even if it has not completed.
+        var heavyOp: String = ""
         /// Number of rows actually rendered in the transcript — the N in the
         /// O(N × markdown) freeze model (messageCount is the message-array
         /// count, not the rendered-row count). Updated from the recompute path.
@@ -298,6 +325,7 @@ final class MainThreadWatchdog {
         if let scrollOwner { performanceContext.scrollOwner = scrollOwner }
         if let displayedRowCount { performanceContext.displayedRowCount = displayedRowCount }
         if let isFollowingBottom { performanceContext.isFollowingBottom = isFollowingBottom }
+        if let heavyOp { performanceContext.heavyOp = heavyOp }
     }
 
     /// Snapshot the current observed context (called off-main in watchdog).
@@ -477,6 +505,7 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
+                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )
@@ -511,6 +540,7 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
+                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )

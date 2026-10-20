@@ -242,11 +242,13 @@ final class PhaseTelemetry {
         for (key, value) in snapshot.contextSum {
             if key == "mutated" { extras["\(key)_sum"] = value }
         }
+        var phaseExtras = extras
+        phaseExtras["durationMs"] = snapshot.maximum
         HermexLogger.shared.log(
             type: "phase",
             screen: "Performance",
             message: "phase aggregate",
-            extras: extras
+            extras: phaseExtras
         )
     }
 

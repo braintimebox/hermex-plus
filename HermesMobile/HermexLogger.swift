@@ -19,10 +19,17 @@ final class HermexLogger {
     private let queue = DispatchQueue(label: "hermex.logger", qos: .utility)
     private var buffer: [[String: Any]] = []
     private let maxBatch = 20
+    private let correlationId = UUID().uuidString
+    private var sequenceCounter: Int = 0
+
+    public enum UserAction: String {
+        case send, scroll, openChat, switchServer
+        case schedule, pin, unpin, save, share
+    }
 
     /// Ring buffer of recent events, attached to freeze reports for context.
     private var recentEvents: [String] = []
-    private let maxRecent = 20
+    private let maxRecent = 100
 
     private init() {}
 
@@ -43,6 +50,8 @@ final class HermexLogger {
         extras: [String: Any]? = nil
     ) {
         queue.async { [self] in
+            self.sequenceCounter += 1
+            let seqNo = self.sequenceCounter
             let now = Date().timeIntervalSince1970
 
             // Keep a compact ring buffer of recent events for freeze context.
@@ -59,6 +68,8 @@ final class HermexLogger {
                 "ts": now,
                 "message": message,
                 "appVersion": appVersion,
+                "correlationId": correlationId,
+                "seqNo": seqNo,
             ]
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
@@ -70,6 +81,10 @@ final class HermexLogger {
             buffer.append(event)
             flushIfNeeded()
         }
+    }
+
+    func logUserAction(_ action: UserAction, screen: String? = nil, extras: [String: Any]? = nil) {
+        log(type: "action", screen: screen, message: "user \(action.rawValue)", extras: extras)
     }
 
     /// Read the configured server URL from the Keychain (same source the app
