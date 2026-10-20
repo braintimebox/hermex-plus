@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1A2B3C4D5E6F7000A0000001 /* NousCompactCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */; };
+		1A2B3C4D5E6F7000A0000003 /* NousCompactCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */; };
 		05814DEA5DE4690F730B1E15 /* InsightsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931EC010A2D940B0E42287A4 /* InsightsViewModel.swift */; };
 		26AB000000000000000000B1 /* ProvidersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26AB000000000000000000F1 /* ProvidersViewModel.swift */; };
 		26AB000000000000000000B2 /* ProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26AB000000000000000000F2 /* ProvidersView.swift */; };
@@ -511,6 +513,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NousCompactCatalog.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NousCompactCatalogTests.swift; sourceTree = "<group>"; };
 		0485E1E1FFB64A24BB729CD4 /* SlashCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandTests.swift; sourceTree = "<group>"; };
 		DFB41BE54A19587EB9037B7B /* ComposerFileTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerFileTriggerTests.swift; sourceTree = "<group>"; };
 		8E518E24247E5D05AA76D419 /* FilePathSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePathSearchTests.swift; sourceTree = "<group>"; };
@@ -1218,6 +1222,7 @@
 				A04500000000000000000018 /* LiveActivityTests.swift */,
 				1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */,
 				1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */,
+				1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */,
 			);
 			path = HermesMobileTests;
 			sourceTree = "<group>";
@@ -1295,6 +1300,7 @@
 				FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */,
 				2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */,
 
+				1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -2200,6 +2206,7 @@
 				FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */,
 				D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */,
 
+				1A2B3C4D5E6F7000A0000001 /* NousCompactCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2354,6 +2361,7 @@
 				A04500000000000000000008 /* LiveActivityTests.swift in Sources */,
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
+				1A2B3C4D5E6F7000A0000003 /* NousCompactCatalogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

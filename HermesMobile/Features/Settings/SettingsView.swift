@@ -558,6 +558,19 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     NavigationLink {
+                        DecisionsView()
+                    } label: {
+                        SettingsAccessoryRow(
+                            title: String(localized: "Decisions (alpha)"),
+                            systemImage: "questionmark.diamond"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Asks a decision model a question about a piece of text.")
+
+                    SettingsDivider()
+
+                    NavigationLink {
                         CustomHeadersSettingsView(authManager: authManager)
                     } label: {
                         SettingsAccessoryRow(
