@@ -371,7 +371,8 @@ final class DecisionsViewModelTests: XCTestCase {
         // Positional keys are all the API echoes; the screen has to show the question.
         XCTAssertEqual(viewModel.questionTitles["q1"], "Asking for money back?")
         XCTAssertEqual(viewModel.questionTitles["q2"], "Which team?")
-        XCTAssertEqual(Set(viewModel.result?.answers.keys ?? []), Set(["q1", "q2"]))
+        let answeredKeys = viewModel.result.map { Set($0.answers.keys) } ?? []
+        XCTAssertEqual(answeredKeys, Set(["q1", "q2"]))
     }
 
     @MainActor
