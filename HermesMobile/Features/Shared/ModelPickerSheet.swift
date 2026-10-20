@@ -547,13 +547,13 @@ struct ModelPickerSheet: View {
                 return !id.contains("missingno") && !display.contains("missingno")
                     && !id.contains("stealth/")
             }
-            return ModelCatalogGroup(
+            return NousCompactCatalog.compact(ModelCatalogGroup(
                 id: group.id,
                 name: group.name,
                 providerID: group.providerID,
                 models: group.allModels.filter(filterBroken),
                 extraModels: group.extraModels.filter(filterBroken)
-            )
+            ))
         }.filter { !$0.allModels.isEmpty || !$0.extraModels.isEmpty }
         // Deduplicate by LOGICAL category identity: (provider_id, display name).
         // The server sends several sibling groups for one provider (base +
