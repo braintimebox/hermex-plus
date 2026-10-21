@@ -676,6 +676,14 @@ struct ModelCatalogGroup: Identifiable, Equatable, Sendable {
     let providerID: String?
     let models: [ModelCatalogOption]
     let extraModels: [ModelCatalogOption]
+    /// Visible models plus the searchable overflow tail, de-duplicated by id.
+    ///
+    /// Stored, not computed: the picker asks for this once per row, per counter
+    /// and per favorites scan, and a computed version rebuilt a `Set` plus a
+    /// filtered array on every one of those calls — on the main thread, inside
+    /// the view body. The value never changes after construction, so paying for
+    /// it once is the whole fix.
+    let allModels: [ModelCatalogOption]
 
     init(
         id: String,
@@ -689,6 +697,17 @@ struct ModelCatalogGroup: Identifiable, Equatable, Sendable {
         self.providerID = providerID
         self.models = models
         self.extraModels = extraModels
+
+        var seen = Set<String>(minimumCapacity: models.count + extraModels.count)
+        var merged: [ModelCatalogOption] = []
+        merged.reserveCapacity(models.count + extraModels.count)
+        for option in models where seen.insert(option.id).inserted {
+            merged.append(option)
+        }
+        for option in extraModels where seen.insert(option.id).inserted {
+            merged.append(option)
+        }
+        self.allModels = merged
     }
 
     init(
@@ -708,15 +727,9 @@ struct ModelCatalogGroup: Identifiable, Equatable, Sendable {
 }
 
 extension ModelCatalogGroup {
-    /// All models in the group, including the overflow tail the server
-    /// exposes as `extra_models` (visible `models` + searchable `extraModels`).
-    /// `slashAutocompleteModels` was the old name — it happens to be the same
-    /// set, but the concept is broader than one consumer. De-duplicated by `id`
-    /// to keep ForEach identity unique.
-    var allModels: [ModelCatalogOption] {
-        var seen = Set<String>()
-        return (models + extraModels).filter { seen.insert($0.id).inserted }
-    }
+    /// Retained as a thin alias so older call sites keep compiling; the value is
+    /// now computed once in `init` rather than on every access.
+    var searchableModels: [ModelCatalogOption] { allModels }
 }
 
 struct ModelCatalogOption: Identifiable, Equatable, Hashable, Sendable {
@@ -859,6 +872,17 @@ extension Array where Element == ModelCatalogGroup {
 
         let liveModels = response.liveOptions
         guard !liveModels.isEmpty else { return self }
+
+        // Live data usually repeats what the cached catalog already holds. Building
+        // a new array for it cost a full SwiftUI diff of every section row on each
+        // picker open, so return `self` — the same instance — when no group would
+        // actually change.
+        let needsMerge = contains { group in
+            group.providerID == provider
+                && !group.name.contains(" · ")
+                && group.models != liveModels
+        }
+        guard needsMerge else { return self }
 
         return map { group in
             guard group.providerID == provider else { return group }

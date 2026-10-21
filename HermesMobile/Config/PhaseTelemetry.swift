@@ -43,14 +43,41 @@ struct PhaseAggregator {
         case lightRender = "Light Render"
         case markdownParseSettled = "Markdown Parse (settled)"
         case markdownParseStream = "Markdown Parse (stream)"
+        // HERMEX-FORK: 3.9.52 — открытие пикера. Две фазы намеренно разделены:
+        // `pickerOpen` меряет только путь «тап → лист показан», а
+        // `pickerCatalogRefresh` — сеть плюс применение каталога, которое идёт
+        // уже после появления списка. Смешивать их в одну цифру нельзя:
+        // сетевое ожидание и задержка отрисовки — разные проблемы.
+        case pickerOpen = "Picker Open"
+        case pickerCatalogRefresh = "Picker Catalog Refresh"
+        // Applying the refreshed catalog is a separate phase: it is pure
+        // main-thread work (diff + list rebuild), and folding it into the
+        // refresh number hid how much of the 3 355 ms was the network.
+        case pickerCatalogApply = "Picker Catalog Apply"
+        // Split out of Refresh in 3.9.53: the network round trip, the dedup and
+        // compaction of ~400 models, and the assignment that rebuilds the list are
+        // three different problems, and one number could not tell them apart.
+        case pickerNetwork = "Picker Network"
+        case pickerCatalogPrepare = "Picker Catalog Prepare"
+        case pickerFirstFrame = "Picker First Frame"
+        case pickerSearch = "Picker Search"
     }
 
     /// One flush-window summary for a single phase.
     struct Snapshot: Equatable {
         let phase: Phase
+        /// The scenario this sample belongs to, or nil for phases recorded outside
+        /// one. Aggregation is per (phase, traceId): mixing two picker opens into one
+        /// p90 was how a slow cold open hid behind a fast warm one.
+        let traceId: String?
         let count: Int
         let p50: Double
         let p90: Double
+        /// Tail percentiles. p90 hides the frame-killers: 10% of samples above p90
+        /// is one in ten, and for a phase that runs on the main thread that is the
+        /// difference between "fine" and "the picker feels broken".
+        let p95: Double
+        let p99: Double
         let maximum: Double
         /// Samples discarded because the bucket was full; 0 in normal operation.
         let dropped: Int
@@ -66,28 +93,40 @@ struct PhaseAggregator {
 
     let bucketCapacity: Int
 
-    private var samples: [Phase: [Double]] = [:]
-    private var dropped: [Phase: Int] = [:]
-    private var contextMaximum: [Phase: [String: Int]] = [:]
-    private var contextSum: [Phase: [String: Int]] = [:]
+    /// One bucket per phase, split per scenario trace when the caller supplies one.
+    struct Key: Hashable {
+        let phase: Phase
+        let traceId: String?
+    }
+
+    private var samples: [Key: [Double]] = [:]
+    private var dropped: [Key: Int] = [:]
+    private var contextMaximum: [Key: [String: Int]] = [:]
+    private var contextSum: [Key: [String: Int]] = [:]
 
     init(bucketCapacity: Int = PhaseAggregator.defaultBucketCapacity) {
         self.bucketCapacity = max(1, bucketCapacity)
     }
 
-    mutating func record(_ phase: Phase, milliseconds: Double, context: [String: Int] = [:]) {
-        var bucket = samples[phase] ?? []
+    mutating func record(
+        _ phase: Phase,
+        milliseconds: Double,
+        context: [String: Int] = [:],
+        traceId: String? = nil
+    ) {
+        let key = Key(phase: phase, traceId: traceId)
+        var bucket = samples[key] ?? []
         if bucket.count >= bucketCapacity {
-            dropped[phase, default: 0] += 1
+            dropped[key, default: 0] += 1
         } else {
             bucket.append(max(0, milliseconds))
-            samples[phase] = bucket
+            samples[key] = bucket
         }
 
         guard !context.isEmpty else { return }
-        for (key, value) in context {
-            contextMaximum[phase, default: [:]][key] = max(contextMaximum[phase]?[key] ?? value, value)
-            contextSum[phase, default: [:]][key, default: 0] += value
+        for (name, value) in context {
+            contextMaximum[key, default: [:]][name] = max(contextMaximum[key]?[name] ?? value, value)
+            contextSum[key, default: [:]][name, default: 0] += value
         }
     }
 
@@ -95,28 +134,38 @@ struct PhaseAggregator {
     /// the accumulated data reset. Phases with no samples produce nothing.
     mutating func takeSnapshots() -> [Snapshot] {
         var snapshots: [Snapshot] = []
+        // Snapshot the key set first: the loop below removes entries as it goes.
+        let keys = Array(samples.keys)
         for phase in Phase.allCases {
-            guard let bucket = samples[phase], !bucket.isEmpty else {
-                samples[phase] = nil
-                continue
-            }
-            let sorted = bucket.sorted()
-            snapshots.append(
-                Snapshot(
-                    phase: phase,
-                    count: sorted.count,
-                    p50: Self.percentile(sorted, 0.50),
-                    p90: Self.percentile(sorted, 0.90),
-                    maximum: sorted[sorted.count - 1],
-                    dropped: dropped[phase] ?? 0,
-                    contextMaximum: contextMaximum[phase] ?? [:],
-                    contextSum: contextSum[phase] ?? [:]
+            let phaseKeys = keys
+                .filter { $0.phase == phase }
+                .sorted { ($0.traceId ?? "") < ($1.traceId ?? "") }
+            for key in phaseKeys {
+                guard let bucket = samples[key], !bucket.isEmpty else {
+                    samples[key] = nil
+                    continue
+                }
+                let sorted = bucket.sorted()
+                snapshots.append(
+                    Snapshot(
+                        phase: phase,
+                        traceId: key.traceId,
+                        count: sorted.count,
+                        p50: Self.percentile(sorted, 0.50),
+                        p90: Self.percentile(sorted, 0.90),
+                        p95: Self.percentile(sorted, 0.95),
+                        p99: Self.percentile(sorted, 0.99),
+                        maximum: sorted[sorted.count - 1],
+                        dropped: dropped[key] ?? 0,
+                        contextMaximum: contextMaximum[key] ?? [:],
+                        contextSum: contextSum[key] ?? [:]
+                    )
                 )
-            )
-            samples[phase] = nil
-            dropped[phase] = nil
-            contextMaximum[phase] = nil
-            contextSum[phase] = nil
+                samples[key] = nil
+                dropped[key] = nil
+                contextMaximum[key] = nil
+                contextSum[key] = nil
+            }
         }
         return snapshots
     }
@@ -136,6 +185,12 @@ struct PhaseAggregator {
 final class PhaseTelemetry {
     static let shared = PhaseTelemetry()
 
+    /// Identifies one span so its `end` cannot be paired with a sibling's start.
+    struct SpanToken: Hashable {
+        let phase: PhaseAggregator.Phase
+        let id: UInt64
+    }
+
     /// One flush window. Long enough that a flush is rare, short enough that a
     /// session's numbers are visible while it is still in use.
     static let defaultFlushInterval: TimeInterval = 15
@@ -145,60 +200,158 @@ final class PhaseTelemetry {
     private let flushInterval: TimeInterval
     private let now: () -> TimeInterval
     private let sink: (PhaseAggregator.Snapshot) -> Void
+    private let hangReporter: (PhaseAggregator.Phase, Double) -> Void
     private var windowStartedAt: TimeInterval
-    private var startedAt: [PhaseAggregator.Phase: TimeInterval] = [:]
+    /// A stack per phase, not a single slot. Two catalog refreshes or two cache
+    /// writes can overlap; with one slot the second `begin` overwrote the first
+    /// start, the first `end` measured the wrong span and the second lost its
+    /// sample entirely.
+    ///
+    /// The stack alone is only correct for nested spans: two parallel spans that
+    /// finish out of order pair the wrong start and end. `begin` therefore returns
+    /// a token, and `end(token)` closes exactly that span. `end(phase)` stays for
+    /// the call sites that cannot overlap — it pops the newest span (LIFO) and is
+    /// documented as best effort.
+    private var startedAt: [PhaseAggregator.Phase: [SpanToken]] = [:]
+    private var spans: [SpanToken: (start: TimeInterval, traceId: String?)] = [:]
+    private var nextSpanId: UInt64 = 0
+    /// Consecutive samples over budget, per phase. Reset by any sample that fits.
+    private var breachStreak: [PhaseAggregator.Phase: Int] = [:]
+    /// Remaining samples in which this phase records its context (escalated mode).
+    private var detailedRemaining: [PhaseAggregator.Phase: Int] = [:]
+    private var lastHangReportAt: TimeInterval = 0
 
     init(
         flushInterval: TimeInterval = PhaseTelemetry.defaultFlushInterval,
         bucketCapacity: Int = PhaseAggregator.defaultBucketCapacity,
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
-        sink: @escaping (PhaseAggregator.Snapshot) -> Void = PhaseTelemetry.logToHermex
+        sink: @escaping (PhaseAggregator.Snapshot) -> Void = PhaseTelemetry.logToHermex,
+        hangReporter: @escaping (PhaseAggregator.Phase, Double) -> Void = PhaseTelemetry.reportHang
     ) {
         self.aggregator = PhaseAggregator(bucketCapacity: bucketCapacity)
         self.flushInterval = flushInterval
         self.now = now
         self.sink = sink
+        self.hangReporter = hangReporter
         self.windowStartedAt = now()
     }
 
     /// Marks the start of an instrumented phase. Paired with `end(_:context:)`, which
     /// computes the elapsed time locally — the signpost interval keeps its own timing
     /// for Instruments, so neither channel depends on the other.
-    func begin(_ phase: PhaseAggregator.Phase) {
+    @discardableResult
+    func begin(_ phase: PhaseAggregator.Phase, traceId: String? = nil) -> SpanToken {
         lock.lock()
-        startedAt[phase] = now()
+        nextSpanId &+= 1
+        let token = SpanToken(phase: phase, id: nextSpanId)
+        spans[token] = (start: now(), traceId: traceId)
+        startedAt[phase, default: []].append(token)
         lock.unlock()
+        return token
+    }
+
+    /// Closes exactly the span `token` refers to. Use this whenever two spans of
+    /// the same phase can be alive at once: the phase-only `end` cannot tell them
+    /// apart, and pairing the wrong ends produces plausible, wrong numbers.
+    func end(_ token: SpanToken, context: [String: Int] = [:], traceId: String? = nil) {
+        lock.lock()
+        if var stack = startedAt[token.phase],
+           let index = stack.lastIndex(of: token) {
+            stack.remove(at: index)
+            startedAt[token.phase] = stack.isEmpty ? nil : stack
+        }
+        let span = spans.removeValue(forKey: token)
+        lock.unlock()
+        finish(token.phase, span: span, context: context, explicitTrace: traceId)
     }
 
     /// Finishes a phase started with `begin(_:)`. Records one sample and the context
     /// counters; a phase that was never started records nothing.
-    func end(_ phase: PhaseAggregator.Phase, context: [String: Int] = [:]) {
+    func end(_ phase: PhaseAggregator.Phase, context: [String: Int] = [:], traceId: String? = nil) {
         lock.lock()
-        let start = startedAt[phase]
-        startedAt[phase] = nil
-        guard let start else {
+        let token = startedAt[phase]?.popLast()
+        if startedAt[phase]?.isEmpty ?? true {
+            startedAt[phase] = nil
+        }
+        let span = token.flatMap { spans.removeValue(forKey: $0) }
+        lock.unlock()
+        // Never started, or already ended: record nothing rather than inventing a
+        // span from an unrelated start time.
+        finish(phase, span: span, context: context, explicitTrace: traceId)
+    }
+
+    /// Records one finished span. Called outside the lock, with the span already
+    /// removed from the maps, so a missing entry simply records nothing.
+    private func finish(
+        _ phase: PhaseAggregator.Phase,
+        span: (start: TimeInterval, traceId: String?)?,
+        context: [String: Int],
+        explicitTrace: String?
+    ) {
+        lock.lock()
+        guard let start = span else {
             lock.unlock()
             return
         }
-        let elapsed = (now() - start) * 1000
-        aggregator.record(phase, milliseconds: elapsed, context: context)
+        let trace = explicitTrace ?? start.traceId
+        let elapsed = (now() - start.start) * 1000
         let timestamp = now()
+
+        // ESCALATION. A phase that keeps missing its budget starts recording WHY,
+        // for a bounded number of samples, then falls silent again. Without this
+        // every investigation began with a patch, a rebuild and a reinstall just
+        // to learn whether the work ran on the main thread.
+        var effective = context
+        if let budget = PhaseBudget.p90Milliseconds(for: phase) {
+            if elapsed > budget {
+                breachStreak[phase, default: 0] += 1
+            } else {
+                breachStreak[phase] = 0
+            }
+            if breachStreak[phase, default: 0] >= PhaseBudget.breachStreakThreshold,
+               detailedRemaining[phase, default: 0] == 0 {
+                detailedRemaining[phase] = PhaseBudget.detailedSampleBudget
+                breachStreak[phase] = 0
+            }
+        }
+        if detailedRemaining[phase, default: 0] > 0 {
+            detailedRemaining[phase, default: 0] -= 1
+            effective["escalated"] = 1
+            effective["isMainThread"] = Thread.isMainThread ? 1 : 0
+        }
+
+        aggregator.record(phase, milliseconds: elapsed, context: effective, traceId: trace)
         var due: [PhaseAggregator.Snapshot] = []
         if timestamp - windowStartedAt >= flushInterval {
             windowStartedAt = timestamp
             due = aggregator.takeSnapshots()
         }
+        // Hangs are reported regardless of escalation: one stack is worth more
+        // than a hundred counters, and the cooldown keeps the log readable.
+        var reportHang = false
+        if elapsed >= PhaseBudget.hangMilliseconds,
+           timestamp - lastHangReportAt >= PhaseBudget.hangCooldown {
+            lastHangReportAt = timestamp
+            reportHang = true
+        }
         lock.unlock()
+
         for snapshot in due { sink(snapshot) }
+        if reportHang { hangReporter(phase, elapsed) }
     }
 
     /// Records one finished interval. O(1): an append under a lock, plus a window
     /// check. The flush happens on the thread that crosses the boundary, and the
     /// sink itself hands off to `HermexLogger`'s own serial queue.
-    func record(_ phase: PhaseAggregator.Phase, milliseconds: Double, context: [String: Int] = [:]) {
+    func record(
+        _ phase: PhaseAggregator.Phase,
+        milliseconds: Double,
+        context: [String: Int] = [:],
+        traceId: String? = nil
+    ) {
         var due: [PhaseAggregator.Snapshot] = []
         lock.lock()
-        aggregator.record(phase, milliseconds: milliseconds, context: context)
+        aggregator.record(phase, milliseconds: milliseconds, context: context, traceId: traceId)
         let timestamp = now()
         if timestamp - windowStartedAt >= flushInterval {
             windowStartedAt = timestamp
@@ -224,6 +377,8 @@ final class PhaseTelemetry {
         lock.lock()
         aggregator = PhaseAggregator(bucketCapacity: aggregator.bucketCapacity)
         startedAt = [:]
+        breachStreak = [:]
+        detailedRemaining = [:]
         windowStartedAt = now()
         lock.unlock()
     }
@@ -235,8 +390,11 @@ final class PhaseTelemetry {
             "count": snapshot.count,
             "p50": rounded(snapshot.p50),
             "p90": rounded(snapshot.p90),
+            "p95": rounded(snapshot.p95),
+            "p99": rounded(snapshot.p99),
             "max": rounded(snapshot.maximum),
         ]
+        if let traceId = snapshot.traceId { extras["traceId"] = traceId }
         if snapshot.dropped > 0 { extras["dropped"] = snapshot.dropped }
         for (key, value) in snapshot.contextMaximum { extras["\(key)_max"] = value }
         for (key, value) in snapshot.contextSum {
@@ -411,5 +569,104 @@ final class StreamCommitTelemetry {
         frameMaxMs = 0
         frameSamples = 0
         windowStart = now
+    }
+}
+
+/// p90 budgets: the line between "normal" and "worth investigating".
+///
+/// A phase without a budget cannot regress visibly — nobody knows what bad is,
+/// so every report restarts the argument. Markdown deliberately has none: it
+/// reports 0.2 ms p90 across tens of thousands of samples while the app visibly
+/// janks, which means its span is wrong and a budget would only lend authority
+/// to a number that measures the wrong thing.
+enum PhaseBudget {
+    static func p90Milliseconds(for phase: PhaseAggregator.Phase) -> Double? {
+        switch phase {
+        case .cacheWrite, .cacheWriteSessions, .cacheWriteSession: return 50
+        case .cacheRead: return 20
+        case .sessionOpen: return 150
+        case .transcriptApply, .streamBatchApply, .pickerCatalogApply,
+             .renderPolicy, .lightRender, .fallbackRender: return 16
+        case .pickerOpen: return 100
+        case .pickerCatalogRefresh: return 2000
+        case .markdownParse, .markdownParseStream, .markdownParseSettled,
+             .pickerNetwork, .pickerCatalogPrepare, .pickerFirstFrame,
+             .pickerSearch: return nil
+        }
+    }
+
+    /// Samples over budget, in a row, before the phase starts recording context.
+    static let breachStreakThreshold = 3
+    /// How many samples the escalated phase stays detailed before falling silent.
+    static let detailedSampleBudget = 50
+    /// A single sample this long is a hang, not a slow phase.
+    static let hangMilliseconds: Double = 1000
+    /// One stack per minute is enough to identify the call site.
+    static let hangCooldown: TimeInterval = 60
+}
+
+extension PhaseTelemetry {
+    /// Reports a single sample that took a second or more, with a stack.
+    ///
+    /// This is the link the log was missing: `Cache Write 6 920 ms` says how bad
+    /// it was, never where. Fifteen frames and the thread name are enough to
+    /// name the function without shipping a profiler.
+    static func reportHang(_ phase: PhaseAggregator.Phase, _ milliseconds: Double) {
+        HermexLogger.shared.log(
+            type: "freeze",
+            durationMs: milliseconds,
+            screen: "Performance",
+            message: "phase \(phase.rawValue) \(Int(milliseconds)) ms",
+            extras: [
+                "phase": phase.rawValue,
+                "thread": Thread.isMainThread ? "main" : "background",
+                "stack": Thread.callStackSymbols.prefix(15).joined(separator: "\n"),
+            ]
+        )
+    }
+}
+
+
+/// Which screen is on top, and which scenario trace is running, right now.
+///
+/// The frame histogram is produced by the watchdog, which has no idea what the
+/// user was doing. Without this, a bad frame while the model picker is open is
+/// indistinguishable from a bad frame while the chat scrolls — and "scroll" was
+/// the only tag the frames carried.
+///
+/// One lock, two strings, no allocation on the hot path.
+final class TelemetryScenario {
+    static let shared = TelemetryScenario()
+
+    private let lock = NSLock()
+    private var screen: String?
+    private var traceId: String?
+
+    /// A random id for one user action (one picker open, one send). Deliberately
+    /// not derived from anything: it identifies an operation, not a person.
+    static func newTraceId() -> String { UUID().uuidString }
+
+    func enter(screen: String, traceId: String?) {
+        lock.lock()
+        self.screen = screen
+        self.traceId = traceId
+        lock.unlock()
+    }
+
+    /// Leaves the scenario only if it is still the one on screen: a nested screen
+    /// that finishes late must not clear its parent's context.
+    func leave(screen: String) {
+        lock.lock()
+        if self.screen == screen {
+            self.screen = nil
+            self.traceId = nil
+        }
+        lock.unlock()
+    }
+
+    var current: (screen: String?, traceId: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (screen, traceId)
     }
 }

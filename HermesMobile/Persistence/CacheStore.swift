@@ -34,10 +34,13 @@ enum CacheStore {
         // HERMEX-FORK: #920 — cached-session read interval (duration only; the row
         // count lands after the fetch, which a defer cannot see).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        PhaseTelemetry.shared.begin(.cacheRead)
+        // Token, not the phase name: `cachedSessions` runs off-main while
+        // `cachedMessages` runs on the main actor, so two reads really can be in
+        // flight at once and a name-keyed end would close the wrong one.
+        let readSpan = PhaseTelemetry.shared.begin(.cacheRead)
         defer {
             performanceSignposter.endInterval("Cache Read", signpost)
-            PhaseTelemetry.shared.end(.cacheRead)
+            PhaseTelemetry.shared.end(readSpan)
         }
         let serverURLString = serverURL.absoluteString
         let descriptor = FetchDescriptor<CachedSession>(
@@ -65,10 +68,13 @@ enum CacheStore {
     ) throws -> [ChatMessage] {
         // HERMEX-FORK: #920 — cached-message read interval (duration only).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        PhaseTelemetry.shared.begin(.cacheRead)
+        // Token, not the phase name: `cachedSessions` runs off-main while
+        // `cachedMessages` runs on the main actor, so two reads really can be in
+        // flight at once and a name-keyed end would close the wrong one.
+        let readSpan = PhaseTelemetry.shared.begin(.cacheRead)
         defer {
             performanceSignposter.endInterval("Cache Read", signpost)
-            PhaseTelemetry.shared.end(.cacheRead)
+            PhaseTelemetry.shared.end(readSpan)
         }
 
         if let limit, limit <= 0 {

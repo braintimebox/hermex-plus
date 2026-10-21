@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1A2B3C4D5E6F7000A0000011 /* DecisionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000012 /* DecisionModels.swift */; };
+		1A2B3C4D5E6F7000A0000013 /* DecisionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000014 /* DecisionsClient.swift */; };
+		1A2B3C4D5E6F7000A0000015 /* DecisionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000016 /* DecisionsViewModel.swift */; };
+		1A2B3C4D5E6F7000A0000017 /* DecisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000018 /* DecisionsView.swift */; };
+		1A2B3C4D5E6F7000A0000019 /* DecisionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A000001A /* DecisionsTests.swift */; };
+		1A2B3C4D5E6F7000A0000001 /* NousCompactCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */; };
+		1A2B3C4D5E6F7000A0000003 /* NousCompactCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */; };
 		05814DEA5DE4690F730B1E15 /* InsightsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931EC010A2D940B0E42287A4 /* InsightsViewModel.swift */; };
 		26AB000000000000000000B1 /* ProvidersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26AB000000000000000000F1 /* ProvidersViewModel.swift */; };
 		26AB000000000000000000B2 /* ProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26AB000000000000000000F2 /* ProvidersView.swift */; };
@@ -511,6 +518,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1A2B3C4D5E6F7000A0000012 /* DecisionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionModels.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000014 /* DecisionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsClient.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000016 /* DecisionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsViewModel.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000018 /* DecisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsView.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A000001A /* DecisionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsTests.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NousCompactCatalog.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NousCompactCatalogTests.swift; sourceTree = "<group>"; };
 		0485E1E1FFB64A24BB729CD4 /* SlashCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandTests.swift; sourceTree = "<group>"; };
 		DFB41BE54A19587EB9037B7B /* ComposerFileTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerFileTriggerTests.swift; sourceTree = "<group>"; };
 		8E518E24247E5D05AA76D419 /* FilePathSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePathSearchTests.swift; sourceTree = "<group>"; };
@@ -1010,6 +1024,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1A2B3C4D5E6F7000A000001B /* Decisions */ = {
+			isa = PBXGroup;
+			children = (
+				1A2B3C4D5E6F7000A0000016 /* DecisionsViewModel.swift */,
+				1A2B3C4D5E6F7000A0000018 /* DecisionsView.swift */,
+			);
+			path = Decisions;
+			sourceTree = "<group>";
+		};
 		1A2B3C4D5E6F700000000030 = {
 			isa = PBXGroup;
 			children = (
@@ -1218,6 +1241,8 @@
 				A04500000000000000000018 /* LiveActivityTests.swift */,
 				1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */,
 				1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */,
+				1A2B3C4D5E6F7000A0000004 /* NousCompactCatalogTests.swift */,
+				1A2B3C4D5E6F7000A000001A /* DecisionsTests.swift */,
 			);
 			path = HermesMobileTests;
 			sourceTree = "<group>";
@@ -1259,6 +1284,7 @@
 				C0FF000000000000000000A2 /* CustomHeader.swift */,
 				1A2B3C4D5E6F7000000000B3 /* APIError.swift */,
 				C04400000000000000000002 /* CacheFallbackPolicy.swift */,
+				1A2B3C4D5E6F7000A0000014 /* DecisionsClient.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -1295,6 +1321,8 @@
 				FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */,
 				2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */,
 
+				1A2B3C4D5E6F7000A0000002 /* NousCompactCatalog.swift */,
+				1A2B3C4D5E6F7000A0000012 /* DecisionModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1326,6 +1354,7 @@
 				1A2B3C4D5E6F70000000206 /* Memory */,
 				B50E1CE3A8912B92B1924714 /* Insights */,
 				C1490000000000000000000D /* Kanban */,
+				1A2B3C4D5E6F7000A000001B /* Decisions */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -2200,6 +2229,11 @@
 				FE452D0B1AAA4B00864B64AC /* ScheduledMessagesView.swift in Sources */,
 				D86ADFCBADD74428AD14B6A3 /* SessionPickerForForward.swift in Sources */,
 
+				1A2B3C4D5E6F7000A0000001 /* NousCompactCatalog.swift in Sources */,
+				1A2B3C4D5E6F7000A0000011 /* DecisionModels.swift in Sources */,
+				1A2B3C4D5E6F7000A0000013 /* DecisionsClient.swift in Sources */,
+				1A2B3C4D5E6F7000A0000015 /* DecisionsViewModel.swift in Sources */,
+				1A2B3C4D5E6F7000A0000017 /* DecisionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2354,6 +2388,8 @@
 				A04500000000000000000008 /* LiveActivityTests.swift in Sources */,
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
+				1A2B3C4D5E6F7000A0000003 /* NousCompactCatalogTests.swift in Sources */,
+				1A2B3C4D5E6F7000A0000019 /* DecisionsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2542,8 +2578,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2572,8 +2608,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2598,8 +2634,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2623,8 +2659,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2650,8 +2686,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2679,8 +2715,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2707,8 +2743,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2735,8 +2771,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.51;
-				MARKETING_VERSION = 3.9.51;
+				MARKETING_VERSION = 3.9.52;
+				MARKETING_VERSION = 3.9.52;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

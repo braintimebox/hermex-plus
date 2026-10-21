@@ -314,7 +314,8 @@ final class MainThreadWatchdog {
         isScrolledNearBottom: Bool? = nil,
         scrollOwner: String? = nil,
         displayedRowCount: Int? = nil,
-        isFollowingBottom: Bool? = nil
+        isFollowingBottom: Bool? = nil,
+        heavyOp: String? = nil
     ) {
         contextLock.lock()
         defer { contextLock.unlock() }
@@ -505,7 +506,6 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )
@@ -540,7 +540,6 @@ final class MainThreadWatchdog {
                         "displayedRowCount": ctx.displayedRowCount,
                         "isUserInteracting": ctx.isUserInteracting,
                         "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                        "heavyOp": HeavyOperationTracker.snapshot() ?? "",
                         "scrollOwner": ctx.scrollOwner,
                     ]
                 )
@@ -686,6 +685,9 @@ final class FrameTimeMonitor: NSObject {
         let sorted = frames.sorted()
         let buckets = Self.histogramBuckets(for: frames)
         let ctx = MainThreadWatchdog.snapshotPerformanceContext()
+        // The watchdog knows how the frame looked, not what the user was doing.
+        // The scenario is read once per window, off the main thread.
+        let scenario = TelemetryScenario.shared.current
         HermexLogger.shared.log(
             type: "frames",
             durationMs: Self.percentile(sorted, 0.50),
@@ -710,6 +712,10 @@ final class FrameTimeMonitor: NSObject {
                 "p99": Self.percentile(sorted, 0.99),
                 "maxMs": sorted[sorted.count - 1],
                 "frameTag": Self.frameContextTag(ctx),
+                // "none" rather than an omitted key: the server keeps the field set
+                // stable across versions, and empty means "no scenario was active".
+                "screen": scenario.screen ?? "none",
+                "traceId": scenario.traceId ?? "none",
             ]
         )
     }
