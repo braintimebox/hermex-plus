@@ -37,7 +37,7 @@ concurrency:
 env:
   # The one commit this workflow is allowed to build. If the branch moves, the
   # build still describes the code that was reviewed and tested.
-  TARGET_SHA: 8464bc84295b5baec2e132c811c39cd7df211244
+  TARGET_SHA: e8197f7a8a4f6fa0ab61cdad3630778fb9079c31
   PROJECT_PATH: HermesMobile.xcodeproj
   SCHEME: HermesMobile
   DERIVED_DATA_PATH: DerivedData
@@ -135,3 +135,90 @@ jobs:
           name: ipa-intel
           path: ${{ env.IPA_NAME }}
           retention-days: 30
+
+  test:
+    name: Build and Test (Intel)
+    runs-on: macos-26-intel
+    timeout-minutes: 90
+    env:
+      TEST_WORKERS: 1
+    steps:
+      - name: Check out the target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+
+      - name: Confirm the commit
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "${actual}" != "${TARGET_SHA}" ]]; then
+            echo "::error title=Wrong commit::Expected ${TARGET_SHA}, got ${actual}"
+            exit 1
+          fi
+          uname -m
+          xcodebuild -version
+
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      # Same shape as pr-ci.yml, only the host architecture differs: the device
+      # build does not care, but the test destination does.
+      - name: Select simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          name=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          phones = [
+              device["name"]
+              for runtime, devices in data["devices"].items()
+              if "iOS" in runtime
+              for device in devices
+              if device.get("isAvailable") and device["name"].startswith("iPhone")
+          ]
+          preferred = "iPhone 17"
+          print(preferred if preferred in phones else phones[0] if phones else "")
+          ')
+          if [[ -z "${name}" ]]; then
+            echo "No available iPhone simulator found:" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Using simulator: ${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild build-for-testing \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Build-for-testing: $((SECONDS - start_seconds))s"
+
+      - name: Test without building
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild test-without-building \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Tests: $((SECONDS - start_seconds))s"
