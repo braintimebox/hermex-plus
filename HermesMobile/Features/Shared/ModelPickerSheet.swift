@@ -56,6 +56,11 @@ struct ModelPickerSheet: View {
     private let savedCustomGroupID = "saved-custom-models"
 
     var body: some View {
+        // Prepared ONCE per body evaluation. This used to be a computed property
+        // reached three times per pass (quick rows → sections → search), each run
+        // filtering the whole catalog, de-duplicating it and sorting it on the
+        // main thread. The result only changes when `modelGroups` changes.
+        let prepared = Self.prepare(modelGroups)
         NavigationStack {
             List {
                 if let errorMessage {
@@ -74,13 +79,13 @@ struct ModelPickerSheet: View {
                 }
 
                 if trimmedSearchQuery.isEmpty {
-                    ForEach(quickGroups) { group in
+                    ForEach(Self.quickGroups(from: prepared, custom: customModelGroups)) { group in
                         quickGroupRow(group)
                             .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
                             .listRowSeparator(.hidden)
                     }
 
-                    ForEach(Array(catalogSections.enumerated()), id: \.element.section) { index, entry in
+                    ForEach(Array(Self.catalogSections(from: prepared, custom: customModelGroups).enumerated()), id: \.element.section) { index, entry in
                         sectionHeaderRow(entry.section, showsSeparator: index > 0)
 
                         ForEach(entry.groups) { group in
@@ -92,7 +97,7 @@ struct ModelPickerSheet: View {
                 } else {
                     // A query answers with one flat list: section headers over a
                     // filtered subset would be mostly empty and cost vertical space.
-                    ForEach(filteredModelGroups) { group in
+                    ForEach(Self.filteredGroups(prepared, query: trimmedSearchQuery) + customModelGroups) { group in
                         modelGroupDisclosure(group)
                             .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
                             .listRowSeparator(.hidden)
@@ -161,7 +166,8 @@ struct ModelPickerSheet: View {
             } description: {
                 Text(verbatim: message)
             }
-        } else if filteredModelGroups.isEmpty, !trimmedSearchQuery.isEmpty {
+        } else if Self.filteredGroups(prepared, query: trimmedSearchQuery).isEmpty,
+                  !trimmedSearchQuery.isEmpty {
             ContentUnavailableView.search(text: searchText)
         }
     }
@@ -538,12 +544,12 @@ struct ModelPickerSheet: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var filteredModelGroups: [ModelCatalogGroup] {
-        Self.filteredGroups(preparedGroups, query: trimmedSearchQuery) + customModelGroups
-    }
-
     /// Catalog rows after filtering out unusable models and collapsing repeats.
-    private var preparedGroups: [ModelCatalogGroup] {
+    ///
+    /// Static and called exactly once per `body`: as a computed property it was
+    /// evaluated three times per pass (quick rows, sections, search), and each
+    /// evaluation walked all ~580 catalog options.
+    static func prepare(_ modelGroups: [ModelCatalogGroup]) -> [ModelCatalogGroup] {
         let cleaned = modelGroups.map { group in
             let filterBroken: (ModelCatalogOption) -> Bool = { option in
                 let id = option.id.lowercased()
@@ -572,14 +578,17 @@ struct ModelPickerSheet: View {
     /// Pinned rows above the categorized catalog: Mixture of Agents (the server's
     /// `moa` provider group) and the saved/current custom rows. Their icons are
     /// what tells a user these are actions, not another provider catalog.
-    private var quickGroups: [ModelCatalogGroup] {
+    static func quickGroups(
+        from preparedGroups: [ModelCatalogGroup],
+        custom: [ModelCatalogGroup]
+    ) -> [ModelCatalogGroup] {
         var groups: [ModelCatalogGroup] = []
         if let moa = preparedGroups.first(where: {
             ($0.providerID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "moa"
         }) {
             groups.append(moa)
         }
-        groups.append(contentsOf: customModelGroups)
+        groups.append(contentsOf: custom)
         return groups
     }
 
@@ -597,10 +606,13 @@ struct ModelPickerSheet: View {
     /// Catalog rows in presentation order: FREE, LATEST, CONTRIBUTOR, then every
     /// remaining provider catalog. A section with no groups is omitted rather
     /// than shown empty, and every group keeps its real identity.
-    private var catalogSections: [ModelPickerGroupSection] {
-        let quickIDs = Set(quickGroups.map(\.id))
+    static func catalogSections(
+        from preparedGroups: [ModelCatalogGroup],
+        custom: [ModelCatalogGroup]
+    ) -> [ModelPickerGroupSection] {
+        let quickIDs = Set(quickGroups(from: preparedGroups, custom: custom).map(\.id))
         let catalog = preparedGroups.filter { !quickIDs.contains($0.id) }
-        return Self.sectionedGroups(catalog)
+        return sectionedGroups(catalog)
     }
 
     /// Section header, with the block separator drawn on its top edge.

@@ -563,28 +563,6 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertFalse(gamma.matchesSelection(modelID: "model-a", providerID: "custom:beta"))
     }
 
-}
-
-final class PersonalityAutocompleteTests: XCTestCase {
-    func testSlashAutocompleteNamesPrependsNoneAndDeduplicates() throws {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let response = try decoder.decode(
-            PersonalitiesResponse.self,
-            from: Data("""
-            {
-              "personalities": [
-                {"name": "mentor", "description": "Patient technical coach"},
-                {"name": "none", "description": "Should not duplicate the clear option"},
-                {"name": "critic"},
-                {"name": "   "}
-              ]
-            }
-            """.utf8)
-        )
-
-        XCTAssertEqual(response.slashAutocompleteNames, ["none", "mentor", "critic"])
-    }
 
     // MARK: - Picker refresh cost (perf: no-change opens must not rebuild the list)
 
@@ -676,5 +654,27 @@ final class PersonalityAutocompleteTests: XCTestCase {
         array.withUnsafeBufferPointer { buffer in
             buffer.baseAddress.map { UnsafeRawPointer($0) }
         }
+    }
+}
+
+final class PersonalityAutocompleteTests: XCTestCase {
+    func testSlashAutocompleteNamesPrependsNoneAndDeduplicates() throws {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let response = try decoder.decode(
+            PersonalitiesResponse.self,
+            from: Data("""
+            {
+              "personalities": [
+                {"name": "mentor", "description": "Patient technical coach"},
+                {"name": "none", "description": "Should not duplicate the clear option"},
+                {"name": "critic"},
+                {"name": "   "}
+              ]
+            }
+            """.utf8)
+        )
+
+        XCTAssertEqual(response.slashAutocompleteNames, ["none", "mentor", "critic"])
     }
 }

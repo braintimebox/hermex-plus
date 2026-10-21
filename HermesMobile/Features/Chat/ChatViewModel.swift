@@ -1198,16 +1198,35 @@ final class ChatViewModel {
     func refreshModelCatalogForPickerOpen() async {
         guard catalogRefreshSchedule.claim(now: Date()) else { return }
 
+        // Let the first frames land before touching the network. The sheet is
+        // already showing a usable catalog; issuing two requests in the same
+        // frame as the presentation is what made the open feel busy.
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        guard !Task.isCancelled else { return }
+
         PhaseTelemetry.shared.begin(.pickerCatalogRefresh)
         defer { PhaseTelemetry.shared.end(.pickerCatalogRefresh) }
 
-        if let response = try? await client.models() {
-            applyCatalogGroupsIfChanged(response.catalogGroups)
+        // Two independent endpoints: fetch them together instead of paying the
+        // tunnel round trip twice in series (3 355 ms measured when serial).
+        async let catalogRequest = client.models()
+        async let liveRequest = client.modelsLive()
+        let catalog = try? await catalogRequest
+        let live = try? await liveRequest
+
+        var candidate = modelCatalogGroups
+        if let catalog, !catalog.catalogGroups.isEmpty {
+            candidate = catalog.catalogGroups
+        }
+        if let live {
+            candidate = candidate.mergingLiveModels(from: live)
         }
 
-        if let live = try? await client.modelsLive() {
-            applyCatalogGroupsIfChanged(modelCatalogGroups.mergingLiveModels(from: live))
-        }
+        // Apply is measured on its own: network latency and main-thread rebuild
+        // are different problems and must not share a number.
+        PhaseTelemetry.shared.begin(.pickerCatalogApply)
+        defer { PhaseTelemetry.shared.end(.pickerCatalogApply) }
+        applyCatalogGroupsIfChanged(candidate)
     }
 
     /// Assigns the catalog only when it differs from what the picker is showing.
