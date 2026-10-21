@@ -248,8 +248,8 @@ final class PhaseTelemetryTests: XCTestCase {
 
         let snapshot = try XCTUnwrap(snapshots.first { $0.phase == .cacheWrite })
         XCTAssertEqual(snapshot.count, 5)
-        // Breaches 1...3 only count; escalation starts at the 4th sample.
-        XCTAssertEqual(snapshot.contextSum["escalated"], 2)
+        // The sample that reaches the threshold is already detailed: 3rd, 4th, 5th.
+        XCTAssertEqual(snapshot.contextSum["escalated"], 3)
         XCTAssertNotNil(snapshot.contextSum["isMainThread"])
     }
 
@@ -285,7 +285,10 @@ final class PhaseTelemetryTests: XCTestCase {
 
     /// A single second-long sample is reported as a hang with a stack, once.
     func testHangIsReportedOncePerCooldown() throws {
-        var clock = 0.0
+        // A real timestamp is a Unix epoch, and the cooldown gate compares absolute
+        // instants: starting at 0 would make the first hang look like it happened
+        // seconds ago, so it would be swallowed before any report.
+        var clock = 1_000_000.0
         var hangs: [(PhaseAggregator.Phase, Double)] = []
         let telemetry = PhaseTelemetry(
             flushInterval: 3_600,
