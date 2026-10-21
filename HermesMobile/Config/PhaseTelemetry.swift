@@ -50,6 +50,10 @@ struct PhaseAggregator {
         // сетевое ожидание и задержка отрисовки — разные проблемы.
         case pickerOpen = "Picker Open"
         case pickerCatalogRefresh = "Picker Catalog Refresh"
+        // Applying the refreshed catalog is a separate phase: it is pure
+        // main-thread work (diff + list rebuild), and folding it into the
+        // refresh number hid how much of the 3 355 ms was the network.
+        case pickerCatalogApply = "Picker Catalog Apply"
     }
 
     /// One flush-window summary for a single phase.
@@ -152,19 +156,27 @@ final class PhaseTelemetry {
     private let flushInterval: TimeInterval
     private let now: () -> TimeInterval
     private let sink: (PhaseAggregator.Snapshot) -> Void
+    private let hangReporter: (PhaseAggregator.Phase, Double) -> Void
     private var windowStartedAt: TimeInterval
     private var startedAt: [PhaseAggregator.Phase: TimeInterval] = [:]
+    /// Consecutive samples over budget, per phase. Reset by any sample that fits.
+    private var breachStreak: [PhaseAggregator.Phase: Int] = [:]
+    /// Remaining samples in which this phase records its context (escalated mode).
+    private var detailedRemaining: [PhaseAggregator.Phase: Int] = [:]
+    private var lastHangReportAt: TimeInterval = 0
 
     init(
         flushInterval: TimeInterval = PhaseTelemetry.defaultFlushInterval,
         bucketCapacity: Int = PhaseAggregator.defaultBucketCapacity,
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
-        sink: @escaping (PhaseAggregator.Snapshot) -> Void = PhaseTelemetry.logToHermex
+        sink: @escaping (PhaseAggregator.Snapshot) -> Void = PhaseTelemetry.logToHermex,
+        hangReporter: @escaping (PhaseAggregator.Phase, Double) -> Void = PhaseTelemetry.reportHang
     ) {
         self.aggregator = PhaseAggregator(bucketCapacity: bucketCapacity)
         self.flushInterval = flushInterval
         self.now = now
         self.sink = sink
+        self.hangReporter = hangReporter
         self.windowStartedAt = now()
     }
 
@@ -188,15 +200,49 @@ final class PhaseTelemetry {
             return
         }
         let elapsed = (now() - start) * 1000
-        aggregator.record(phase, milliseconds: elapsed, context: context)
         let timestamp = now()
+
+        // ESCALATION. A phase that keeps missing its budget starts recording WHY,
+        // for a bounded number of samples, then falls silent again. Without this
+        // every investigation began with a patch, a rebuild and a reinstall just
+        // to learn whether the work ran on the main thread.
+        var effective = context
+        if let budget = PhaseBudget.p90Milliseconds(for: phase) {
+            if elapsed > budget {
+                breachStreak[phase, default: 0] += 1
+            } else {
+                breachStreak[phase] = 0
+            }
+            if breachStreak[phase, default: 0] >= PhaseBudget.breachStreakThreshold,
+               detailedRemaining[phase, default: 0] == 0 {
+                detailedRemaining[phase] = PhaseBudget.detailedSampleBudget
+                breachStreak[phase] = 0
+            }
+        }
+        if detailedRemaining[phase, default: 0] > 0 {
+            detailedRemaining[phase, default: 0] -= 1
+            effective["escalated"] = 1
+            effective["isMainThread"] = Thread.isMainThread ? 1 : 0
+        }
+
+        aggregator.record(phase, milliseconds: elapsed, context: effective)
         var due: [PhaseAggregator.Snapshot] = []
         if timestamp - windowStartedAt >= flushInterval {
             windowStartedAt = timestamp
             due = aggregator.takeSnapshots()
         }
+        // Hangs are reported regardless of escalation: one stack is worth more
+        // than a hundred counters, and the cooldown keeps the log readable.
+        var reportHang = false
+        if elapsed >= PhaseBudget.hangMilliseconds,
+           timestamp - lastHangReportAt >= PhaseBudget.hangCooldown {
+            lastHangReportAt = timestamp
+            reportHang = true
+        }
         lock.unlock()
+
         for snapshot in due { sink(snapshot) }
+        if reportHang { hangReporter(phase, elapsed) }
     }
 
     /// Records one finished interval. O(1): an append under a lock, plus a window
@@ -231,6 +277,8 @@ final class PhaseTelemetry {
         lock.lock()
         aggregator = PhaseAggregator(bucketCapacity: aggregator.bucketCapacity)
         startedAt = [:]
+        breachStreak = [:]
+        detailedRemaining = [:]
         windowStartedAt = now()
         lock.unlock()
     }
@@ -418,5 +466,57 @@ final class StreamCommitTelemetry {
         frameMaxMs = 0
         frameSamples = 0
         windowStart = now
+    }
+}
+
+/// p90 budgets: the line between "normal" and "worth investigating".
+///
+/// A phase without a budget cannot regress visibly — nobody knows what bad is,
+/// so every report restarts the argument. Markdown deliberately has none: it
+/// reports 0.2 ms p90 across tens of thousands of samples while the app visibly
+/// janks, which means its span is wrong and a budget would only lend authority
+/// to a number that measures the wrong thing.
+enum PhaseBudget {
+    static func p90Milliseconds(for phase: PhaseAggregator.Phase) -> Double? {
+        switch phase {
+        case .cacheWrite, .cacheWriteSessions, .cacheWriteSession: return 50
+        case .cacheRead: return 20
+        case .sessionOpen: return 150
+        case .transcriptApply, .streamBatchApply, .pickerCatalogApply,
+             .renderPolicy, .lightRender, .fallbackRender: return 16
+        case .pickerOpen: return 100
+        case .pickerCatalogRefresh: return 2000
+        case .markdownParse, .markdownParseStream, .markdownParseSettled: return nil
+        }
+    }
+
+    /// Samples over budget, in a row, before the phase starts recording context.
+    static let breachStreakThreshold = 3
+    /// How many samples the escalated phase stays detailed before falling silent.
+    static let detailedSampleBudget = 50
+    /// A single sample this long is a hang, not a slow phase.
+    static let hangMilliseconds: Double = 1000
+    /// One stack per minute is enough to identify the call site.
+    static let hangCooldown: TimeInterval = 60
+}
+
+extension PhaseTelemetry {
+    /// Reports a single sample that took a second or more, with a stack.
+    ///
+    /// This is the link the log was missing: `Cache Write 6 920 ms` says how bad
+    /// it was, never where. Fifteen frames and the thread name are enough to
+    /// name the function without shipping a profiler.
+    static func reportHang(_ phase: PhaseAggregator.Phase, _ milliseconds: Double) {
+        HermexLogger.shared.log(
+            type: "freeze",
+            durationMs: milliseconds,
+            screen: "Performance",
+            message: "phase \(phase.rawValue) \(Int(milliseconds)) ms",
+            extras: [
+                "phase": phase.rawValue,
+                "thread": Thread.isMainThread ? "main" : "background",
+                "stack": Thread.callStackSymbols.prefix(15).joined(separator: "\n"),
+            ]
+        )
     }
 }

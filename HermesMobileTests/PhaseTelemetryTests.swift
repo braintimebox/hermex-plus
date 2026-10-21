@@ -208,4 +208,102 @@ final class PhaseTelemetryTests: XCTestCase {
         XCTAssertNotNil(snapshot)
         PhaseTelemetry.logToHermex(snapshot!)
     }
+
+    // MARK: - Escalation (budgets → detailed context → silence again)
+
+    /// Every phase must have a deliberate budget decision. A phase that quietly
+    /// returns nil is a phase nobody can regress: adding one without a budget is
+    /// how the picker shipped without telemetry in the first place.
+    func testEveryPhaseHasADeliberateBudgetDecision() {
+        let withoutBudget = PhaseAggregator.Phase.allCases
+            .filter { PhaseBudget.p90Milliseconds(for: $0) == nil }
+
+        XCTAssertEqual(
+            Set(withoutBudget),
+            [.markdownParse, .markdownParseStream, .markdownParseSettled],
+            "Markdown is exempt only because its span is wrong; any other phase without a budget must be a deliberate change"
+        )
+    }
+
+    /// Three consecutive samples over budget switch the phase to detailed mode:
+    /// the next samples carry `escalated` and `isMainThread`, so a later reading
+    /// can tell main-thread work from background work without a rebuild.
+    func testRepeatedBreachesEscalateTheFollowingSamples() throws {
+        var clock = 0.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        // Budget for Cache Write is 50 ms; each sample takes 200 ms.
+        for _ in 0..<5 {
+            telemetry.begin(.cacheWrite)
+            clock += 0.2
+            telemetry.end(.cacheWrite)
+        }
+        telemetry.flush()
+
+        let snapshot = try XCTUnwrap(snapshots.first { $0.phase == .cacheWrite })
+        XCTAssertEqual(snapshot.count, 5)
+        // Breaches 1...3 only count; escalation starts at the 4th sample.
+        XCTAssertEqual(snapshot.contextSum["escalated"], 2)
+        XCTAssertNotNil(snapshot.contextSum["isMainThread"])
+    }
+
+    /// A sample inside its budget keeps the phase quiet and resets the streak —
+    /// otherwise one bad minute would leave every later report verbose forever.
+    func testSampleInsideBudgetResetsTheStreak() throws {
+        var clock = 0.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        func sample(_ milliseconds: Double) {
+            telemetry.begin(.cacheWrite)
+            clock += milliseconds / 1000
+            telemetry.end(.cacheWrite)
+        }
+
+        sample(200)   // breach 1
+        sample(200)   // breach 2
+        sample(10)    // inside budget → streak reset
+        sample(200)   // breach 1 again, not 3
+        sample(200)   // breach 2
+        telemetry.flush()
+
+        let snapshot = try XCTUnwrap(snapshots.first { $0.phase == .cacheWrite })
+        XCTAssertEqual(snapshot.count, 5)
+        XCTAssertNil(snapshot.contextSum["escalated"], "two breaches with a reset between them must not escalate")
+    }
+
+    /// A single second-long sample is reported as a hang with a stack, once.
+    func testHangIsReportedOncePerCooldown() throws {
+        var clock = 0.0
+        var hangs: [(PhaseAggregator.Phase, Double)] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { _ in },
+            hangReporter: { hangs.append(($0, $1)) }
+        )
+
+        telemetry.begin(.cacheWrite)
+        clock += 1.5
+        telemetry.end(.cacheWrite)
+
+        telemetry.begin(.cacheWrite)
+        clock += 1.5          // still inside the 60 s cooldown
+        telemetry.end(.cacheWrite)
+
+        XCTAssertEqual(hangs.count, 1, "one stack per cooldown, not one per hang")
+        let firstHang = try XCTUnwrap(hangs.first)
+        XCTAssertEqual(firstHang.1, 1500, accuracy: 1)
+    }
 }
