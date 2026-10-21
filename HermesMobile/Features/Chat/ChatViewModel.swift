@@ -1204,15 +1204,24 @@ final class ChatViewModel {
         try? await Task.sleep(nanoseconds: 250_000_000)
         guard !Task.isCancelled else { return }
 
-        PhaseTelemetry.shared.begin(.pickerCatalogRefresh)
-        defer { PhaseTelemetry.shared.end(.pickerCatalogRefresh) }
+        let traceId = TelemetryScenario.shared.current.traceId
+        let refreshSpan = PhaseTelemetry.shared.begin(.pickerCatalogRefresh, traceId: traceId)
+        defer { PhaseTelemetry.shared.end(refreshSpan, traceId: traceId) }
 
         // Two independent endpoints: fetch them together instead of paying the
         // tunnel round trip twice in series (3 355 ms measured when serial).
+        // Network is its own span: a slow refresh is either the tunnel or the
+        // rebuild, and only a separate span can say which.
+        let networkSpan = PhaseTelemetry.shared.begin(.pickerNetwork, traceId: traceId)
         async let catalogRequest = client.models()
         async let liveRequest = client.modelsLive()
         let catalog = try? await catalogRequest
         let live = try? await liveRequest
+        PhaseTelemetry.shared.end(
+            networkSpan,
+            context: ["catalog": catalog == nil ? 0 : 1, "live": live == nil ? 0 : 1],
+            traceId: traceId
+        )
 
         var candidate = modelCatalogGroups
         if let catalog, !catalog.catalogGroups.isEmpty {
@@ -1224,8 +1233,8 @@ final class ChatViewModel {
 
         // Apply is measured on its own: network latency and main-thread rebuild
         // are different problems and must not share a number.
-        PhaseTelemetry.shared.begin(.pickerCatalogApply)
-        defer { PhaseTelemetry.shared.end(.pickerCatalogApply) }
+        let applySpan = PhaseTelemetry.shared.begin(.pickerCatalogApply, traceId: traceId)
+        defer { PhaseTelemetry.shared.end(applySpan, traceId: traceId) }
         applyCatalogGroupsIfChanged(candidate)
     }
 

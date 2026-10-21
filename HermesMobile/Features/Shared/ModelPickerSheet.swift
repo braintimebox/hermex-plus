@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The model picker shared by the chat composer, Settings > Default Model, and
 /// the Task editor.
@@ -44,6 +45,11 @@ struct ModelPickerSheet: View {
     /// the `Picker Open` phase it starts on the tap; other surfaces leave it nil.
     var onDidAppear: (() -> Void)? = nil
 
+    /// Ends `Picker First Frame` on the first display-link tick after appearance.
+    /// `@State`, not `let`: the view struct is recreated constantly, and a fresh
+    /// probe per body pass would stack display links instead of measuring one frame.
+    @State private var firstFrameProbe = PickerFirstFrameProbe()
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
@@ -60,7 +66,7 @@ struct ModelPickerSheet: View {
         // reached three times per pass (quick rows → sections → search), each run
         // filtering the whole catalog, de-duplicating it and sorting it on the
         // main thread. The result only changes when `modelGroups` changes.
-        let prepared = Self.prepare(modelGroups)
+        let prepared = Self.measuredPrepare(modelGroups)
         NavigationStack {
             List {
                 if let errorMessage {
@@ -97,7 +103,7 @@ struct ModelPickerSheet: View {
                 } else {
                     // A query answers with one flat list: section headers over a
                     // filtered subset would be mostly empty and cost vertical space.
-                    ForEach(Self.filteredGroups(prepared, query: trimmedSearchQuery) + customModelGroups) { group in
+                    ForEach(Self.measuredSearch(prepared, query: trimmedSearchQuery) + customModelGroups) { group in
                         modelGroupDisclosure(group)
                             .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 12))
                             .listRowSeparator(.hidden)
@@ -122,6 +128,15 @@ struct ModelPickerSheet: View {
             )
             .onAppear {
                 onDidAppear?()
+                // The scenario the frame histogram needs: without it a bad frame
+                // here is indistinguishable from a bad frame while the chat scrolls.
+                // The composer already opened a trace on the tap; any other entry
+                // point (Settings, Task editor) gets one here, so the chain exists
+                // even when nobody upstream created it.
+                let traceId = TelemetryScenario.shared.current.traceId
+                    ?? TelemetryScenario.newTraceId()
+                TelemetryScenario.shared.enter(screen: "ModelPicker", traceId: traceId)
+                firstFrameProbe.start(traceId: traceId)
                 initializeCustomProviderIfNeeded()
                 // Groups start collapsed on every appearance: expansion is the
                 // user's action, never the catalog's. There is deliberately no
@@ -132,6 +147,10 @@ struct ModelPickerSheet: View {
             }
             .onChange(of: searchText) { _, newValue in
                 sectionExpansion.updateSearchText(newValue)
+            }
+            .onDisappear {
+                firstFrameProbe.cancel()
+                TelemetryScenario.shared.leave(screen: "ModelPicker")
             }
             .toolbar {
                 ToolbarItem(placement: configuration.dismissPlacement) {
@@ -166,7 +185,7 @@ struct ModelPickerSheet: View {
             } description: {
                 Text(verbatim: message)
             }
-        } else if Self.filteredGroups(Self.prepare(modelGroups), query: trimmedSearchQuery).isEmpty,
+        } else if Self.measuredSearch(Self.measuredPrepare(modelGroups), query: trimmedSearchQuery).isEmpty,
                   !trimmedSearchQuery.isEmpty {
             ContentUnavailableView.search(text: searchText)
         }
@@ -691,6 +710,43 @@ struct ModelPickerSheet: View {
     /// provider stays findable by the name the picker actually shows it under:
     /// the id is spelled `openai-codex` where the header reads "OpenAI Codex",
     /// and matching only ids would answer "no models" to the visible name.
+    /// `prepare` with a phase around it.
+    ///
+    /// The measurement is deliberately a wrapper, not a second implementation:
+    /// the result is returned untouched, so timing cannot change what the sheet
+    /// shows. It exists because preparation was the expensive step nobody could
+    /// see — it runs inside the view body, over the whole catalog, on the main
+    /// thread, and it was invisible in every previous report.
+    static func measuredPrepare(_ groups: [ModelCatalogGroup]) -> [ModelCatalogGroup] {
+        let traceId = TelemetryScenario.shared.current.traceId
+        let span = PhaseTelemetry.shared.begin(.pickerCatalogPrepare, traceId: traceId)
+        let prepared = prepare(groups)
+        PhaseTelemetry.shared.end(
+            span,
+            context: [
+                "models": groups.reduce(0) { $0 + $1.allModels.count },
+                "groups": prepared.count,
+            ],
+            traceId: traceId
+        )
+        return prepared
+    }
+
+    /// `filteredGroups` with a phase around it, only while a query is active.
+    /// Empty-query filtering is a passthrough and would only add noise.
+    static func measuredSearch(_ groups: [ModelCatalogGroup], query: String) -> [ModelCatalogGroup] {
+        guard !query.isEmpty else { return filteredGroups(groups, query: query) }
+        let traceId = TelemetryScenario.shared.current.traceId
+        let span = PhaseTelemetry.shared.begin(.pickerSearch, traceId: traceId)
+        let matches = filteredGroups(groups, query: query)
+        PhaseTelemetry.shared.end(
+            span,
+            context: ["queryChars": query.count, "results": matches.count],
+            traceId: traceId
+        )
+        return matches
+    }
+
     static func filteredGroups(_ groups: [ModelCatalogGroup], query: String) -> [ModelCatalogGroup] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return groups }
@@ -1024,5 +1080,62 @@ extension View {
                 isSelected ? Color.primary : Color.clear,
                 in: RoundedRectangle(cornerRadius: PickerRowMetrics.cornerRadius, style: .continuous)
             )
+    }
+}
+
+/// Measures appearance -> the first display-link tick, and stops there.
+///
+/// WHAT IT DOES NOT PROVE: that the picker's first frame was presented. A display
+/// link ticks at the start of a frame cycle, before rendering, so a tick can arrive
+/// while the sheet is still compositing. The number is therefore an **upper bound on
+/// presentation latency**, not evidence of a fully drawn screen. Anything stronger
+/// needs a render-server signal that SwiftUI does not expose; measuring to the second
+/// tick would only add a frame of latency to the same guess.
+///
+/// WHAT IT DOES GUARANTEE: the sample belongs to the open that started it (stale
+/// traces are dropped), and a dismiss before the first tick records nothing, because
+/// the probe is cancelled with the sheet.
+final class PickerFirstFrameProbe: NSObject {
+    private var link: CADisplayLink?
+    private var startedAt: CFTimeInterval = 0
+    private var traceId: String?
+
+    func start(traceId: String?) {
+        // A reopen may arrive while the previous link is still armed; drop it so the
+        // new open gets its own measurement instead of being silently skipped.
+        link?.invalidate()
+        link = nil
+        self.traceId = traceId
+        startedAt = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(tick))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    /// Cancels without recording: the sheet closed before a frame ticked, so there is
+    /// no first frame to report for this open.
+    func cancel() {
+        link?.invalidate()
+        link = nil
+        traceId = nil
+    }
+
+    @objc private func tick() {
+        let elapsed = (CACurrentMediaTime() - startedAt) * 1000
+        link?.invalidate()
+        link = nil
+        // Attribution guard: if the picker was closed (or another open replaced it)
+        // before this tick, the sample would be credited to a scenario that is gone.
+        let active = TelemetryScenario.shared.current
+        if let traceId = traceId {
+            guard active.traceId == traceId else { return }
+        } else {
+            guard active.screen == nil || active.screen == "ModelPicker" else { return }
+        }
+        PhaseTelemetry.shared.record(
+            .pickerFirstFrame,
+            milliseconds: elapsed,
+            traceId: traceId
+        )
     }
 }
