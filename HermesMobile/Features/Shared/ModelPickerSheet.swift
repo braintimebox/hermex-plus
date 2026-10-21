@@ -166,7 +166,7 @@ struct ModelPickerSheet: View {
             } description: {
                 Text(verbatim: message)
             }
-        } else if Self.filteredGroups(prepared, query: trimmedSearchQuery).isEmpty,
+        } else if Self.filteredGroups(Self.prepare(modelGroups), query: trimmedSearchQuery).isEmpty,
                   !trimmedSearchQuery.isEmpty {
             ContentUnavailableView.search(text: searchText)
         }
