@@ -1,0 +1,30 @@
+name: Runner probe
+
+# Answers ONE question: can this repository get a macOS Intel runner right now?
+#
+# Why Intel: every macOS ARM64 job since ~17:00 on 20.10.2026 was cancelled after
+# 15 minutes without a single step. GitHub's own check-run annotation names the
+# reason — "Due to capacity constraints, jobs targeting macOS arm64 runners may
+# experience longer queue times" — and the Intel pool is a different one.
+#
+# Nothing is checked out and nothing is built: the job exists to be ACQUIRED.
+# A queued-then-cancelled job proves the pool is unavailable exactly as well as
+# a log line would, and this way no minute is wasted on a checkout.
+#
+# Manual only. No schedule, no push trigger: a probe that runs itself is noise.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Probe macos-26-intel
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    steps:
+      - name: Report host
+        run: |
+          set -euo pipefail
+          sw_vers
+          uname -m
+          xcodebuild -version
