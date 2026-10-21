@@ -37,7 +37,7 @@ concurrency:
 env:
   # The one commit this workflow is allowed to build. If the branch moves, the
   # build still describes the code that was reviewed and tested.
-  TARGET_SHA: e8197f7a8a4f6fa0ab61cdad3630778fb9079c31
+  TARGET_SHA: 0db92ef59abb301ae888d5caacd5c90414bbb25c
   PROJECT_PATH: HermesMobile.xcodeproj
   SCHEME: HermesMobile
   DERIVED_DATA_PATH: DerivedData
