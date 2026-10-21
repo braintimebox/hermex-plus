@@ -1,3 +1,10 @@
+## 3.9.52 — Picker smoothness; telemetry budgets and escalation
+- ModelCatalogGroup.allModels is computed once in init, not rebuilt (Set + filter) on every row, counter and favorites scan
+- Model Picker prepares its catalog once per body: filter, Nous compaction and de-duplication used to run three times per pass
+- Picker catalog refresh runs /api/models and /api/models/live in parallel after a 250 ms settle; apply is its own phase
+- PhaseTelemetry: p90 budget per phase, automatic escalation to detailed context (`escalated`, `isMainThread`) after 3 breaches, stack report for any sample >= 1 s (once per minute)
+- Picker performance tests moved into ModelCatalogTests (they were passing inside an unrelated class)
+
 ## 3.9.51 — Diagnostics: correlation IDs, session tracking, query endpoint, telemetry improvements (freeze diagnostics, fault tree, server correlation)
 - HermexLogger: correlationId, seqNo, action log, ring buffer 100
 - MainThreadWatchdog: HeavyOperationTracker expanded (SSE, Cache, Decode, Markdown, Stream)
