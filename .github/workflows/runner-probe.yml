@@ -12,8 +12,22 @@ name: Runner probe
 # a log line would, and this way no minute is wasted on a checkout.
 #
 # Manual only. No schedule, no push trigger: a probe that runs itself is noise.
+#
+# EXCEPTION, and it is the only reason this file can run at all: `workflow_dispatch`
+# refuses to start a workflow that does not exist on the DEFAULT branch
+# ("This event will only trigger a workflow run if the workflow file exists on the
+# default branch" — docs, events-that-trigger-workflows). `main` is off limits for
+# this probe, so the trigger is `push` scoped to this one branch: GitHub reads the
+# workflow file from the pushed ref, so no default-branch copy is needed.
+#
+# Verified before adding: no other workflow in this repo listens to push except
+# `build-ipa.yml`, and it is scoped to `main`, so a push here starts this job and
+# nothing else. No checkout, no secrets, no build.
 
 on:
+  push:
+    branches:
+      - ci/runner-probe
   workflow_dispatch:
 
 jobs:
