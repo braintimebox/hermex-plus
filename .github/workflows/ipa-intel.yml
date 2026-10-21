@@ -1,0 +1,137 @@
+name: Build IPA (Intel runner)
+
+# Packages the IPA for a pinned commit on `macos-26-intel`.
+#
+# WHY THIS FILE EXISTS
+#   The Apple-silicon pool was dry: every `macos-26` job on 20.10.2026 was cancelled
+#   after 15 minutes without running a single step, and GitHub's check-run
+#   annotation named the cause — "Due to capacity constraints, jobs targeting
+#   macOS arm64 runners may experience longer queue times". The Intel pool is a
+#   different one: probe run 39537132579 was acquired in 5 seconds and reported
+#   macOS 26.6.1 / x86_64 / Xcode 26.6 (17F113) — the same Xcode build the arm64
+#   image ships, so the toolchain is not a variable here.
+#
+# WHY IT IS NOT IN build-ipa.yml
+#   `main` and that workflow are off limits for this experiment. This file lives
+#   only in `ci/runner-probe` and is reached by a push scoped to that branch
+#   (`workflow_dispatch` only starts a workflow that exists on the default branch).
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+#   No tests (the target commit already passed 2639 green on arm64), no version
+#   bump, no release, no publish, no secrets, no signing. The IPA is unsigned —
+#   the same shape `build-ipa.yml` produces, so the sideload path is unchanged.
+#
+#   Host architecture is irrelevant to the output: `-destination generic/platform=iOS`
+#   builds the arm64 device slice on either x86_64 or arm64 macOS.
+
+on:
+  push:
+    branches:
+      - ci/runner-probe
+  workflow_dispatch:
+
+concurrency:
+  group: ipa-intel
+  cancel-in-progress: false
+
+env:
+  # The one commit this workflow is allowed to build. If the branch moves, the
+  # build still describes the code that was reviewed and tested.
+  TARGET_SHA: 8464bc84295b5baec2e132c811c39cd7df211244
+  PROJECT_PATH: HermesMobile.xcodeproj
+  SCHEME: HermesMobile
+  DERIVED_DATA_PATH: DerivedData
+
+jobs:
+  build:
+    name: Package IPA (Intel)
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    steps:
+      - name: Check out the target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+
+      # Provenance, printed before anything is compiled: the report has to be able
+      # to say which Xcode built this IPA and which commit it came from.
+      - name: Confirm the commit and the toolchain
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "checked out: ${actual}"
+          echo "expected:    ${TARGET_SHA}"
+          if [[ "${actual}" != "${TARGET_SHA}" ]]; then
+            echo "::error title=Wrong commit::Expected ${TARGET_SHA}, got ${actual}"
+            exit 1
+          fi
+          uname -m
+          xcodebuild -version
+          echo "version file: $(cat VERSION)"
+
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Build for device
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          echo "Build for device: $((SECONDS - start_seconds))s"
+
+      - name: Locate .app
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find DerivedData/Build/Products -name '*.app' -path '*/Release-iphoneos/*' -type d | head -1)"
+          if [[ -z "${APP_PATH}" ]]; then
+            echo "::error title=No app bundle::Release-iphoneos produced no .app"
+            exit 1
+          fi
+          echo "APP_PATH=${APP_PATH}" >> "$GITHUB_ENV"
+          echo "app: ${APP_PATH}"
+
+      # The version stays inside the file name but the commit rides along, so two
+      # builds of the same VERSION can never be confused again.
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          VER="$(cat VERSION)"
+          IPA="HermesPlus-${VER}-${TARGET_SHA:0:7}.ipa"
+          mkdir Payload
+          cp -R "${APP_PATH}" Payload/
+          zip -q -r "${IPA}" Payload
+          rm -rf Payload
+          ls -lh "${IPA}"
+          shasum -a 256 "${IPA}"
+          echo "IPA_NAME=${IPA}" >> "$GITHUB_ENV"
+
+      - name: Report bundle facts
+        run: |
+          set -euo pipefail
+          echo "### IPA facts" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: \`${TARGET_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- runner arch: \`$(uname -m)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Xcode: \`$(xcodebuild -version | head -1)\` (build $(xcodebuild -version | tail -1 | awk '{print $3}'))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- file: \`${IPA_NAME}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- size: \`$(du -h "${IPA_NAME}" | awk '{print $1}')\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sha256: \`$(shasum -a 256 "${IPA_NAME}" | awk '{print $1}')\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-intel
+          path: ${{ env.IPA_NAME }}
+          retention-days: 30
