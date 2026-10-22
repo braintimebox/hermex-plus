@@ -259,6 +259,13 @@ final class ChatStreamCoordinator {
         seedActiveRunStart(runStartedAt)
         hasInMemorySnapshotForActiveStream = false
         isConnectionSuspended = false
+        // Every event logged while this run is live carries both ids, so a phase
+        // aggregate or a frame window can be joined to the session and stream it
+        // was measured in instead of being attributed by wall-clock luck.
+        HermexLogger.shared.setDiagnosticContext(
+            sessionId: delegate?.streamCoordinatorSessionID,
+            streamId: streamID
+        )
         if replayAfterSeq == nil {
             lastEventID = nil
         }
@@ -1071,6 +1078,12 @@ final class ChatStreamCoordinator {
         setLiveTokensPerSecondIfChanged(nil)
         delegate?.streamCoordinatorStreamingAssistantMessageID = nil
         hasCompletedCurrentResponse = false
+        // The run is over: keep the session, drop the stream so later events are
+        // not attributed to a finished run.
+        HermexLogger.shared.setDiagnosticContext(
+            sessionId: delegate?.streamCoordinatorSessionID,
+            streamId: nil
+        )
         delegate?.streamCoordinatorDidFinishStream()
         isConnectionSuspended = false
         resetRecoveryState()

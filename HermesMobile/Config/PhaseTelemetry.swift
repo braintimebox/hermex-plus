@@ -201,6 +201,9 @@ final class PhaseTelemetry {
     private let now: () -> TimeInterval
     private let sink: (PhaseAggregator.Snapshot) -> Void
     private let hangReporter: (PhaseAggregator.Phase, Double) -> Void
+    /// Called when a finished span measures a negative interval. Reported, never
+    /// recorded: a backwards clock must not become a 0 ms sample.
+    private let clockAnomalyReporter: (PhaseAggregator.Phase, Double) -> Void
     private var windowStartedAt: TimeInterval
     /// A stack per phase, not a single slot. Two catalog refreshes or two cache
     /// writes can overlap; with one slot the second `begin` overwrote the first
@@ -224,15 +227,22 @@ final class PhaseTelemetry {
     init(
         flushInterval: TimeInterval = PhaseTelemetry.defaultFlushInterval,
         bucketCapacity: Int = PhaseAggregator.defaultBucketCapacity,
-        now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
+        // Monotonic clock for DURATIONS. `Date()` is wall-clock: an NTP
+        // correction, a manual time change or a device that slept mid-span makes
+        // the interval meaningless. Calendar time stays on the event itself (`ts`,
+        // stamped by HermexLogger from `Date()`), so ordering across devices is
+        // still calendar-based while every measured duration is monotonic.
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         sink: @escaping (PhaseAggregator.Snapshot) -> Void = PhaseTelemetry.logToHermex,
-        hangReporter: @escaping (PhaseAggregator.Phase, Double) -> Void = PhaseTelemetry.reportHang
+        hangReporter: @escaping (PhaseAggregator.Phase, Double) -> Void = PhaseTelemetry.reportHang,
+        clockAnomalyReporter: @escaping (PhaseAggregator.Phase, Double) -> Void = PhaseTelemetry.reportClockAnomaly
     ) {
         self.aggregator = PhaseAggregator(bucketCapacity: bucketCapacity)
         self.flushInterval = flushInterval
         self.now = now
         self.sink = sink
         self.hangReporter = hangReporter
+        self.clockAnomalyReporter = clockAnomalyReporter
         self.windowStartedAt = now()
     }
 
@@ -296,6 +306,15 @@ final class PhaseTelemetry {
         let trace = explicitTrace ?? start.traceId
         let elapsed = (now() - start.start) * 1000
         let timestamp = now()
+
+        // A backwards clock (NTP correction, manual change) must not enter the
+        // bucket as a 0 ms sample: that would silently improve every percentile.
+        // Drop it and say so, so the anomaly is visible instead of invisible.
+        guard elapsed >= 0 else {
+            lock.unlock()
+            clockAnomalyReporter(phase, elapsed)
+            return
+        }
 
         // ESCALATION. A phase that keeps missing its budget starts recording WHY,
         // for a bounded number of samples, then falls silent again. Without this
@@ -611,6 +630,20 @@ extension PhaseTelemetry {
     /// This is the link the log was missing: `Cache Write 6 920 ms` says how bad
     /// it was, never where. Fifteen frames and the thread name are enough to
     /// name the function without shipping a profiler.
+    /// Reports a negative measured interval. These cannot be fixed by clamping:
+    /// a clamp turns a broken measurement into a plausible fast one.
+    static func reportClockAnomaly(_ phase: PhaseAggregator.Phase, _ milliseconds: Double) {
+        HermexLogger.shared.log(
+            type: "telemetry_clock",
+            screen: "Performance",
+            message: "negative span duration",
+            extras: [
+                "phase": phase.rawValue,
+                "milliseconds": milliseconds,
+            ]
+        )
+    }
+
     static func reportHang(_ phase: PhaseAggregator.Phase, _ milliseconds: Double) {
         HermexLogger.shared.log(
             type: "freeze",

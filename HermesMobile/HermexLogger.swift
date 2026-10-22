@@ -22,6 +22,46 @@ final class HermexLogger {
     private let correlationId = UUID().uuidString
     private var sequenceCounter: Int = 0
 
+    /// Diagnostic identity of the operation currently in flight. Attached to every
+    /// event so `sessionId`/`streamId` survive into the log even when the call site
+    /// does not know them: the phase and frame channels are shared by every screen.
+    private let diagnosticContextLock = NSLock()
+    private var diagnosticSessionId: String?
+    private var diagnosticStreamId: String?
+
+    func setDiagnosticContext(sessionId: String?, streamId: String?) {
+        diagnosticContextLock.lock()
+        defer { diagnosticContextLock.unlock() }
+        // nil clears: a stale id from a previous conversation must not be attached
+        // to events of the next one. Callers pass both explicitly for that reason.
+        diagnosticSessionId = sessionId
+        diagnosticStreamId = streamId
+    }
+
+    private func currentDiagnosticContext() -> (sessionId: String?, streamId: String?) {
+        diagnosticContextLock.lock()
+        defer { diagnosticContextLock.unlock() }
+        return (diagnosticSessionId, diagnosticStreamId)
+    }
+
+    /// Pure merge used by `log` and asserted by tests. Caller-supplied extras win,
+    /// so an event that already names its stream is never overwritten by ambient
+    /// context from a later operation.
+    static func applyingDiagnosticContext(
+        _ event: [String: Any],
+        sessionId: String?,
+        streamId: String?
+    ) -> [String: Any] {
+        var merged = event
+        if merged["sessionId"] == nil, let sessionId, !sessionId.isEmpty {
+            merged["sessionId"] = sessionId
+        }
+        if merged["streamId"] == nil, let streamId, !streamId.isEmpty {
+            merged["streamId"] = streamId
+        }
+        return merged
+    }
+
     public enum UserAction: String {
         case send, scroll, openChat, switchServer
         case schedule, pin, unpin, save, share
@@ -74,6 +114,12 @@ final class HermexLogger {
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
             if let extras { event.merge(extras) { _, new in new } }
+            let context = currentDiagnosticContext()
+            event = Self.applyingDiagnosticContext(
+                event,
+                sessionId: context.sessionId,
+                streamId: context.streamId
+            )
             if type == "freeze" {
                 event["lastEvents"] = recentEvents
                 event["foreground"] = UIApplication.shared.applicationState == .active

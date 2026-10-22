@@ -498,4 +498,62 @@ final class PhaseTelemetryTests: XCTestCase {
         let snapshot = snapshots.first { $0.phase == .pickerSearch }
         XCTAssertEqual(snapshot?.count, 1)
     }
+    // HERMEX-FORK: P0 telemetry — durations must not follow the calendar clock.
+    /// A clock that goes backwards (NTP correction, manual change) used to become a
+    /// 0 ms sample, which silently improved every percentile. It must be dropped
+    /// and reported instead.
+    func testBackwardsClockSampleIsDroppedAndReported() throws {
+        final class Clock { var value: TimeInterval = 100 }
+        let clock = Clock()
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        var anomalies: [(PhaseAggregator.Phase, Double)] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 0,
+            now: { clock.value },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in },
+            clockAnomalyReporter: { anomalies.append(($0, $1)) }
+        )
+
+        let span = telemetry.begin(.cacheWrite)
+        clock.value = 50           // calendar jumped backwards mid-span
+        telemetry.end(span, context: [:])
+
+        XCTAssertTrue(snapshots.isEmpty, "a negative interval must not enter the bucket")
+        XCTAssertEqual(anomalies.count, 1)
+        XCTAssertEqual(anomalies.first?.0, .cacheWrite)
+        XCTAssertEqual(anomalies.first?.1 ?? 0, -50_000, accuracy: 0.001)
+
+        // The next, sane span still records normally: one bad sample cannot poison
+        // the phase for the rest of the session.
+        let sane = telemetry.begin(.cacheWrite)
+        clock.value = 50.05
+        telemetry.end(sane, context: [:])
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(try XCTUnwrap(snapshots.first?.p50), 50, accuracy: 0.001)
+    }
+
+    // HERMEX-FORK: P1 telemetry — operation identity travels with the event.
+    /// Ambient session/stream identity is merged into every event, and an event
+    /// that already names its own stream is never overwritten by it.
+    func testDiagnosticContextIsAttachedWithoutOverwritingEventIdentity() {
+        let merged = HermexLogger.applyingDiagnosticContext(
+            ["type": "phase"],
+            sessionId: "session-1",
+            streamId: "stream-1"
+        )
+        XCTAssertEqual(merged["sessionId"] as? String, "session-1")
+        XCTAssertEqual(merged["streamId"] as? String, "stream-1")
+
+        let ownIdentity = HermexLogger.applyingDiagnosticContext(
+            ["type": "phase", "streamId": "stream-own"],
+            sessionId: "session-1",
+            streamId: "stream-ambient"
+        )
+        XCTAssertEqual(ownIdentity["streamId"] as? String, "stream-own")
+
+        let empty = HermexLogger.applyingDiagnosticContext(["type": "phase"], sessionId: nil, streamId: nil)
+        XCTAssertNil(empty["sessionId"])
+        XCTAssertNil(empty["streamId"])
+    }
 }
