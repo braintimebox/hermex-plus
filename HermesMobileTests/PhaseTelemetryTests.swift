@@ -525,9 +525,11 @@ final class PhaseTelemetryTests: XCTestCase {
         XCTAssertEqual(anomalies.first?.1 ?? 0, -50_000, accuracy: 0.001)
 
         // The next, sane span still records normally: one bad sample cannot poison
-        // the phase for the rest of the session.
+        // the phase for the rest of the session. The fake clock has to move PAST the
+        // window start (100) or the 15 s window never elapses and nothing flushes.
+        clock.value = 200
         let sane = telemetry.begin(.cacheWrite)
-        clock.value = 50.05
+        clock.value = 200.05
         telemetry.end(sane, context: [:])
         XCTAssertEqual(snapshots.count, 1)
         XCTAssertEqual(try XCTUnwrap(snapshots.first?.p50), 50, accuracy: 0.001)
