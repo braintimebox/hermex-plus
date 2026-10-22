@@ -9,66 +9,42 @@ final class SSEClientTests: XCTestCase {
     }
 
     func testSSEClientDeliversIncrementalEventsBeforeDone() async throws {
-        DelayedSSEURLProtocol.configure(chunks: [
-            DelayedSSEChunk(
-                text: "event: reasoning\ndata: {\"text\":\"Thinking live.\"}\n\n",
-                delayNanoseconds: 20_000_000
-            ),
-            DelayedSSEChunk(
-                text: "event: tool\ndata: {\"name\":\"read_file\",\"preview\":\"Reading file\"}\n\n",
-                delayNanoseconds: 20_000_000
-            ),
-            DelayedSSEChunk(
-                text: "event: token\ndata: {\"text\":\"First live token.\"}\n\n",
-                delayNanoseconds: 20_000_000
-            ),
-            DelayedSSEChunk(
-                text: "event: done\ndata: {\"usage\":{}}\n\n",
-                delayNanoseconds: 250_000_000
-            ),
-            DelayedSSEChunk(
-                text: "event: stream_end\ndata: {}\n\n",
-                delayNanoseconds: 10_000_000
-            )
-        ])
+        let gateReached = expectation(description: "fixture paused immediately before done")
+        let gate = DelayedSSEGate { gateReached.fulfill() }
+        defer { Task { await gate.release() } }
+        DelayedSSEURLProtocol.configure(
+            chunks: [
+                DelayedSSEChunk(
+                    text: "event: reasoning\ndata: {\"text\":\"Thinking live.\"}\n\n",
+                    delayNanoseconds: 0
+                ),
+                DelayedSSEChunk(
+                    text: "event: tool\ndata: {\"name\":\"read_file\",\"preview\":\"Reading file\"}\n\n",
+                    delayNanoseconds: 0
+                ),
+                DelayedSSEChunk(
+                    text: "event: token\ndata: {\"text\":\"First live token.\"}\n\n",
+                    delayNanoseconds: 0
+                ),
+                DelayedSSEChunk(
+                    text: "event: done\ndata: {\"usage\":{}}\n\n",
+                    delayNanoseconds: 0
+                ),
+                DelayedSSEChunk(
+                    text: "event: stream_end\ndata: {}\n\n",
+                    delayNanoseconds: 0
+                )
+            ],
+            pauseBeforeChunkIndex: 3,
+            gate: gate
+        )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [DelayedSSEURLProtocol.self]
         let client = SSEClient(urlSessionConfiguration: configuration)
-        let liveEvent = expectation(description: "received live event before done")
+        let liveEvents = expectation(description: "all live events received before done")
+        liveEvents.expectedFulfillmentCount = 3
         let doneEvent = expectation(description: "received done event")
-        var didFulfillLiveEvent = false
-        var receivedEvents: [SSEEvent] = []
-
-        client.start(url: URL(string: "https://example.test/api/chat/stream?stream_id=stream-123")!) { event in
-            receivedEvents.append(event)
-
-            if !didFulfillLiveEvent {
-                switch event {
-                case .reasoning, .toolStarted, .toolCompleted, .token, .interimAssistant:
-                    didFulfillLiveEvent = true
-                    liveEvent.fulfill()
-                default:
-                    break
-                }
-            }
-
-            if case .done = event {
-                doneEvent.fulfill()
-            }
-        }
-
-        // Generous deadline: CI runners under parallel-clone load have blown a
-        // 1s budget on wall-clock chunk delays that finish in ~0.3s locally (#76).
-        await fulfillment(of: [liveEvent], timeout: 5)
-        XCTAssertFalse(receivedEvents.contains { event in
-            if case .done = event { return true }
-            return false
-        })
-
-        await fulfillment(of: [doneEvent], timeout: 5)
-        client.stop()
-
-        XCTAssertEqual(Array(receivedEvents.prefix(3)), [
+        let expectedLiveEvents: [SSEEvent] = [
             .reasoning("Thinking live."),
             .toolStarted(ToolStreamEvent(
                 eventType: nil,
@@ -79,7 +55,42 @@ final class SSEClientTests: XCTestCase {
                 isError: nil
             )),
             .token("First live token.")
-        ])
+        ]
+        var receivedEvents: [SSEEvent] = []
+
+        client.start(url: URL(string: "https://example.test/api/chat/stream?stream_id=stream-123")!) { event in
+            receivedEvents.append(event)
+
+            switch event {
+            case .reasoning, .toolStarted, .token:
+                liveEvents.fulfill()
+            default:
+                break
+            }
+
+            if case .done = event {
+                doneEvent.fulfill()
+            }
+        }
+
+        // The fixture itself is held before `.done`: no wall-clock guess about
+        // when XCTest will resume after the first callback.
+        await fulfillment(of: [gateReached, liveEvents], timeout: 5)
+        XCTAssertEqual(Array(receivedEvents.prefix(3)), expectedLiveEvents)
+        XCTAssertFalse(receivedEvents.contains { event in
+            if case .done = event { return true }
+            return false
+        })
+
+        await gate.release()
+        await fulfillment(of: [doneEvent], timeout: 5)
+        client.stop()
+
+        let doneIndex = try XCTUnwrap(receivedEvents.firstIndex { event in
+            if case .done = event { return true }
+            return false
+        })
+        XCTAssertGreaterThan(doneIndex, expectedLiveEvents.count - 1)
         XCTAssertEqual(
             DelayedSSEURLProtocol.capturedRequest()?.value(forHTTPHeaderField: "Accept"),
             "text/event-stream"
@@ -679,25 +690,63 @@ private struct DelayedSSEChunk {
     let delayNanoseconds: UInt64
 }
 
+/// A test-controlled barrier: the protocol suspends when it reaches the selected
+/// chunk and resumes only when the test releases it. Suspension, not a blocking
+/// semaphore, so the fixture never starves the cooperative pool it runs on, and no
+/// wall-clock delay is used to infer event ordering.
+private actor DelayedSSEGate {
+    private var pendingResume: CheckedContinuation<Void, Never>?
+    private var didRelease = false
+    private let onReached: () -> Void
+
+    init(onReached: @escaping () -> Void) {
+        self.onReached = onReached
+    }
+
+    func pause() async {
+        onReached()
+        guard !didRelease else { return }
+        await withCheckedContinuation { pendingResume = $0 }
+    }
+
+    func release() {
+        didRelease = true
+        pendingResume?.resume()
+        pendingResume = nil
+    }
+}
+
 private final class DelayedSSEURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var chunks: [DelayedSSEChunk] = []
+    private static var pauseBeforeChunkIndex: Int?
+    private static var gate: DelayedSSEGate?
     private static var lastRequest: URLRequest?
 
     private var loadingTask: Task<Void, Never>?
 
-    static func configure(chunks: [DelayedSSEChunk]) {
+    static func configure(
+        chunks: [DelayedSSEChunk],
+        pauseBeforeChunkIndex: Int? = nil,
+        gate: DelayedSSEGate? = nil
+    ) {
         lock.lock()
         self.chunks = chunks
+        self.pauseBeforeChunkIndex = pauseBeforeChunkIndex
+        self.gate = gate
         lastRequest = nil
         lock.unlock()
     }
 
     static func reset() {
         lock.lock()
+        let gate = self.gate
         chunks = []
+        pauseBeforeChunkIndex = nil
+        self.gate = nil
         lastRequest = nil
         lock.unlock()
+        Task { await gate?.release() }
     }
 
     static func capturedRequest() -> URLRequest? {
@@ -716,9 +765,13 @@ private final class DelayedSSEURLProtocol: URLProtocol {
 
     override func startLoading() {
         let chunks: [DelayedSSEChunk]
+        let pauseBeforeChunkIndex: Int?
+        let gate: DelayedSSEGate?
         Self.lock.lock()
         Self.lastRequest = request
         chunks = Self.chunks
+        pauseBeforeChunkIndex = Self.pauseBeforeChunkIndex
+        gate = Self.gate
         Self.lock.unlock()
 
         guard let url = request.url,
@@ -739,7 +792,11 @@ private final class DelayedSSEURLProtocol: URLProtocol {
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         loadingTask = Task { [weak self] in
             guard let self else { return }
-            for chunk in chunks {
+            for (index, chunk) in chunks.enumerated() {
+                guard !Task.isCancelled else { return }
+                if index == pauseBeforeChunkIndex, let gate {
+                    await gate.pause()
+                }
                 guard !Task.isCancelled else { return }
                 if chunk.delayNanoseconds > 0 {
                     try? await Task.sleep(nanoseconds: chunk.delayNanoseconds)

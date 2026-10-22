@@ -8530,12 +8530,52 @@ final class ChatViewModelSendTests: XCTestCase {
             }
         }
 
+        // Hold the serial message-write queue so loadMessages can enqueue its old
+        // server snapshot without letting it reach SwiftData yet.
+        let oldWriteQueueEntered = expectation(description: "message write queue held")
+        let releaseOldWriteQueue = DispatchSemaphore(value: 0)
+        defer { releaseOldWriteQueue.signal() }
+        CacheStore.writeQueue.async {
+            oldWriteQueueEntered.fulfill()
+            releaseOldWriteQueue.wait()
+        }
+        await fulfillment(of: [oldWriteQueueEntered], timeout: 5)
+        let preClearGeneration = viewModel.messageCacheWriteFence.capture()
+
         await viewModel.loadMessages(modelContext: context)
         XCTAssertFalse(viewModel.messages.isEmpty)
 
-        let result = await viewModel.clearConversationFromSlashCommand(modelContext: context)
+        let cacheClearEnqueued = expectation(description: "/clear queued after earlier writes")
+        let clearTask = Task {
+            await viewModel.clearConversationFromSlashCommand(
+                modelContext: context,
+                cacheClearEnqueued: { cacheClearEnqueued.fulfill() }
+            )
+        }
+        await fulfillment(of: [cacheClearEnqueued], timeout: 5)
+        // The clear is only queued behind the held writer: it must not have wiped
+        // anything yet, and the operation must still be in flight.
+        XCTAssertTrue(viewModel.isClearingConversation)
+        XCTAssertFalse(
+            try CacheStore.cachedMessages(serverURL: serverURL, sessionID: "session-abc", in: context).isEmpty,
+            "clear must not run before older queued writes finish"
+        )
+
+        // Simulate a pre-clear operation whose stale snapshot is enqueued only after
+        // the clear was scheduled. Its captured generation must make it a no-op.
+        viewModel.cacheMessagesInBackground(
+            [ChatMessage(role: "assistant", content: "Late stale snapshot", timestamp: 1_770_000_003, messageId: "late-stale")],
+            sessionID: "session-abc",
+            modelContext: context,
+            writeGeneration: preClearGeneration
+        )
+
+        releaseOldWriteQueue.signal()
+        let result = await clearTask.value
+        CacheStore.writeQueue.sync {}
 
         XCTAssertEqual(result, .executed(message: nil))
+        XCTAssertFalse(viewModel.isClearingConversation)
         XCTAssertEqual(requestPaths, ["/api/session", "/api/session/clear"])
         XCTAssertTrue(viewModel.messages.isEmpty)
         XCTAssertEqual(viewModel.displayTitle, "Untitled")

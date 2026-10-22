@@ -366,7 +366,7 @@ final class PhaseTelemetryTests: XCTestCase {
     /// Two overlapping spans of the same phase each keep their own start: the
     /// second `begin` used to overwrite the first, so one span measured the other
     /// and the other disappeared.
-    func testOverlappingPhaseSpansAreBothRecorded() {
+    func testOverlappingPhaseSpansAreBothRecorded() throws {
         var clock = 1_000_000.0
         var snapshots: [PhaseAggregator.Snapshot] = []
         let telemetry = PhaseTelemetry(
@@ -387,8 +387,11 @@ final class PhaseTelemetryTests: XCTestCase {
 
         let snapshot = snapshots.first { $0.phase == .pickerNetwork }
         XCTAssertEqual(snapshot?.count, 2, "both spans must survive")
-        XCTAssertEqual(snapshot?.p50, 50, "LIFO pairs each end with its own start")
-        XCTAssertEqual(snapshot?.maximum, 250)
+        // `TimeInterval` is Double seconds; decimal fake-clock steps can differ by
+        // sub-microsecond representation error after conversion to milliseconds.
+        // 0.001 ms is far below a real pairing error (50 vs 250 ms) but above that noise.
+        XCTAssertEqual(try XCTUnwrap(snapshot?.p50), 50, accuracy: 0.001, "LIFO pairs each end with its own start")
+        XCTAssertEqual(try XCTUnwrap(snapshot?.maximum), 250, accuracy: 0.001)
     }
 
     /// An `end` without a matching `begin` records nothing instead of inventing a
@@ -452,7 +455,7 @@ final class PhaseTelemetryTests: XCTestCase {
     /// Spans that finish in START order cannot be paired by a stack at all: the
     /// first `end` would pop the second span's start. Tokens pair each end with its
     /// own span, so both durations stay true.
-    func testTokenSpansPairEachEndWithItsOwnStart() {
+    func testTokenSpansPairEachEndWithItsOwnStart() throws {
         var clock = 1_000_000.0
         var snapshots: [PhaseAggregator.Snapshot] = []
         let telemetry = PhaseTelemetry(
@@ -473,8 +476,8 @@ final class PhaseTelemetryTests: XCTestCase {
 
         let snapshot = snapshots.first { $0.phase == .cacheRead }
         XCTAssertEqual(snapshot?.count, 2)
-        XCTAssertEqual(snapshot?.p50, 300)
-        XCTAssertEqual(snapshot?.maximum, 300)
+        XCTAssertEqual(try XCTUnwrap(snapshot?.p50), 300, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(snapshot?.maximum), 300, accuracy: 0.001)
     }
 
     /// A token that was never opened, or already closed, records nothing.

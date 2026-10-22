@@ -340,6 +340,7 @@ final class ChatViewModel {
     /// `/clear` refuses while it is set, so the clear response cannot wipe a
     /// message the user started inside that window (#389).
     private(set) var isClearingConversation = false
+    @ObservationIgnored let messageCacheWriteFence = CacheWriteFence()
     private(set) var displayTitle: String
     private(set) var listeningMessageID: String?
     private(set) var streamingScrollTrigger = 0
@@ -1778,9 +1779,18 @@ final class ChatViewModel {
             errorMessage = String(localized: "The server did not provide a session ID.")
             return
         }
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
 
         resetPendingStreamingContentBuffers()
         latestServerLoadHadAssistantResponseAfterLatestUser = false
+        // Anchor diagnostics to the session that is actually being opened. Without
+        // this, events logged after leaving a chat still carry the previous
+        // session's id (ambient context is cleared on nil). Skipped while a stream
+        // is live: that stream owns its own ids.
+        if activeStreamID == nil {
+            HermexLogger.shared.setDiagnosticContext(sessionId: sessionID, streamId: nil)
+        }
+
         let streamLoadPreparation = streamCoordinator.prepareForSessionLoad()
         isLoading = true
         errorMessage = nil
@@ -1812,6 +1822,7 @@ final class ChatViewModel {
         do {
             let networkStart = Date()
             let (response, loadAttempts) = try await clientSessionWithRetry(sessionID: sessionID)
+            guard messageCacheWriteFence.isCurrent(cacheWriteGeneration) else { return }
             let networkMs = Int(Date().timeIntervalSince(networkStart) * 1000)
             let session = response.session
             let loadedMessages = session?.messages ?? []
@@ -1883,7 +1894,12 @@ final class ChatViewModel {
                 estimatedCost: session?.estimatedCost
             )
             if let modelContext {
-                cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
+                cacheMessagesInBackground(
+                    messages,
+                    sessionID: sessionID,
+                    modelContext: modelContext,
+                    writeGeneration: cacheWriteGeneration
+                )
             }
             if let title = session?.title {
                 displayTitle = Self.displayTitle(from: title)
@@ -1912,6 +1928,7 @@ final class ChatViewModel {
                 )
             )
         } catch {
+            guard messageCacheWriteFence.isCurrent(cacheWriteGeneration) else { return }
             lastError = error
             latestServerLoadHadAssistantResponseAfterLatestUser = false
             if CacheFallbackPolicy.shouldUseCache(for: error), let modelContext {
@@ -2135,6 +2152,7 @@ final class ChatViewModel {
             errorMessage = String(localized: "The server did not provide a session ID.")
             return false
         }
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
 
         guard !isLoadingOlderMessages, hasOlderMessages else {
             return false
@@ -2163,6 +2181,7 @@ final class ChatViewModel {
                 messageLimit: Self.messagePageLimit,
                 messageBefore: messageBefore
             )
+            guard messageCacheWriteFence.isCurrent(cacheWriteGeneration) else { return false }
             guard let session = response.session else {
                 hasOlderMessages = false
                 return false
@@ -2203,7 +2222,12 @@ final class ChatViewModel {
             completedReasoningGroups = []
 
             if let modelContext {
-                cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
+                cacheMessagesInBackground(
+                    messages,
+                    sessionID: sessionID,
+                    modelContext: modelContext,
+                    writeGeneration: cacheWriteGeneration
+                )
             }
 
             HermexLogger.shared.log(
@@ -2221,6 +2245,7 @@ final class ChatViewModel {
 
             return didAddMessages
         } catch {
+            guard messageCacheWriteFence.isCurrent(cacheWriteGeneration) else { return false }
             lastError = error
             errorMessage = error.localizedDescription
             HermexLogger.shared.log(
@@ -2907,6 +2932,7 @@ final class ChatViewModel {
             sendErrorMessage = String(localized: "The server did not provide a session ID.")
             return false
         }
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
 
         // HERMEX-FORK: the goal notice itself says "send a new message, or type
         // continue, to kick it off" — so the send IS its acknowledgement. It goes
@@ -2945,7 +2971,8 @@ final class ChatViewModel {
             messageAttachments: attachmentPreparation.messageAttachments,
             apiPayloads: attachmentPreparation.apiPayloads,
             attachmentsToRestoreOnFailure: attachmentPreparation.attachments,
-            modelContext: modelContext
+            modelContext: modelContext,
+            writeGeneration: cacheWriteGeneration
         )
         if didStart {
             for attachment in attachmentPreparation.attachments {
@@ -2995,6 +3022,7 @@ final class ChatViewModel {
             setUploadAttachmentError(String(localized: "The server did not provide a session ID."))
             return false
         }
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
 
         isSendingVoiceNote = true
         setUploadAttachmentError(nil)
@@ -3007,6 +3035,7 @@ final class ChatViewModel {
         let transcript: String
         do {
             let response = try await client.transcribeAudio(data: audioData, filename: filename)
+            guard messageCacheWriteFence.isCurrent(cacheWriteGeneration) else { return false }
             if let serverError = response.error?.trimmingCharacters(in: .whitespacesAndNewlines),
                !serverError.isEmpty {
                 setUploadAttachmentError(serverError)
@@ -3058,7 +3087,8 @@ final class ChatViewModel {
             messageAttachments: [messageAttachment],
             apiPayloads: [pending.toJSONValue()],
             attachmentsToRestoreOnFailure: [],
-            modelContext: modelContext
+            modelContext: modelContext,
+            writeGeneration: cacheWriteGeneration
         )
     }
 
@@ -3118,7 +3148,8 @@ final class ChatViewModel {
         messageAttachments: [MessageAttachment],
         apiPayloads: [JSONValue]?,
         attachmentsToRestoreOnFailure: [PendingAttachment],
-        modelContext: ModelContext?
+        modelContext: ModelContext?,
+        writeGeneration: UInt64
     ) async -> Bool {
         isStartingChat = true
         sendErrorMessage = nil
@@ -3142,7 +3173,7 @@ final class ChatViewModel {
         )
         messages.append(optimisticMessage)
 
-        cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+        cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext, writeGeneration: writeGeneration)
 
         do {
             let explicitModelPick = explicitModelPickForChatStart()
@@ -3173,7 +3204,7 @@ final class ChatViewModel {
                     screen: "ChatViewModel"
                 )
                 rollbackOptimisticMessage(id: localMessageID)
-                cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+                cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext, writeGeneration: writeGeneration)
                 restorePendingAttachments(attachmentsToRestoreOnFailure)
                 return false
             }
@@ -3187,7 +3218,7 @@ final class ChatViewModel {
         } catch {
             if let streamID = (error as? APIError)?.activeStreamID {
                 rollbackOptimisticMessage(id: localMessageID)
-                cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+                cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext, writeGeneration: writeGeneration)
                 restorePendingAttachments(attachmentsToRestoreOnFailure)
                 // The existing run may have started outside this view model. Reconcile
                 // the server transcript first so the SSE tokens attach to the persisted
@@ -3211,7 +3242,7 @@ final class ChatViewModel {
             // the watchdog can group today's failures without being told.
             DeliveryTelemetry.record(error, path: .send, screen: "ChatViewModel")
             rollbackOptimisticMessage(id: localMessageID)
-            cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+            cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext, writeGeneration: writeGeneration)
             restorePendingAttachments(attachmentsToRestoreOnFailure)
             return false
         }
@@ -3367,14 +3398,16 @@ final class ChatViewModel {
     /// send-time freeze (one SwiftData fetch per message). ModelContainer is
     /// Sendable; the background context is created inside the worker and
     /// discarded after the save.
-    private func cacheMessagesInBackground(
+    func cacheMessagesInBackground(
         _ messages: [ChatMessage],
         sessionID: String,
-        modelContext: ModelContext?
+        modelContext: ModelContext?,
+        writeGeneration: UInt64
     ) {
         guard let modelContext else { return }
         let container = modelContext.container
         let serverURL = server
+        let writeFence = messageCacheWriteFence
         // Timestamped here, on the caller's thread, not inside the worker.
         //
         // This date orders competing writes: a snapshot issued later must win.
@@ -3386,6 +3419,9 @@ final class ChatViewModel {
         // HERMEX-FORK: CacheStore.writeQueue is serial, so writes keep their order
         // by construction instead of relying on the timestamp guard alone.
         CacheStore.writeQueue.async {
+            // A snapshot captured before `/clear` must not be allowed to run after
+            // its clear barrier, even when this queue item was enqueued late.
+            guard writeFence.isCurrent(writeGeneration) else { return }
             let bgContext = ModelContext(container)
             do {
                 try CacheStore.cacheMessages(
@@ -3401,14 +3437,27 @@ final class ChatViewModel {
         }
     }
 
-    private func cacheCurrentMessages(sessionID: String, modelContext: ModelContext?) {
+    private func cacheCurrentMessages(
+        sessionID: String,
+        modelContext: ModelContext?,
+        writeGeneration: UInt64
+    ) {
         guard modelContext != nil else { return }
-        cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
+        cacheMessagesInBackground(
+            messages,
+            sessionID: sessionID,
+            modelContext: modelContext,
+            writeGeneration: writeGeneration
+        )
     }
 
     func cacheCompletedResponse(modelContext: ModelContext) {
         guard let sessionID else { return }
-        cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+        cacheCurrentMessages(
+            sessionID: sessionID,
+            modelContext: modelContext,
+            writeGeneration: messageCacheWriteFence.capture()
+        )
     }
 
     func clearTranscript() {
@@ -4392,7 +4441,10 @@ final class ChatViewModel {
     /// irreversible, so `ChatView` confirms before calling this. Pass the
     /// `ModelContext` so the offline cache is emptied too — otherwise a cold
     /// open would repaint the history this just deleted.
-    func clearConversationFromSlashCommand(modelContext: ModelContext?) async -> SlashCommandExecutionResult {
+    func clearConversationFromSlashCommand(
+        modelContext: ModelContext?,
+        cacheClearEnqueued: (() -> Void)? = nil
+    ) async -> SlashCommandExecutionResult {
         if let refusal = clearConversationRefusal {
             return .unsupported(friendlyMessage: refusal)
         }
@@ -4412,13 +4464,25 @@ final class ChatViewModel {
                 return .unsupported(friendlyMessage: error)
             }
 
+            // Any snapshot captured before this point belongs to the history the
+            // server just deleted: invalidate it so a late queued write is a no-op.
+            messageCacheWriteFence.invalidate()
+
             clearTranscript()
             displayTitle = Self.displayTitle(from: response.session?.title)
             liveActivityManager.update(.sessionTitle(displayTitle))
 
             if let modelContext {
                 do {
-                    try CacheStore.cacheMessages([], serverURL: server, sessionID: sessionID, in: modelContext)
+                    // Same serial queue as every background snapshot: older writes
+                    // finish first, and the return happens only after the empty
+                    // snapshot has committed, so nobody can repaint cleared history.
+                    try await CacheStore.clearMessagesAndWait(
+                        serverURL: server,
+                        sessionID: sessionID,
+                        in: modelContext.container,
+                        onEnqueued: cacheClearEnqueued
+                    )
                 } catch {
                     // The server history is gone but the offline copy still
                     // holds it, so a later cold open would repaint messages the
@@ -4842,6 +4906,7 @@ final class ChatViewModel {
             return false
         }
 
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
         isEditingMessage = true
         messageActionErrorMessage = nil
         lastError = nil
@@ -4870,7 +4935,12 @@ final class ChatViewModel {
                 reasoningAnchorMessageID = nil
 
                 if let modelContext {
-                    cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
+                    cacheMessagesInBackground(
+                        messages,
+                        sessionID: sessionID,
+                        modelContext: modelContext,
+                        writeGeneration: cacheWriteGeneration
+                    )
                 }
             }
 
@@ -4946,6 +5016,7 @@ final class ChatViewModel {
             return false
         }
 
+        let cacheWriteGeneration = messageCacheWriteFence.capture()
         isRegeneratingMessage = true
         messageActionErrorMessage = nil
         lastError = nil
@@ -4973,7 +5044,12 @@ final class ChatViewModel {
                 reasoningAnchorMessageID = nil
 
                 if let modelContext {
-                    cacheMessagesInBackground(messages, sessionID: sessionID, modelContext: modelContext)
+                    cacheMessagesInBackground(
+                        messages,
+                        sessionID: sessionID,
+                        modelContext: modelContext,
+                        writeGeneration: cacheWriteGeneration
+                    )
                 }
             }
 
