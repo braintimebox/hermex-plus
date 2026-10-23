@@ -38,6 +38,10 @@ final class HermexLogger {
     /// Counting of POST outcomes, exposed for tests and diagnostics.
     private(set) var deliveredBatches = 0
     private(set) var failedBatches = 0
+    /// Events that reached the queue but could not be written to disk: they are
+    /// NOT durable and must not be reported as saved.
+    private(set) var unpersistedEvents = 0
+    private(set) var rejectedOversizeEvents = 0
 
     /// Diagnostic identity of the operation currently in flight. Attached to every
     /// event so `sessionId`/`streamId` survive into the log even when the call site
@@ -165,8 +169,19 @@ final class HermexLogger {
     // MARK: - delivery
 
     private func enqueue(_ event: [String: Any], eventId: String) {
-        guard let data = try? JSONSerialization.data(withJSONObject: event) else { return }
-        _ = spool.append(eventId: eventId, json: data)
+        guard let data = try? JSONSerialization.data(withJSONObject: event) else {
+            // Serialisation failure is a loss: the spool never saw this event.
+            unpersistedEvents += 1
+            return
+        }
+        switch spool.append(eventId: eventId, json: data) {
+        case .persisted:
+            break
+        case .memoryOnly:
+            unpersistedEvents += 1
+        case .rejectedOversize:
+            rejectedOversizeEvents += 1
+        }
     }
 
     /// Serialises a batch and posts it. An event is removed from the spool only
@@ -244,6 +259,12 @@ final class HermexLogger {
     var pendingEventCount: Int { spool.pendingCount }
     /// Test seam: number of events dropped by the overflow policy.
     var droppedEventCount: Int { spool.droppedCount }
+    /// Test seam: bytes currently held by the queue.
+    var pendingByteCount: Int { spool.pendingBytes }
+    /// Test seam: drops the journal could not record (memory-only).
+    var unloggedDropCount: Int { spool.unloggedDropCount }
+    /// Test seam: failed spool writes.
+    var persistenceFailureCount: Int { spool.persistenceFailureCount }
     func logUserAction(_ action: UserAction, screen: String? = nil, extras: [String: Any]? = nil) {
         log(type: "action", screen: screen, message: "user \(action.rawValue)", extras: extras)
     }

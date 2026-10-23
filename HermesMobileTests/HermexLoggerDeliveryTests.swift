@@ -285,7 +285,7 @@ final class HermexLoggerDeliveryTests: XCTestCase {
     // MARK: - overflow policy
 
     func testOverflowDropsOldestAndRecordsTheLoss() {
-        let small = TelemetrySpool(directory: directory, capacity: 2)
+        let small = TelemetrySpool(directory: directory, eventLimit: 2, byteLimit: 4096)
         for index in 0..<4 {
             small.append(eventId: "e-\(index)", json: Data("{\"n\":\(index)}".utf8))
         }
@@ -364,5 +364,163 @@ final class TelemetrySpoolTests: XCTestCase {
         let spool = TelemetrySpool(directory: readOnly)
         spool.append(eventId: "kept", json: Data("{}".utf8))
         XCTAssertEqual(spool.pendingCount, 1, "a persist failure must not drop the event")
+    }
+}
+
+
+/// Limits, overflow policy and the drop journal.
+final class TelemetrySpoolLimitsTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUp() {
+        super.setUp()
+        directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("limits-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        try? FileManager.default.removeItem(at: directory)
+        super.tearDown()
+    }
+
+    private func payload(_ bytes: Int, marker: String = "x") -> Data {
+        Data("{\"pad\":\"\(marker)\",\"v\":\"\(String(repeating: "a", count: max(0, bytes - 20)))\"}".utf8)
+    }
+
+    private func dropRecords() -> [[String: Any]] {
+        let file = directory.appendingPathComponent("telemetry-drops.jsonl")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").compactMap {
+            (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any]
+        }
+    }
+
+    func testEventLimitDropsOldestAndRecordsRange() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 3, byteLimit: 64 * 1024)
+        for index in 0..<5 {
+            spool.append(eventId: "e\(index)", json: payload(64))
+        }
+        XCTAssertEqual(spool.pendingCount, 3)
+        XCTAssertEqual(spool.ready(limit: 10).map(\.id), ["e2", "e3", "e4"])
+        XCTAssertEqual(spool.droppedCount, 2)
+        let overflow = dropRecords().filter { ($0["reason"] as? String) == "overflow" }
+        XCTAssertEqual(overflow.first?["oldest"] as? String, "e0")
+        XCTAssertEqual(overflow.first?["count"] as? Int, 2)
+    }
+
+    func testByteLimitTripsBeforeEventLimit() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 1_000)
+        for index in 0..<10 {
+            spool.append(eventId: "b\(index)", json: payload(300))
+        }
+        XCTAssertLessThanOrEqual(spool.pendingCount, 4, "byte budget, not the count, must bound the queue")
+        XCTAssertLessThanOrEqual(spool.pendingBytes, 1_000)
+        XCTAssertGreaterThan(spool.droppedCount, 0)
+    }
+
+    func testOversizeEventIsRejectedAndRecorded() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 512)
+        let result = spool.append(eventId: "huge", json: payload(2_000))
+        XCTAssertEqual(result, .rejectedOversize)
+        XCTAssertEqual(spool.pendingCount, 0)
+        XCTAssertTrue(dropRecords().contains { ($0["reason"] as? String) == "oversize_event" })
+    }
+
+    func testLoadEnforcesBothLimits() throws {
+        // Build a spool file that exceeds both budgets, as an older build might.
+        var lines = ""
+        for index in 0..<20 {
+            let record: [String: Any] = ["id": "old\(index)", "json": payload(200).base64EncodedString(),
+                                         "attempts": 0, "nextAttemptAt": 0.0]
+            let data = try JSONSerialization.data(withJSONObject: record)
+            lines += String(decoding: data, as: UTF8.self) + "\n"
+        }
+        try lines.write(to: directory.appendingPathComponent("telemetry-spool.jsonl"), atomically: true, encoding: .utf8)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 5, byteLimit: 1_500)
+        XCTAssertLessThanOrEqual(spool.pendingCount, 5)
+        XCTAssertLessThanOrEqual(spool.pendingBytes, 1_500)
+        XCTAssertGreaterThan(spool.droppedCount, 0, "trimming on load is a recorded loss")
+    }
+
+    func testDropCountersMatchJournal() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 2, byteLimit: 8 * 1024)
+        for index in 0..<6 { spool.append(eventId: "c\(index)", json: payload(80)) }
+        let logged = dropRecords().reduce(0) { $0 + (($1["count"] as? Int) ?? 0) }
+        XCTAssertEqual(logged, spool.droppedCount - spool.unloggedDropCount)
+    }
+
+    func testPersistFailureIsNotReportedAsPersisted() throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 8 * 1024)
+        let result = spool.append(eventId: "ro", json: payload(64))
+        XCTAssertEqual(result, .memoryOnly, "a failed write must never claim durability")
+        XCTAssertEqual(spool.pendingCount, 1)
+        XCTAssertGreaterThan(spool.persistenceFailureCount, 0)
+    }
+
+    func testCorruptAndTornLinesAreCounted() throws {
+        let good = try JSONSerialization.data(withJSONObject:
+            ["id": "ok", "json": payload(40).base64EncodedString(), "attempts": 0, "nextAttemptAt": 0.0])
+        var text = String(decoding: good, as: UTF8.self) + "\n"
+        text += "not-json-at-all\n"
+        text += "{\"id\":\"torn\""   // no newline: crash mid-write
+        try text.write(to: directory.appendingPathComponent("telemetry-spool.jsonl"), atomically: true, encoding: .utf8)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 64 * 1024)
+        XCTAssertEqual(spool.pendingCount, 1)
+        XCTAssertEqual(spool.droppedCount, 2, "one corrupt line and one torn line")
+        XCTAssertTrue(dropRecords().contains { ($0["reason"] as? String) == "corrupt_spool_line" })
+    }
+
+    func testDropJournalRotatesAndKeepsOneGeneration() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 1, byteLimit: 8 * 1024, dropLogLimit: 200)
+        for index in 0..<40 { spool.append(eventId: "r\(index)", json: payload(64)) }
+        let current = directory.appendingPathComponent("telemetry-drops.jsonl")
+        let previous = directory.appendingPathComponent("telemetry-drops.1.jsonl")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: previous.path), "rotation must keep one generation")
+        let size = (try? FileManager.default.attributesOfItem(atPath: current.path)[.size] as? Int) ?? 0
+        XCTAssertLessThanOrEqual(size, 200, "the journal must stay bounded")
+    }
+
+    func testDropJournalOpenFailureCountsUnloggedDrops() throws {
+        // A directory where the journal file should be: opening it always fails.
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("telemetry-drops.jsonl"),
+                                                withIntermediateDirectories: true)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 1, byteLimit: 8 * 1024)
+        for index in 0..<5 { spool.append(eventId: "u\(index)", json: payload(64)) }
+        XCTAssertGreaterThan(spool.droppedCount, 0)
+        XCTAssertGreaterThan(spool.unloggedDropCount, 0, "an unwritable journal must surface as unlogged loss")
+    }
+
+    func testRepeatedWriteFailureDoesNotLoopOrGrow() throws {
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("telemetry-drops.jsonl"),
+                                                withIntermediateDirectories: true)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 1, byteLimit: 8 * 1024)
+        for index in 0..<10 { spool.append(eventId: "l\(index)", json: payload(64)) }
+        let unloggedAfterFirst = spool.unloggedDropCount
+        for index in 10..<20 { spool.append(eventId: "l\(index)", json: payload(64)) }
+        XCTAssertGreaterThanOrEqual(spool.unloggedDropCount, unloggedAfterFirst)
+        XCTAssertFalse(FileManager.default.fileExists(atPath:
+            directory.appendingPathComponent("telemetry-drops.1.jsonl").path),
+            "a blocked journal must not spawn rotations")
+    }
+
+    func testInterruptedDropRotationIsRecovered() throws {
+        let rotating = directory.appendingPathComponent("telemetry-drops.rotating")
+        try "{\"reason\":\"interrupted\"}\n".write(to: rotating, atomically: true, encoding: .utf8)
+        _ = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 8 * 1024)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: rotating.path))
+        let previous = directory.appendingPathComponent("telemetry-drops.1.jsonl")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: previous.path))
+    }
+
+    func testConcurrentAppendsRespectBothBudgets() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 20, byteLimit: 4_000)
+        DispatchQueue.concurrentPerform(iterations: 200) { index in
+            spool.append(eventId: "p\(index)", json: payload(80))
+        }
+        XCTAssertLessThanOrEqual(spool.pendingCount, 20)
+        XCTAssertLessThanOrEqual(spool.pendingBytes, 4_000)
     }
 }
