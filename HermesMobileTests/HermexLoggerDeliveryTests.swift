@@ -17,6 +17,9 @@ final class HermexLoggerDeliveryTests: XCTestCase {
             var error: Error?
             /// Never answers: models a request whose completion never fires.
             var hang: Bool = false
+            /// Answers late: models a callback that arrives after the client
+            /// already gave up on it.
+            var delay: TimeInterval = 0
         }
         static var script: [Response] = []
         static var bodies: [Data] = []
@@ -49,9 +52,16 @@ final class HermexLoggerDeliveryTests: XCTestCase {
             }
             let http = HTTPURLResponse(url: request.url!, statusCode: response.status,
                                        httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data("{\"ok\":true}".utf8))
-            client?.urlProtocolDidFinishLoading(self)
+            let deliver = {
+                self.client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+                self.client?.urlProtocol(self, didLoad: Data("{\"ok\":true}".utf8))
+                self.client?.urlProtocolDidFinishLoading(self)
+            }
+            if response.delay > 0 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + response.delay, execute: deliver)
+            } else {
+                deliver()
+            }
         }
 
         override func stopLoading() {}
@@ -234,6 +244,22 @@ final class HermexLoggerDeliveryTests: XCTestCase {
         logger.flushNow()   // stalledTimeout is 0: the sender recovers
         waitUntil("retry issued") { TelemetryURLProtocol.bodies.count >= 2 }
         waitUntil("delivered on retry") { self.spool.pendingCount == 0 }
+    }
+
+    func testLateCallbackFromAnAbandonedRequestIsIgnored() {
+        // First request answers late; the sender has already timed it out and
+        // started a second one. The stale callback must not touch the spool.
+        TelemetryURLProtocol.reset([.init(status: 200, delay: 0.3), .init(status: 200)])
+        logger = makeLogger(stalledTimeout: 0)
+        logger.log(type: "event", message: "late")
+        logger.flushNow()
+        waitUntil("first request issued") { TelemetryURLProtocol.bodies.count == 1 }
+        logger.flushNow()   // orphans the first request, sends the second
+        waitUntil("second request issued") { TelemetryURLProtocol.bodies.count >= 2 }
+        waitUntil("delivered once") { self.spool.pendingCount == 0 }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))  // let the stale callback land
+        XCTAssertEqual(spool.pendingCount, 0)
+        XCTAssertEqual(logger.deliveredBatches, 1, "a stale 200 must not be counted twice")
     }
 
     // MARK: - restart

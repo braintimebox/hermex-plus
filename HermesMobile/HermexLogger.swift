@@ -32,6 +32,9 @@ final class HermexLogger {
     private var flushTimer: DispatchSourceTimer?
     private var inFlight = false
     private var inFlightSince: TimeInterval = 0
+    /// Bumped for every send and every stall reset: a late callback from an
+    /// abandoned request must not mutate the state of the current one.
+    private var sendGeneration = 0
     /// Counting of POST outcomes, exposed for tests and diagnostics.
     private(set) var deliveredBatches = 0
     private(set) var failedBatches = 0
@@ -175,6 +178,7 @@ final class HermexLogger {
             let stalled = Date().timeIntervalSince1970 - inFlightSince
             guard stalled < stalledTimeout else {
                 inFlight = false
+                sendGeneration += 1   // orphan the callback that never arrived
                 failedBatches += 1
                 return
             }
@@ -202,12 +206,15 @@ final class HermexLogger {
         request.httpBody = payload
         request.timeoutInterval = 10
 
+        sendGeneration += 1
+        let generation = sendGeneration
         inFlight = true
         inFlightSince = Date().timeIntervalSince1970
         let ids = batch.map(\.id)
         session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
             self.queue.async {
+                guard generation == self.sendGeneration else { return }
                 self.inFlight = false
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 if error == nil && (200..<300).contains(status) {
