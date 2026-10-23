@@ -17,10 +17,71 @@ final class HermexLogger {
     static let shared = HermexLogger()
 
     private let queue = DispatchQueue(label: "hermex.logger", qos: .utility)
-    private var buffer: [[String: Any]] = []
     private let maxBatch = 20
     private let correlationId = UUID().uuidString
     private var sequenceCounter: Int = 0
+
+    /// Injected for tests: a URLSession backed by URLProtocol, and a URL source.
+    private let session: URLSession
+    private let serverURLProvider: () -> URL?
+    /// How long an unanswered request may block the sender before it is retried.
+    private let stalledTimeout: TimeInterval
+
+    /// Durable queue: an event survives a failed POST, a timeout and a restart.
+    private let spool: TelemetrySpool
+    private var flushTimer: DispatchSourceTimer?
+    private var inFlight = false
+    private var inFlightSince: TimeInterval = 0
+    /// Bumped for every send and every stall reset: a late callback from an
+    /// abandoned request must not mutate the state of the current one.
+    private var sendGeneration = 0
+    /// Counting of POST outcomes, exposed for tests and diagnostics.
+    private(set) var deliveredBatches = 0
+    private(set) var failedBatches = 0
+    /// Events that reached the queue but could not be written to disk: they are
+    /// NOT durable and must not be reported as saved.
+    private(set) var unpersistedEvents = 0
+    private(set) var rejectedOversizeEvents = 0
+
+    /// Diagnostic identity of the operation currently in flight. Attached to every
+    /// event so `sessionId`/`streamId` survive into the log even when the call site
+    /// does not know them: the phase and frame channels are shared by every screen.
+    private let diagnosticContextLock = NSLock()
+    private var diagnosticSessionId: String?
+    private var diagnosticStreamId: String?
+
+    func setDiagnosticContext(sessionId: String?, streamId: String?) {
+        diagnosticContextLock.lock()
+        defer { diagnosticContextLock.unlock() }
+        // nil clears: a stale id from a previous conversation must not be attached
+        // to events of the next one. Callers pass both explicitly for that reason.
+        diagnosticSessionId = sessionId
+        diagnosticStreamId = streamId
+    }
+
+    private func currentDiagnosticContext() -> (sessionId: String?, streamId: String?) {
+        diagnosticContextLock.lock()
+        defer { diagnosticContextLock.unlock() }
+        return (diagnosticSessionId, diagnosticStreamId)
+    }
+
+    /// Pure merge used by `log` and asserted by tests. Caller-supplied extras win,
+    /// so an event that already names its stream is never overwritten by ambient
+    /// context from a later operation.
+    static func applyingDiagnosticContext(
+        _ event: [String: Any],
+        sessionId: String?,
+        streamId: String?
+    ) -> [String: Any] {
+        var merged = event
+        if merged["sessionId"] == nil, let sessionId, !sessionId.isEmpty {
+            merged["sessionId"] = sessionId
+        }
+        if merged["streamId"] == nil, let streamId, !streamId.isEmpty {
+            merged["streamId"] = streamId
+        }
+        return merged
+    }
 
     public enum UserAction: String {
         case send, scroll, openChat, switchServer
@@ -31,7 +92,19 @@ final class HermexLogger {
     private var recentEvents: [String] = []
     private let maxRecent = 100
 
-    private init() {}
+    init(session: URLSession = .shared,
+         spool: TelemetrySpool = TelemetrySpool(),
+         serverURLProvider: @escaping () -> URL? = {
+             (try? KeychainStore().load(.serverURL)).flatMap { URL(string: $0) }
+         },
+         stalledTimeout: TimeInterval = 30,
+         startTimer: Bool = true) {
+        self.stalledTimeout = stalledTimeout
+        self.session = session
+        self.spool = spool
+        self.serverURLProvider = serverURLProvider
+        if startTimer { startFlushTimer() }
+    }
 
     /// The app's short version string, attached to every event so a freeze or
     /// stutter can always be attributed to the exact build it came from.
@@ -52,6 +125,7 @@ final class HermexLogger {
         queue.async { [self] in
             self.sequenceCounter += 1
             let seqNo = self.sequenceCounter
+            let eventId = UUID().uuidString
             let now = Date().timeIntervalSince1970
 
             // Keep a compact ring buffer of recent events for freeze context.
@@ -70,45 +144,140 @@ final class HermexLogger {
                 "appVersion": appVersion,
                 "correlationId": correlationId,
                 "seqNo": seqNo,
+                // Unique per event across launches, restarts and versions.
+                // This is the only key the server deduplicates on.
+                "eventId": eventId,
             ]
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
             if let extras { event.merge(extras) { _, new in new } }
+            let context = currentDiagnosticContext()
+            event = Self.applyingDiagnosticContext(
+                event,
+                sessionId: context.sessionId,
+                streamId: context.streamId
+            )
             if type == "freeze" {
                 event["lastEvents"] = recentEvents
                 event["foreground"] = UIApplication.shared.applicationState == .active
             }
-            buffer.append(event)
+            enqueue(event, eventId: eventId)
             flushIfNeeded()
         }
     }
 
+    // MARK: - delivery
+
+    private func enqueue(_ event: [String: Any], eventId: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: event) else {
+            // Serialisation failure is a loss: the spool never saw this event.
+            unpersistedEvents += 1
+            return
+        }
+        switch spool.append(eventId: eventId, json: data) {
+        case .persisted:
+            break
+        case .memoryOnly:
+            unpersistedEvents += 1
+        case .rejectedOversize:
+            rejectedOversizeEvents += 1
+        }
+    }
+
+    /// Serialises a batch and posts it. An event is removed from the spool only
+    /// after a 2xx answer; every failure reschedules the same events.
+    private func flushIfNeeded() {
+        if inFlight {
+            // A completion that never arrives (session invalidated, process
+            // suspended mid-request) must not wedge the sender forever.
+            let stalled = Date().timeIntervalSince1970 - inFlightSince
+            guard stalled < stalledTimeout else {
+                inFlight = false
+                sendGeneration += 1   // orphan the callback that never arrived
+                failedBatches += 1
+                return
+            }
+            return
+        }
+        guard let baseURL = serverURLProvider() else {
+            // No server configured yet: keep the events, retry later. They are
+            // bounded by the spool, so this cannot grow without limit.
+            return
+        }
+        let batch = spool.ready(limit: maxBatch)
+        guard !batch.isEmpty else { return }
+
+        var payload = Data("[".utf8)
+        for (index, item) in batch.enumerated() {
+            if index > 0 { payload.append(0x2C) }
+            payload.append(item.json)
+        }
+        payload.append(0x5D)
+
+        var request = URLRequest(url: baseURL.appendingPathComponent("webhook/hermex-logs"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Hermex-Request-ID")
+        request.httpBody = payload
+        request.timeoutInterval = 10
+
+        sendGeneration += 1
+        let generation = sendGeneration
+        inFlight = true
+        inFlightSince = Date().timeIntervalSince1970
+        let ids = batch.map(\.id)
+        session.dataTask(with: request) { [weak self] _, response, error in
+            guard let self else { return }
+            self.queue.async {
+                guard generation == self.sendGeneration else { return }
+                self.inFlight = false
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if error == nil && (200..<300).contains(status) {
+                    self.spool.acknowledge(ids: ids)
+                    self.deliveredBatches += 1
+                } else {
+                    // Timeout, network failure, 5xx, 429 or an unreadable answer:
+                    // the server may already have stored the event, and the retry
+                    // is idempotent because every event carries a unique eventId.
+                    self.failedBatches += 1
+                    self.spool.reschedule(ids: ids)
+                }
+                self.flushIfNeeded()
+            }
+        }.resume()
+    }
+
+    /// Called when the app goes to the background: give the queue one chance to
+    /// drain inside the time iOS grants.
+    func flushNow() {
+        queue.async { [self] in
+            flushIfNeeded()
+        }
+    }
+
+    /// Test seam: number of events still queued.
+    var pendingEventCount: Int { spool.pendingCount }
+    /// Test seam: number of events dropped by the overflow policy.
+    var droppedEventCount: Int { spool.droppedCount }
+    /// Test seam: bytes currently held by the queue.
+    var pendingByteCount: Int { spool.pendingBytes }
+    /// Test seam: drops the journal could not record (memory-only).
+    var unloggedDropCount: Int { spool.unloggedDropCount }
+    /// Test seam: failed spool writes.
+    var persistenceFailureCount: Int { spool.persistenceFailureCount }
     func logUserAction(_ action: UserAction, screen: String? = nil, extras: [String: Any]? = nil) {
         log(type: "action", screen: screen, message: "user \(action.rawValue)", extras: extras)
     }
 
-    /// Read the configured server URL from the Keychain (same source the app
-    /// uses for all API traffic). Synchronous + cheap — fine on a utility queue.
-    private var serverBaseURL: URL? {
-        guard let urlString = try? KeychainStore().load(.serverURL) else { return nil }
-        return URL(string: urlString)
-    }
-
-    private func flushIfNeeded() {
-        guard !buffer.isEmpty, let baseURL = serverBaseURL else { return }
-        let batch = Array(buffer.prefix(maxBatch))
-        buffer.removeFirst(batch.count)
-        send(batch, to: baseURL)
-    }
-
-    private func send(_ events: [[String: Any]], to baseURL: URL) {
-        let webhook = baseURL.appendingPathComponent("webhook/hermex-logs")
-        var request = URLRequest(url: webhook)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Hermex-Request-ID")  // HERMEX-FORK: request-id for log correlation
-        request.httpBody = try? JSONSerialization.data(withJSONObject: events)
-        request.timeoutInterval = 10
-        URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
+    /// A periodic tick is what turns "retry eventually" into reality: without it
+    /// a failed batch would wait for the next unrelated log() call.
+    private func startFlushTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1.0, leeway: .milliseconds(300))
+        timer.setEventHandler { [weak self] in
+            self?.flushIfNeeded()
+        }
+        timer.resume()
+        flushTimer = timer
     }
 }

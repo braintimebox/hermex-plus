@@ -557,7 +557,11 @@ struct MessageComposerView: View {
                 onDeleteSavedCustom: { option in
                     favoriteModelKeys = ModelFavoritesStore.shared.removeFavorite(for: option)
                     recentModelKeys = ModelRecentsStore.shared.removeRecent(for: option)
-                }
+                },
+                // Closes the `Picker Open` phase started on the tap. Appearance —
+                // not the first committed frame — is what the sheet can observe;
+                // the number is named accordingly.
+                onDidAppear: { PhaseTelemetry.shared.end(.pickerOpen) }
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -1145,6 +1149,15 @@ struct MessageComposerView: View {
 
     private func showAllModels() {
         prepareForComposerPresentation()
+        // One trace per open: the tap, the network round trip, the catalog
+        // preparation, the apply and the first frame all carry it. The process-wide
+        // id that already exists groups a whole app session and cannot answer
+        // "what happened between this tap and this frame".
+        let traceId = TelemetryScenario.newTraceId()
+        TelemetryScenario.shared.enter(screen: "ModelPicker", traceId: traceId)
+        // Closed by `onDidAppear` through the phase name: exactly one open is in
+        // flight per presentation, so no token is needed here.
+        PhaseTelemetry.shared.begin(.pickerOpen, traceId: traceId)
         showsAllModelsSheet = true
     }
 

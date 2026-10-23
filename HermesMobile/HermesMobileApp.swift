@@ -103,6 +103,7 @@ struct HermesMobileApp: App {
                 HermexLogger.shared.log(type: "event", message: "scene active")
             case .background:
                 HermexLogger.shared.log(type: "event", message: "scene background")
+                HermexLogger.shared.flushNow()
                 BGTask.scheduleNext()
             case .inactive:
                 break

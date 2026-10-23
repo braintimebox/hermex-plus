@@ -208,4 +208,354 @@ final class PhaseTelemetryTests: XCTestCase {
         XCTAssertNotNil(snapshot)
         PhaseTelemetry.logToHermex(snapshot!)
     }
+
+    // MARK: - Escalation (budgets → detailed context → silence again)
+
+    /// Every phase must have a deliberate budget decision. A phase that quietly
+    /// returns nil is a phase nobody can regress: adding one without a budget is
+    /// how the picker shipped without telemetry in the first place.
+    func testEveryPhaseHasADeliberateBudgetDecision() {
+        let withoutBudget = PhaseAggregator.Phase.allCases
+            .filter { PhaseBudget.p90Milliseconds(for: $0) == nil }
+
+        XCTAssertEqual(
+            Set(withoutBudget),
+            [
+                .markdownParse, .markdownParseStream, .markdownParseSettled,
+                // Added in the Model Picker diagnostic stage: no baseline exists yet,
+                // so a budget would be a guess dressed as a norm. They get budgets
+                // once the device run produces one.
+                .pickerNetwork, .pickerCatalogPrepare, .pickerFirstFrame, .pickerSearch,
+            ],
+            "A phase without a budget must be a deliberate change, not an oversight"
+        )
+    }
+
+    /// Three consecutive samples over budget switch the phase to detailed mode:
+    /// the next samples carry `escalated` and `isMainThread`, so a later reading
+    /// can tell main-thread work from background work without a rebuild.
+    func testRepeatedBreachesEscalateTheFollowingSamples() throws {
+        var clock = 0.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        // Budget for Cache Write is 50 ms; each sample takes 200 ms.
+        for _ in 0..<5 {
+            telemetry.begin(.cacheWrite)
+            clock += 0.2
+            telemetry.end(.cacheWrite)
+        }
+        telemetry.flush()
+
+        let snapshot = try XCTUnwrap(snapshots.first { $0.phase == .cacheWrite })
+        XCTAssertEqual(snapshot.count, 5)
+        // The sample that reaches the threshold is already detailed: 3rd, 4th, 5th.
+        XCTAssertEqual(snapshot.contextSum["escalated"], 3)
+        XCTAssertNotNil(snapshot.contextSum["isMainThread"])
+    }
+
+    /// A sample inside its budget keeps the phase quiet and resets the streak —
+    /// otherwise one bad minute would leave every later report verbose forever.
+    func testSampleInsideBudgetResetsTheStreak() throws {
+        var clock = 0.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        func sample(_ milliseconds: Double) {
+            telemetry.begin(.cacheWrite)
+            clock += milliseconds / 1000
+            telemetry.end(.cacheWrite)
+        }
+
+        sample(200)   // breach 1
+        sample(200)   // breach 2
+        sample(10)    // inside budget → streak reset
+        sample(200)   // breach 1 again, not 3
+        sample(200)   // breach 2
+        telemetry.flush()
+
+        let snapshot = try XCTUnwrap(snapshots.first { $0.phase == .cacheWrite })
+        XCTAssertEqual(snapshot.count, 5)
+        XCTAssertNil(snapshot.contextSum["escalated"], "two breaches with a reset between them must not escalate")
+    }
+
+    /// A single second-long sample is reported as a hang with a stack, once.
+    func testHangIsReportedOncePerCooldown() throws {
+        // A real timestamp is a Unix epoch, and the cooldown gate compares absolute
+        // instants: starting at 0 would make the first hang look like it happened
+        // seconds ago, so it would be swallowed before any report.
+        var clock = 1_000_000.0
+        var hangs: [(PhaseAggregator.Phase, Double)] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { _ in },
+            hangReporter: { hangs.append(($0, $1)) }
+        )
+
+        telemetry.begin(.cacheWrite)
+        clock += 1.5
+        telemetry.end(.cacheWrite)
+
+        telemetry.begin(.cacheWrite)
+        clock += 1.5          // still inside the 60 s cooldown
+        telemetry.end(.cacheWrite)
+
+        XCTAssertEqual(hangs.count, 1, "one stack per cooldown, not one per hang")
+        let firstHang = try XCTUnwrap(hangs.first)
+        XCTAssertEqual(firstHang.1, 1500, accuracy: 1)
+    }
+
+    // MARK: - Correlation (one trace per user action)
+
+    /// Samples from two picker opens must never share a bucket: mixing them let a
+    /// fast warm open hide the tail of a slow cold one.
+    func testSnapshotsAreSeparatedByTrace() {
+        var aggregator = PhaseAggregator()
+        aggregator.record(.pickerCatalogPrepare, milliseconds: 40, traceId: "open-A")
+        aggregator.record(.pickerCatalogPrepare, milliseconds: 20, traceId: "open-A")
+        aggregator.record(.pickerCatalogPrepare, milliseconds: 200, traceId: "open-B")
+
+        let snapshots = aggregator.takeSnapshots()
+        XCTAssertEqual(snapshots.count, 2)
+
+        let byTrace = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.traceId ?? "-", $0) })
+        XCTAssertEqual(byTrace["open-A"]?.count, 2)
+        XCTAssertEqual(byTrace["open-A"]?.maximum, 40)
+        XCTAssertEqual(byTrace["open-B"]?.count, 1)
+        XCTAssertEqual(byTrace["open-B"]?.maximum, 200)
+    }
+
+    /// Untraced samples keep the historical behaviour: one bucket per phase.
+    func testUntracedSamplesStayInOneBucket() {
+        var aggregator = PhaseAggregator()
+        aggregator.record(.sessionOpen, milliseconds: 10)
+        aggregator.record(.sessionOpen, milliseconds: 20)
+
+        let snapshots = aggregator.takeSnapshots()
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertNil(snapshots.first?.traceId)
+        XCTAssertEqual(snapshots.first?.count, 2)
+    }
+
+    /// Tail percentiles use the same nearest-rank rule as p50/p90.
+    func testTailPercentilesAreReported() {
+        var aggregator = PhaseAggregator()
+        for value in 1...100 {
+            aggregator.record(.pickerFirstFrame, milliseconds: Double(value))
+        }
+        let snapshot = aggregator.takeSnapshots().first
+        XCTAssertEqual(snapshot?.p90, 90)
+        XCTAssertEqual(snapshot?.p95, 95)
+        XCTAssertEqual(snapshot?.p99, 99)
+        XCTAssertEqual(snapshot?.maximum, 100)
+    }
+
+    // MARK: - Overlapping phases
+
+    /// Two overlapping spans of the same phase each keep their own start: the
+    /// second `begin` used to overwrite the first, so one span measured the other
+    /// and the other disappeared.
+    func testOverlappingPhaseSpansAreBothRecorded() throws {
+        var clock = 1_000_000.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        telemetry.begin(.pickerNetwork)
+        clock += 0.100
+        telemetry.begin(.pickerNetwork)
+        clock += 0.050
+        telemetry.end(.pickerNetwork)      // closes the inner span: 50 ms
+        clock += 0.100
+        telemetry.end(.pickerNetwork)      // closes the outer span: 250 ms
+        telemetry.flush()
+
+        let snapshot = snapshots.first { $0.phase == .pickerNetwork }
+        XCTAssertEqual(snapshot?.count, 2, "both spans must survive")
+        // `TimeInterval` is Double seconds; decimal fake-clock steps can differ by
+        // sub-microsecond representation error after conversion to milliseconds.
+        // 0.001 ms is far below a real pairing error (50 vs 250 ms) but above that noise.
+        XCTAssertEqual(try XCTUnwrap(snapshot?.p50), 50, accuracy: 0.001, "LIFO pairs each end with its own start")
+        XCTAssertEqual(try XCTUnwrap(snapshot?.maximum), 250, accuracy: 0.001)
+    }
+
+    /// An `end` without a matching `begin` records nothing instead of inventing a
+    /// span from an unrelated start time.
+    func testEndWithoutBeginRecordsNothing() {
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { 1_000_000 },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        telemetry.end(.pickerSearch)
+        telemetry.flush()
+        XCTAssertTrue(snapshots.isEmpty)
+    }
+
+    /// The scenario tag must survive a child screen finishing after its parent:
+    /// a late `leave` for a screen that is no longer on top must not clear the
+    /// context the frame histogram is reading.
+    func testScenarioIsOnlyClearedByTheScreenThatOwnsIt() {
+        TelemetryScenario.shared.enter(screen: "ModelPicker", traceId: "trace-1")
+        TelemetryScenario.shared.leave(screen: "Chat")
+        XCTAssertEqual(TelemetryScenario.shared.current.screen, "ModelPicker")
+        XCTAssertEqual(TelemetryScenario.shared.current.traceId, "trace-1")
+
+        TelemetryScenario.shared.leave(screen: "ModelPicker")
+        XCTAssertNil(TelemetryScenario.shared.current.screen)
+        XCTAssertNil(TelemetryScenario.shared.current.traceId)
+    }
+
+    // MARK: - Prepare measurement must not change the catalog
+
+    /// Timing is a wrapper, not a second implementation: whatever `prepare`
+    /// returns, the measured variant returns byte for byte.
+    func testMeasuredPrepareReturnsTheSameCatalog() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "opencode",
+                name: "OpenCode",
+                providerID: "opencode-go",
+                models: [
+                    ModelCatalogOption(id: "kept", displayName: "Kept", providerID: "opencode-go"),
+                    ModelCatalogOption(id: "kept", displayName: "Kept", providerID: "opencode-go"),
+                ]
+            ),
+            ModelCatalogGroup(
+                id: "stealth",
+                name: "Stealth",
+                providerID: "stealth",
+                models: [
+                    ModelCatalogOption(id: "stealth/hidden", displayName: "Hidden", providerID: "stealth"),
+                ]
+            ),
+        ]
+
+        XCTAssertEqual(ModelPickerSheet.measuredPrepare(groups), ModelPickerSheet.prepare(groups))
+    }
+
+    /// Spans that finish in START order cannot be paired by a stack at all: the
+    /// first `end` would pop the second span's start. Tokens pair each end with its
+    /// own span, so both durations stay true.
+    func testTokenSpansPairEachEndWithItsOwnStart() throws {
+        var clock = 1_000_000.0
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { clock },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        let first = telemetry.begin(.cacheRead)
+        clock += 0.100
+        let second = telemetry.begin(.cacheRead)
+        clock += 0.200
+        telemetry.end(first)          // first span: 300 ms, closed while the second is live
+        clock += 0.100
+        telemetry.end(second)         // second span: 300 ms
+        telemetry.flush()
+
+        let snapshot = snapshots.first { $0.phase == .cacheRead }
+        XCTAssertEqual(snapshot?.count, 2)
+        XCTAssertEqual(try XCTUnwrap(snapshot?.p50), 300, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(snapshot?.maximum), 300, accuracy: 0.001)
+    }
+
+    /// A token that was never opened, or already closed, records nothing.
+    func testEndingAnUnknownTokenRecordsNothing() {
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 3_600,
+            now: { 1_000_000 },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in }
+        )
+
+        let span = telemetry.begin(.pickerSearch)
+        telemetry.end(span)
+        telemetry.end(span)   // second close must not invent a sample
+        telemetry.flush()
+
+        let snapshot = snapshots.first { $0.phase == .pickerSearch }
+        XCTAssertEqual(snapshot?.count, 1)
+    }
+    // HERMEX-FORK: P0 telemetry — durations must not follow the calendar clock.
+    /// A clock that goes backwards (NTP correction, manual change) used to become a
+    /// 0 ms sample, which silently improved every percentile. It must be dropped
+    /// and reported instead.
+    func testBackwardsClockSampleIsDroppedAndReported() throws {
+        final class Clock { var value: TimeInterval = 100 }
+        let clock = Clock()
+        var snapshots: [PhaseAggregator.Snapshot] = []
+        var anomalies: [(PhaseAggregator.Phase, Double)] = []
+        let telemetry = PhaseTelemetry(
+            flushInterval: 0,
+            now: { clock.value },
+            sink: { snapshots.append($0) },
+            hangReporter: { _, _ in },
+            clockAnomalyReporter: { anomalies.append(($0, $1)) }
+        )
+
+        let span = telemetry.begin(.cacheWrite)
+        clock.value = 50           // calendar jumped backwards mid-span
+        telemetry.end(span, context: [:])
+
+        XCTAssertTrue(snapshots.isEmpty, "a negative interval must not enter the bucket")
+        XCTAssertEqual(anomalies.count, 1)
+        XCTAssertEqual(anomalies.first?.0, .cacheWrite)
+        XCTAssertEqual(anomalies.first?.1 ?? 0, -50_000, accuracy: 0.001)
+
+        // The next, sane span still records normally: one bad sample cannot poison
+        // the phase for the rest of the session. The fake clock has to move PAST the
+        // window start (100) or the 15 s window never elapses and nothing flushes.
+        clock.value = 200
+        let sane = telemetry.begin(.cacheWrite)
+        clock.value = 200.05
+        telemetry.end(sane, context: [:])
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(try XCTUnwrap(snapshots.first?.p50), 50, accuracy: 0.001)
+    }
+
+    // HERMEX-FORK: P1 telemetry — operation identity travels with the event.
+    /// Ambient session/stream identity is merged into every event, and an event
+    /// that already names its own stream is never overwritten by it.
+    func testDiagnosticContextIsAttachedWithoutOverwritingEventIdentity() {
+        let merged = HermexLogger.applyingDiagnosticContext(
+            ["type": "phase"],
+            sessionId: "session-1",
+            streamId: "stream-1"
+        )
+        XCTAssertEqual(merged["sessionId"] as? String, "session-1")
+        XCTAssertEqual(merged["streamId"] as? String, "stream-1")
+
+        let ownIdentity = HermexLogger.applyingDiagnosticContext(
+            ["type": "phase", "streamId": "stream-own"],
+            sessionId: "session-1",
+            streamId: "stream-ambient"
+        )
+        XCTAssertEqual(ownIdentity["streamId"] as? String, "stream-own")
+
+        let empty = HermexLogger.applyingDiagnosticContext(["type": "phase"], sessionId: nil, streamId: nil)
+        XCTAssertNil(empty["sessionId"])
+        XCTAssertNil(empty["streamId"])
+    }
 }

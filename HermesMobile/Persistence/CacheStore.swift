@@ -1,6 +1,34 @@
 import Foundation
 import SwiftData
 
+/// Invalidates message snapshots created before a successful server-side clear.
+/// The generation travels with each background write, so an in-flight request
+/// cannot enqueue an old transcript after the clear barrier has been scheduled.
+final class CacheWriteFence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation: UInt64 = 0
+
+    func capture() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation
+    }
+
+    @discardableResult
+    func invalidate() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        generation &+= 1
+        return generation
+    }
+
+    func isCurrent(_ candidate: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation == candidate
+    }
+}
+
 enum CacheStore {
     /// HERMEX-FORK: serial cache-write queues, one per scope. Serial by
     /// construction, so an older snapshot can never finish after a newer one and
@@ -34,10 +62,13 @@ enum CacheStore {
         // HERMEX-FORK: #920 — cached-session read interval (duration only; the row
         // count lands after the fetch, which a defer cannot see).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        PhaseTelemetry.shared.begin(.cacheRead)
+        // Token, not the phase name: `cachedSessions` runs off-main while
+        // `cachedMessages` runs on the main actor, so two reads really can be in
+        // flight at once and a name-keyed end would close the wrong one.
+        let readSpan = PhaseTelemetry.shared.begin(.cacheRead)
         defer {
             performanceSignposter.endInterval("Cache Read", signpost)
-            PhaseTelemetry.shared.end(.cacheRead)
+            PhaseTelemetry.shared.end(readSpan)
         }
         let serverURLString = serverURL.absoluteString
         let descriptor = FetchDescriptor<CachedSession>(
@@ -65,10 +96,13 @@ enum CacheStore {
     ) throws -> [ChatMessage] {
         // HERMEX-FORK: #920 — cached-message read interval (duration only).
         let signpost = performanceSignposter.beginInterval("Cache Read")
-        PhaseTelemetry.shared.begin(.cacheRead)
+        // Token, not the phase name: `cachedSessions` runs off-main while
+        // `cachedMessages` runs on the main actor, so two reads really can be in
+        // flight at once and a name-keyed end would close the wrong one.
+        let readSpan = PhaseTelemetry.shared.begin(.cacheRead)
         defer {
             performanceSignposter.endInterval("Cache Read", signpost)
-            PhaseTelemetry.shared.end(.cacheRead)
+            PhaseTelemetry.shared.end(readSpan)
         }
 
         if let limit, limit <= 0 {
@@ -301,6 +335,30 @@ enum CacheStore {
 
         try performMaintenance(in: context, now: cachedAt)
         try context.save()
+    }
+
+    /// Deletes a conversation's cached messages on the same serial queue as all
+    /// background message snapshots. The continuation resumes only after the empty
+    /// snapshot has committed, so callers do not report `/clear` complete while an
+    /// earlier queued write can still repopulate history.
+    static func clearMessagesAndWait(
+        serverURL: URL,
+        sessionID: String,
+        in container: ModelContainer,
+        onEnqueued: (() -> Void)? = nil
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            writeQueue.async {
+                let context = ModelContext(container)
+                do {
+                    try cacheMessages([], serverURL: serverURL, sessionID: sessionID, in: context)
+                    continuation.resume(returning: ())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+            onEnqueued?()
+        }
     }
 
     /// Deletes only the cached sessions and messages belonging to `serverURL`,
