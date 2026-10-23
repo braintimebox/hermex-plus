@@ -15,6 +15,8 @@ final class HermexLoggerDeliveryTests: XCTestCase {
         struct Response {
             var status: Int = 200
             var error: Error?
+            /// Never answers: models a request whose completion never fires.
+            var hang: Bool = false
         }
         static var script: [Response] = []
         static var bodies: [Data] = []
@@ -40,6 +42,7 @@ final class HermexLoggerDeliveryTests: XCTestCase {
                 Self.lock.lock(); Self.bodies.append(data); Self.lock.unlock()
             }
             let response = Self.next()
+            if response.hang { return }
             if let error = response.error {
                 client?.urlProtocol(self, didFailWithError: error)
                 return
@@ -87,9 +90,10 @@ final class HermexLoggerDeliveryTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeLogger(url: URL? = URL(string: "https://example.test")) -> HermexLogger {
+    private func makeLogger(url: URL? = URL(string: "https://example.test"),
+                            stalledTimeout: TimeInterval = 30) -> HermexLogger {
         HermexLogger(session: session, spool: spool,
-                     serverURLProvider: { url }, startTimer: false)
+                     serverURLProvider: { url }, stalledTimeout: stalledTimeout, startTimer: false)
     }
 
     private func waitUntil(_ description: String, timeout: TimeInterval = 2,
@@ -219,6 +223,17 @@ final class HermexLoggerDeliveryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(spool.pendingCount, 5,
                                     "a long outage must not delete a single event")
         XCTAssertGreaterThanOrEqual(logger.droppedEventCount, 0)
+    }
+
+    func testUnansweredRequestDoesNotWedgeTheSender() {
+        TelemetryURLProtocol.reset([.init(hang: true), .init(status: 200)])
+        logger = makeLogger(stalledTimeout: 0)
+        logger.log(type: "event", message: "hang")
+        logger.flushNow()
+        waitUntil("first attempt issued") { TelemetryURLProtocol.bodies.count == 1 }
+        logger.flushNow()   // stalledTimeout is 0: the sender recovers
+        waitUntil("retry issued") { TelemetryURLProtocol.bodies.count >= 2 }
+        waitUntil("delivered on retry") { self.spool.pendingCount == 0 }
     }
 
     // MARK: - restart

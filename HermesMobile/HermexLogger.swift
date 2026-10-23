@@ -24,11 +24,14 @@ final class HermexLogger {
     /// Injected for tests: a URLSession backed by URLProtocol, and a URL source.
     private let session: URLSession
     private let serverURLProvider: () -> URL?
+    /// How long an unanswered request may block the sender before it is retried.
+    private let stalledTimeout: TimeInterval
 
     /// Durable queue: an event survives a failed POST, a timeout and a restart.
     private let spool: TelemetrySpool
     private var flushTimer: DispatchSourceTimer?
     private var inFlight = false
+    private var inFlightSince: TimeInterval = 0
     /// Counting of POST outcomes, exposed for tests and diagnostics.
     private(set) var deliveredBatches = 0
     private(set) var failedBatches = 0
@@ -87,7 +90,9 @@ final class HermexLogger {
          serverURLProvider: @escaping () -> URL? = {
              (try? KeychainStore().load(.serverURL)).flatMap { URL(string: $0) }
          },
+         stalledTimeout: TimeInterval = 30,
          startTimer: Bool = true) {
+        self.stalledTimeout = stalledTimeout
         self.session = session
         self.spool = spool
         self.serverURLProvider = serverURLProvider
@@ -164,7 +169,17 @@ final class HermexLogger {
     /// Serialises a batch and posts it. An event is removed from the spool only
     /// after a 2xx answer; every failure reschedules the same events.
     private func flushIfNeeded() {
-        guard !inFlight else { return }
+        if inFlight {
+            // A completion that never arrives (session invalidated, process
+            // suspended mid-request) must not wedge the sender forever.
+            let stalled = Date().timeIntervalSince1970 - inFlightSince
+            guard stalled < stalledTimeout else {
+                inFlight = false
+                failedBatches += 1
+                return
+            }
+            return
+        }
         guard let baseURL = serverURLProvider() else {
             // No server configured yet: keep the events, retry later. They are
             // bounded by the spool, so this cannot grow without limit.
@@ -188,6 +203,7 @@ final class HermexLogger {
         request.timeoutInterval = 10
 
         inFlight = true
+        inFlightSince = Date().timeIntervalSince1970
         let ids = batch.map(\.id)
         session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
