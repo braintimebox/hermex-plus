@@ -31,8 +31,11 @@ final class TelemetrySpool {
     /// Backoff for retries, seconds. Capped, never infinite growth.
     static let backoff: [TimeInterval] = [2, 8, 30, 120, 600]
 
-    private let memoryLimit: Int
-    private let diskLimit: Int
+    /// One bound for the whole queue. Two separate bounds ("memory" and "disk")
+    /// disagreed: append() enforced only the memory one and load() truncated to
+    /// it, so a relaunch silently discarded everything above the memory bound
+    /// while the file still held those events.
+    private let capacity: Int
     private let directory: URL
     private let spoolFile: URL
     private let dropsFile: URL
@@ -41,11 +44,8 @@ final class TelemetrySpool {
     private var items: [Item] = []
     private var droppedTotal: Int = 0
 
-    init(directory: URL? = nil,
-         memoryLimit: Int = 500,
-         diskLimit: Int = 5_000) {
-        self.memoryLimit = memoryLimit
-        self.diskLimit = diskLimit
+    init(directory: URL? = nil, capacity: Int = 5_000) {
+        self.capacity = capacity
         let dir = directory ?? TelemetrySpool.defaultDirectory()
         self.directory = dir
         self.spoolFile = dir.appendingPathComponent("telemetry-spool.jsonl")
@@ -79,13 +79,13 @@ final class TelemetrySpool {
         defer { lock.unlock() }
         items.append(Item(id: eventId, json: json, attempts: 0, nextAttemptAt: 0))
         var overflowed = 0
-        while items.count > memoryLimit {
+        while items.count > capacity {
             items.removeFirst()
             overflowed += 1
         }
         if overflowed > 0 {
             droppedTotal += overflowed
-            recordDrop(reason: "overflow_memory", count: overflowed)
+            recordDrop(reason: "overflow", count: overflowed)
         }
         persist()
         return overflowed == 0
@@ -119,15 +119,14 @@ final class TelemetrySpool {
             items[index].attempts = attempts
             items[index].nextAttemptAt = t + delay
         }
-        // Disk cap is a hard bound: past it the oldest events go, with a record.
         var overflowed = 0
-        while items.count > diskLimit {
+        while items.count > capacity {
             items.removeFirst()
             overflowed += 1
         }
         if overflowed > 0 {
             droppedTotal += overflowed
-            recordDrop(reason: "overflow_disk", count: overflowed)
+            recordDrop(reason: "overflow", count: overflowed)
         }
         persist()
     }
@@ -174,14 +173,19 @@ final class TelemetrySpool {
         guard let data = try? Data(contentsOf: spoolFile), !data.isEmpty else { return }
         let decoder = JSONDecoder()
         for line in data.split(separator: 0x0A) {
-            guard let record = try? decoder.decode(SpoolRecord.self, from: Data(line)) else { continue }
+            guard let record = try? decoder.decode(SpoolRecord.self, from: Data(line)) else {
+                // A torn line (crash mid-write) is a loss: say so, don't hide it.
+                droppedTotal += 1
+                recordDrop(reason: "corrupt_spool_line", count: 1)
+                continue
+            }
             items.append(Item(id: record.id,
                               json: record.json,
                               attempts: record.attempts,
                               nextAttemptAt: record.nextAttemptAt))
         }
-        if items.count > memoryLimit {
-            let overflowed = items.count - memoryLimit
+        if items.count > capacity {
+            let overflowed = items.count - capacity
             items.removeFirst(overflowed)
             droppedTotal += overflowed
             recordDrop(reason: "overflow_on_load", count: overflowed)
@@ -202,11 +206,14 @@ final class TelemetrySpool {
         // One line per record keeps the file append-friendly and diffable.
         var out = Data()
         for record in records {
-            guard let one = try? JSONEncoder().encode(record) else { continue }
+            guard let one = try? JSONEncoder().encode(record) else {
+                droppedTotal += 1
+                recordDrop(reason: "encode_failed", count: 1)
+                continue
+            }
             out.append(one)
             out.append(0x0A)
         }
-        _ = encoded
         try? out.write(to: spoolFile, options: .atomic)
     }
 }

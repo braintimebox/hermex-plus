@@ -244,7 +244,7 @@ final class HermexLoggerDeliveryTests: XCTestCase {
     // MARK: - overflow policy
 
     func testOverflowDropsOldestAndRecordsTheLoss() {
-        let small = TelemetrySpool(directory: directory, memoryLimit: 2, diskLimit: 3)
+        let small = TelemetrySpool(directory: directory, capacity: 2)
         for index in 0..<4 {
             small.append(eventId: "e-\(index)", json: Data("{\"n\":\(index)}".utf8))
         }
