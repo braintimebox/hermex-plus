@@ -432,8 +432,9 @@ final class TelemetrySpoolLimitsTests: XCTestCase {
         // Build a spool file that exceeds both budgets, as an older build might.
         var lines = ""
         for index in 0..<20 {
-            let record: [String: Any] = ["id": "old\(index)", "json": payload(200).base64EncodedString(),
-                                         "attempts": 0, "nextAttemptAt": 0.0]
+            let record: [String: Any] = ["r": ["id": "old\(index)",
+                                                   "json": payload(200).base64EncodedString(),
+                                                   "attempts": 0, "nextAttemptAt": 0.0]]
             let data = try JSONSerialization.data(withJSONObject: record)
             lines += String(decoding: data, as: UTF8.self) + "\n"
         }
@@ -462,7 +463,8 @@ final class TelemetrySpoolLimitsTests: XCTestCase {
 
     func testCorruptAndTornLinesAreCounted() throws {
         let good = try JSONSerialization.data(withJSONObject:
-            ["id": "ok", "json": payload(40).base64EncodedString(), "attempts": 0, "nextAttemptAt": 0.0])
+            ["r": ["id": "ok", "json": payload(40).base64EncodedString(),
+                   "attempts": 0, "nextAttemptAt": 0.0]])
         var text = String(decoding: good, as: UTF8.self) + "\n"
         text += "not-json-at-all\n"
         text += "{\"id\":\"torn\""   // no newline: crash mid-write

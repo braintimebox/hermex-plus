@@ -11,13 +11,15 @@ import Foundation
 ///  - an event leaves the queue only after a 2xx acknowledgement, or through an
 ///    explicitly recorded drop (overflow / oversize / explicit decision);
 ///  - a failed attempt reschedules the same event with bounded backoff;
-///  - the queue is bounded by BOTH a count and a byte budget;
+///  - the queue is bounded by BOTH a count (5 000) and a byte budget (4 MiB);
 ///  - every drop is written to a separate, size-limited journal;
 ///  - if a drop cannot be recorded, it is counted separately: the journal never
 ///    claims a guarantee it did not deliver.
 ///
-/// All methods are synchronous; HermexLogger serialises them on one utility
-/// queue. The lock keeps the type safe if that rule is ever broken.
+/// The file is append-only (one line per event, one line per acknowledgement) and
+/// is compacted only when tombstones outnumber live events. Rewriting the whole
+/// queue per event would cost O(queue) per keystroke — at the cap that is 4 MiB
+/// written for every draft character.
 final class TelemetrySpool {
 
     enum AppendResult: Equatable {
@@ -40,14 +42,13 @@ final class TelemetrySpool {
     /// Backoff for retries, seconds. Capped, never infinite growth.
     static let backoff: [TimeInterval] = [2, 8, 30, 120, 600]
 
-    /// Bookkeeping overhead per item (id, counters, array slot). Counted in the
+    /// Bookkeeping overhead per item (id, counters, array slot), counted in the
     /// byte budget so 5 000 tiny events cannot inflate memory invisibly.
     static let itemOverhead = 64
 
     private let eventLimit: Int
     private let byteLimit: Int
     private let dropLogLimit: Int
-    private let directory: URL
     private let spoolFile: URL
     private let dropsFile: URL
     private let dropsPreviousFile: URL
@@ -63,6 +64,8 @@ final class TelemetrySpool {
     private(set) var unloggedDrops: Int = 0
     private(set) var persistFailures: Int = 0
     private var writesSinceSync: Int = 0
+    private var appendsSinceSync: Int = 0
+    private var tombstoneCount: Int = 0
     private var dropWritesBlockedUntil: TimeInterval = 0
 
     init(directory: URL? = nil,
@@ -73,7 +76,6 @@ final class TelemetrySpool {
         self.byteLimit = byteLimit
         self.dropLogLimit = dropLogLimit
         let dir = directory ?? TelemetrySpool.defaultDirectory()
-        self.directory = dir
         self.spoolFile = dir.appendingPathComponent("telemetry-spool.jsonl")
         self.dropsFile = dir.appendingPathComponent("telemetry-drops.jsonl")
         self.dropsPreviousFile = dir.appendingPathComponent("telemetry-drops.1.jsonl")
@@ -120,11 +122,17 @@ final class TelemetrySpool {
             return .rejectedOversize
         }
 
-        items.append(Item(id: eventId, json: json, size: size, attempts: 0, nextAttemptAt: 0))
+        let item = Item(id: eventId, json: json, size: size, attempts: 0, nextAttemptAt: 0)
+        items.append(item)
         bytes += size
         trimOverflowLocked()
 
-        return persist() ? .persisted : .memoryOnly
+        // Durability is claimed only if this record reached the file.
+        guard appendRecord(item) else {
+            persistFailures += 1
+            return .memoryOnly
+        }
+        return .persisted
     }
 
     /// Removes acknowledged events. The only successful removal path.
@@ -136,10 +144,12 @@ final class TelemetrySpool {
         items.removeAll { gone.contains($0.id) }
         bytes -= removed.reduce(0) { $0 + $1.size }
         if bytes < 0 { bytes = 0 }
-        _ = persist()
+        appendAck(removed.map(\.id))
     }
 
     /// Reschedules failed events with bounded backoff; nothing is dropped.
+    /// `attempts` is deliberately not persisted: after a relaunch the ladder
+    /// restarts, which costs a few extra attempts and never a loss.
     func reschedule(ids: [String], now: Date = Date()) {
         lock.lock(); defer { lock.unlock() }
         let affected = Set(ids)
@@ -151,7 +161,6 @@ final class TelemetrySpool {
             items[index].nextAttemptAt = t + delay
         }
         trimOverflowLocked()
-        _ = persist()
     }
 
     /// Explicit, caller-driven drop (e.g. a payload the server refuses forever).
@@ -166,7 +175,7 @@ final class TelemetrySpool {
         droppedTotal += removed.count
         recordDrop(reason: reason, count: removed.count,
                    oldest: removed.first?.id, newest: removed.last?.id)
-        _ = persist()
+        appendAck(removed.map(\.id))
     }
 
     /// Both budgets, one deterministic rule: oldest events go first, so the queue
@@ -251,8 +260,8 @@ final class TelemetrySpool {
         }
     }
 
-    /// Rotation keeps exactly one previous generation and never truncates the
-    /// current file before the new one exists.
+    /// Keeps exactly one previous generation and never removes the current file
+    /// before the new one exists.
     private func rotateDropLog() {
         do {
             try? FileManager.default.removeItem(at: dropsPreviousFile)
@@ -261,11 +270,9 @@ final class TelemetrySpool {
             }
         } catch {
             // Rotation failed: keep appending rather than losing the record.
-            dropWritesBlockedUntil = nowSafe()
+            dropWritesBlockedUntil = 0
         }
     }
-
-    private func nowSafe() -> TimeInterval { Date().timeIntervalSince1970 }
 
     private func recoverDropLog() {
         // A crash mid-rotation leaves evidence, not garbage.
@@ -275,7 +282,7 @@ final class TelemetrySpool {
         }
     }
 
-    // MARK: - persistence
+    // MARK: - append-only spool file
 
     private struct SpoolRecord: Codable {
         let id: String
@@ -284,8 +291,84 @@ final class TelemetrySpool {
         let nextAttemptAt: TimeInterval
     }
 
-    /// Streams the spool file: a corrupted file larger than the budget must not be
-    /// read into memory in one allocation.
+    /// One line: either a record or an acknowledgement.
+    private struct SpoolEnvelope: Codable {
+        let r: SpoolRecord?
+        let a: [String]?
+    }
+
+    private func appendRecord(_ item: Item) -> Bool {
+        let envelope = SpoolEnvelope(r: SpoolRecord(id: item.id, json: item.json,
+                                                    attempts: item.attempts,
+                                                    nextAttemptAt: item.nextAttemptAt), a: nil)
+        return appendLine(envelope)
+    }
+
+    private func appendAck(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        tombstoneCount += ids.count
+        _ = appendLine(SpoolEnvelope(r: nil, a: ids))
+        if tombstoneCount > items.count {
+            _ = compact()
+        }
+    }
+
+    private func appendLine(_ envelope: SpoolEnvelope) -> Bool {
+        guard let data = try? JSONEncoder().encode(envelope) else { return false }
+        var line = data
+        line.append(0x0A)
+        if !FileManager.default.fileExists(atPath: spoolFile.path) {
+            guard FileManager.default.createFile(atPath: spoolFile.path, contents: nil) else { return false }
+        }
+        guard let handle = try? FileHandle(forWritingTo: spoolFile) else { return false }
+        defer { try? handle.close() }
+        do {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: line)
+            appendsSinceSync += 1
+            if appendsSinceSync >= 32 {
+                appendsSinceSync = 0
+                try handle.synchronize()
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Rewrites the file with live events only.
+    private func compact() -> Bool {
+        var out = Data()
+        let encoder = JSONEncoder()
+        for item in items {
+            let envelope = SpoolEnvelope(r: SpoolRecord(id: item.id, json: item.json,
+                                                        attempts: item.attempts,
+                                                        nextAttemptAt: item.nextAttemptAt), a: nil)
+            guard let data = try? encoder.encode(envelope) else {
+                droppedTotal += 1
+                recordDrop(reason: "encode_failed", count: 1)
+                continue
+            }
+            out.append(data)
+            out.append(0x0A)
+        }
+        do {
+            try out.write(to: spoolFile, options: .atomic)
+            if let handle = try? FileHandle(forWritingTo: spoolFile) { try? handle.synchronize() }
+            tombstoneCount = 0
+            return true
+        } catch {
+            persistFailures += 1
+            return false
+        }
+    }
+
+    /// Forces a rewrite (compaction). Exposed for tests and maintenance.
+    @discardableResult
+    func persist() -> Bool { compact() }
+
+    /// Streams the file: a corrupted spool larger than the budget must not be read
+    /// into memory in one allocation.
     private func load() {
         recoverDropLog()
         guard let handle = try? FileHandle(forReadingFrom: spoolFile) else { return }
@@ -302,11 +385,20 @@ final class TelemetrySpool {
                 let line = buffer[buffer.startIndex..<newline]
                 buffer.removeSubrange(buffer.startIndex...newline)
                 if line.isEmpty { continue }
-                if let record = try? decoder.decode(SpoolRecord.self, from: Data(line)) {
-                    let size = record.json.count + TelemetrySpool.itemOverhead
-                    items.append(Item(id: record.id, json: record.json, size: size,
-                                      attempts: record.attempts, nextAttemptAt: record.nextAttemptAt))
-                    bytes += size
+                if let envelope = try? decoder.decode(SpoolEnvelope.self, from: Data(line)) {
+                    if let record = envelope.r {
+                        let size = record.json.count + TelemetrySpool.itemOverhead
+                        items.append(Item(id: record.id, json: record.json, size: size,
+                                          attempts: record.attempts, nextAttemptAt: record.nextAttemptAt))
+                        bytes += size
+                    } else if let acked = envelope.a {
+                        let gone = Set(acked)
+                        let removed = items.filter { gone.contains($0.id) }
+                        items.removeAll { gone.contains($0.id) }
+                        bytes -= removed.reduce(0) { $0 + $1.size }
+                        if bytes < 0 { bytes = 0 }
+                        tombstoneCount += removed.count
+                    }
                 } else {
                     corrupt += 1
                 }
@@ -321,38 +413,8 @@ final class TelemetrySpool {
         let beforeCount = items.count
         let beforeBytes = bytes
         trimOverflowLocked()
-        if beforeCount != items.count || beforeBytes != bytes {
-            _ = persist()
-        }
-    }
-
-    /// Writes the whole queue atomically. Returns false when the write failed, so
-    /// the caller cannot claim the event is durable.
-    @discardableResult
-    func persist() -> Bool {
-        var out = Data()
-        let encoder = JSONEncoder()
-        var encodeFailures = 0
-        for item in items {
-            let record = SpoolRecord(id: item.id, json: item.json,
-                                     attempts: item.attempts, nextAttemptAt: item.nextAttemptAt)
-            guard let data = try? encoder.encode(record) else {
-                encodeFailures += 1
-                continue
-            }
-            out.append(data)
-            out.append(0x0A)
-        }
-        if encodeFailures > 0 {
-            droppedTotal += encodeFailures
-            recordDrop(reason: "encode_failed", count: encodeFailures)
-        }
-        do {
-            try out.write(to: spoolFile, options: .atomic)
-            return true
-        } catch {
-            persistFailures += 1
-            return false
+        if beforeCount != items.count || beforeBytes != bytes || tombstoneCount > items.count {
+            _ = compact()
         }
     }
 }
