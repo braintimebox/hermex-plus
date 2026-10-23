@@ -72,6 +72,23 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v7
+        with:
+          # pull_request defaults to refs/pull/N/merge, which tests the merge
+          # result rather than the commit under review. Pin the PR head so the
+          # run proves exactly this SHA.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify checked-out commit
+        run: |
+          set -euo pipefail
+          actual=$(git rev-parse HEAD)
+          expected="${{ github.event.pull_request.head.sha }}"
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error title=Wrong commit::Checked out $actual, expected $expected"
+            exit 1
+          fi
 
       - name: Show Xcode version
         run: xcodebuild -version
