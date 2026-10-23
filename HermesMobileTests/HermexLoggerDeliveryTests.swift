@@ -214,8 +214,9 @@ final class HermexLoggerDeliveryTests: XCTestCase {
         waitUntil("second attempt succeeded") { self.spool.pendingCount == 0 }
 
         let ids = TelemetryURLProtocol.bodies.compactMap { body -> String? in
-            let object = try? JSONSerialization.jsonObject(with: body) as? [[String: Any]]
-            return (object??.first)?["eventId"] as? String
+            guard let raw = try? JSONSerialization.jsonObject(with: body),
+                  let array = raw as? [[String: Any]] else { return nil }
+            return array.first?["eventId"] as? String
         }
         XCTAssertEqual(ids.count, 2, "two attempts were made")
         XCTAssertEqual(ids.first, ids.last, "the retry must reuse the same eventId")
