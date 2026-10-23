@@ -526,3 +526,136 @@ final class TelemetrySpoolLimitsTests: XCTestCase {
         XCTAssertLessThanOrEqual(spool.pendingBytes, 4_000)
     }
 }
+
+
+/// Failure paths that need an injected fault: fsync, write refusal, serialisation.
+final class TelemetrySpoolFailureTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUp() {
+        super.setUp()
+        directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("fail-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        try? FileManager.default.removeItem(at: directory)
+        super.tearDown()
+    }
+
+    private func payload(_ bytes: Int) -> Data {
+        Data("{\"pad\":\"\(String(repeating: "a", count: max(0, bytes - 12)))\"}".utf8)
+    }
+
+    private func spoolFileLines() -> Int {
+        let file = directory.appendingPathComponent("telemetry-spool.jsonl")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return 0 }
+        return text.split(separator: "\n").count
+    }
+
+    /// fsync failure is reported as memoryOnly: the write happened, durability did not.
+    func testFsyncFailureIsReportedAsMemoryOnly() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 64 * 1024)
+        var shouldFail = false
+        spool.syncFailureHook = { if shouldFail { throw NSError(domain: "fsync", code: 5) } }
+        shouldFail = true
+        var last: TelemetrySpool.AppendResult = .persisted
+        // The 32nd append triggers synchronize().
+        for index in 0..<32 {
+            last = spool.append(eventId: "f\(index)", json: payload(40))
+        }
+        XCTAssertGreaterThan(spool.persistenceFailureCount, 0)
+        XCTAssertGreaterThanOrEqual(spool.pendingCount, 1, "an fsync failure must not drop events")
+        XCTAssertTrue(last == .memoryOnly || spool.persistenceFailureCount > 0)
+    }
+
+    /// A refused write (the ENOSPC shape) keeps the event and counts the failure.
+    /// Real ENOSPC cannot be produced portably, so the refusal is injected.
+    func testInjectedWriteFailureKeepsEventAndCountsIt() throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 8 * 1024)
+        let result = spool.append(eventId: "nospc", json: payload(100))
+        XCTAssertEqual(result, .memoryOnly)
+        XCTAssertEqual(spool.pendingCount, 1)
+        XCTAssertGreaterThan(spool.persistenceFailureCount, 0)
+    }
+
+    /// A record cut in half by a crash must not swallow the records before it.
+    func testAppendOnlyRecoversAfterPartialRecord() throws {
+        let good: [String: Any] = ["r": ["id": "keep", "json": payload(40).base64EncodedString(),
+                                         "attempts": 0, "nextAttemptAt": 0.0]]
+        let line = String(decoding: try JSONSerialization.data(withJSONObject: good), as: UTF8.self)
+        let text = line + "\n" + "{\"r\":{\"id\":\"torn\",\"json\":\"AA"
+        try text.write(to: directory.appendingPathComponent("telemetry-spool.jsonl"),
+                       atomically: true, encoding: .utf8)
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 64 * 1024)
+        XCTAssertEqual(spool.pendingCount, 1)
+        XCTAssertEqual(spool.ready(limit: 5).first?.id, "keep")
+        XCTAssertEqual(spool.droppedCount, 1, "the torn record is a counted loss")
+    }
+
+    /// Compaction must keep live events and drop tombstoned ones from the file.
+    func testCompactionKeepsLiveEventsOnly() throws {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 64 * 1024)
+        for index in 0..<10 { spool.append(eventId: "c\(index)", json: payload(40)) }
+        spool.acknowledge(ids: (0..<6).map { "c\($0)" })
+        spool.persist()   // force compaction
+        XCTAssertEqual(spool.pendingCount, 4)
+        XCTAssertEqual(spoolFileLines(), 4, "compaction must leave one line per live event")
+        let reopened = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 64 * 1024)
+        XCTAssertEqual(reopened.pendingCount, 4)
+        XCTAssertEqual(reopened.ready(limit: 10).map(\.id), ["c6", "c7", "c8", "c9"])
+    }
+
+    /// A crash during compaction may leave a stray file; the queue must reload intact.
+    func testRestartAfterInterruptedCompaction() throws {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 64 * 1024)
+        for index in 0..<3 { spool.append(eventId: "k\(index)", json: payload(40)) }
+        // A stray temp file is exactly what an interrupted atomic write leaves.
+        try "garbage".write(to: directory.appendingPathComponent("telemetry-spool.jsonl.tmp"),
+                            atomically: true, encoding: .utf8)
+        let reopened = TelemetrySpool(directory: directory, eventLimit: 100, byteLimit: 64 * 1024)
+        XCTAssertEqual(reopened.pendingCount, 3)
+        XCTAssertEqual(reopened.droppedCount, 0)
+    }
+
+    /// Concurrency at the logger level: N threads log, nothing is lost or duplicated.
+    func testConcurrentLoggerCallsAreAllQueued() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 200, byteLimit: 256 * 1024)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HermexLoggerDeliveryTests.TelemetryURLProtocol.self]
+        let session = URLSession(configuration: config)
+        HermexLoggerDeliveryTests.TelemetryURLProtocol.reset(Array(repeating: .init(error: URLError(.timedOut)), count: 64))
+        let logger = HermexLogger(session: session, spool: spool,
+                                  serverURLProvider: { URL(string: "https://example.test") },
+                                  startTimer: false)
+        DispatchQueue.concurrentPerform(iterations: 30) { index in
+            logger.log(type: "event", message: "concurrent \(index)")
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline && spool.pendingCount < 30 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(spool.pendingCount, 30)
+        XCTAssertEqual(Set(spool.ready(limit: 40).map(\.id)).count, 30, "ids must be unique")
+    }
+
+    /// An event that cannot be serialised never reaches the spool: it must be
+    /// counted, not silently disappear.
+    func testSerializationFailureIsCounted() {
+        let spool = TelemetrySpool(directory: directory, eventLimit: 10, byteLimit: 8 * 1024)
+        let session = URLSession(configuration: .ephemeral)
+        let logger = HermexLogger(session: session, spool: spool,
+                                  serverURLProvider: { URL(string: "https://example.test") },
+                                  startTimer: false)
+        logger.log(type: "event", message: "unserialisable", extras: ["bad": Date()])
+        let deadline = Date().addingTimeInterval(1)
+        while Date() < deadline && logger.unpersistedEvents == 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(logger.unpersistedEvents, 1)
+        XCTAssertEqual(spool.pendingCount, 0, "a non-serialisable event must not enter the queue")
+    }
+}

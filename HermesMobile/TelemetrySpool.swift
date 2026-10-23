@@ -68,6 +68,11 @@ final class TelemetrySpool {
     private var tombstoneCount: Int = 0
     private var dropWritesBlockedUntil: TimeInterval = 0
 
+    /// Test seam: lets a test make `synchronize()` fail deterministically, which
+    /// is the only way to exercise the fsync error path without a real disk fault.
+    /// Nil in production.
+    var syncFailureHook: (() throws -> Void)?
+
     init(directory: URL? = nil,
          eventLimit: Int = 5_000,
          byteLimit: Int = 4 * 1024 * 1024,
@@ -251,6 +256,7 @@ final class TelemetrySpool {
             writesSinceSync += 1
             if writesSinceSync >= 32 {
                 writesSinceSync = 0
+                if let syncFailureHook { try syncFailureHook() }
                 try handle.synchronize()
             }
         } catch {
@@ -328,6 +334,7 @@ final class TelemetrySpool {
             appendsSinceSync += 1
             if appendsSinceSync >= 32 {
                 appendsSinceSync = 0
+                if let syncFailureHook { try syncFailureHook() }
                 try handle.synchronize()
             }
             return true
