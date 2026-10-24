@@ -1,19 +1,48 @@
 import Foundation
 
+/// What a failed session load should do next.
+///
+/// Three outcomes, not two: retrying and falling back to cache are different
+/// decisions. A transport hiccup is worth a bounded retry; a payload the client
+/// cannot decode comes back identical on every attempt, so retrying only spends the
+/// user's time and the cached list is the better answer.
+enum CacheFailureOutcome: Equatable {
+    /// Worth retrying with backoff; fall back to cache if every attempt fails.
+    case retryWithCache
+    /// Never retry — use the cache now.
+    case cacheOnly
+    /// Surface the error; a real server refusal must not hide behind stale rows.
+    case fail
+}
+
 enum CacheFallbackPolicy {
+    /// Backwards-compatible question: may the cached list be shown at all?
     static func shouldUseCache(for error: Error) -> Bool {
+        outcome(for: error) != .fail
+    }
+
+    /// May this failure be retried? Only transport-level failures.
+    static func shouldRetry(_ error: Error) -> Bool {
+        outcome(for: error) == .retryWithCache
+    }
+
+    static func outcome(for error: Error) -> CacheFailureOutcome {
         switch error {
         case APIError.network(let underlying):
-            return isConnectivityError(underlying)
+            return urlOutcome(underlying)
+        case APIError.decoding:
+            // The response arrived but did not match the model: same request, same bytes.
+            return .cacheOnly
         case APIError.http(let statusCode, _):
-            return isTransientUnavailableStatus(statusCode)
+            return isTransientUnavailableStatus(statusCode) ? .retryWithCache : .fail
         default:
-            return isConnectivityError(error)
+            // URLErrors can also reach us unwrapped (not wrapped in APIError.network).
+            return urlOutcome(error)
         }
     }
 
-    private static func isConnectivityError(_ error: Error) -> Bool {
-        guard let urlError = error as? URLError else { return false }
+    private static func urlOutcome(_ error: Error) -> CacheFailureOutcome {
+        guard let urlError = error as? URLError else { return .fail }
 
         switch urlError.code {
         case .notConnectedToInternet,
@@ -22,10 +51,22 @@ enum CacheFallbackPolicy {
              .dnsLookupFailed,
              .cannotFindHost,
              .dataNotAllowed,
-             .timedOut:
-            return true
+             .timedOut,
+             .badServerResponse,
+             .zeroByteResource:
+            return .retryWithCache
+
+        // -1015 cannotDecodeRawData, -1016 cannotDecodeContentData,
+        // -1017 cannotParseResponse: the bytes arrived and are unusable. A tunnel that
+        // truncates a response reproduces this on every attempt, so no retry — but the
+        // cache is a legitimate answer, and returning an empty list for it is the bug.
+        case .cannotDecodeRawData,
+             .cannotDecodeContentData,
+             .cannotParseResponse:
+            return .cacheOnly
+
         default:
-            return false
+            return .fail
         }
     }
 

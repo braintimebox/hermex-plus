@@ -1961,7 +1961,7 @@ final class ChatViewModel {
                 )
                 return (response, attempt + 1)
             } catch {
-                guard CacheFallbackPolicy.shouldUseCache(for: error),
+                guard CacheFallbackPolicy.shouldRetry(error),
                       attempt < maxAttempts - 1,
                       !isCancellationError(error) else {
                     throw error

@@ -298,7 +298,12 @@ final class SessionListViewModel {
                     if !cachedSessions.isEmpty {
                         sessions = cachedSessions
                         isViewingCachedData = true
-                        errorMessage = nil
+                        // A transport failure is quiet: the offline banner already says
+                        // "cached". A decoding or HTTP failure means the server did
+                        // answer, so hiding it would leave a stale list that looks live.
+                        errorMessage = CacheFallbackPolicy.isTransportFailure(error)
+                            ? nil
+                            : error.localizedDescription
                         // Cached rows carry no live server state, so nothing can
                         // still be waiting on the user here.
                         clearAttentionStates()
@@ -340,7 +345,7 @@ final class SessionListViewModel {
             do {
                 return try await client.sessions()
             } catch {
-                guard CacheFallbackPolicy.shouldUseCache(for: error),
+                guard CacheFallbackPolicy.shouldRetry(error),
                       attempt < maxAttempts - 1,
                       !isCancellationError(error) else {
                     throw error
