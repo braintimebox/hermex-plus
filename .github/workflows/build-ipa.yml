@@ -79,15 +79,32 @@ jobs:
           python3 scripts/pipeline-precheck.py
 
   test:
-    name: Build and Test
+    # THREE SHARDS, ONE SUITE. The single-worker suite measured 689s of a ~23 min
+    # run, so the test stage is the only lever left that matters. Workers inside
+    # one job were tried and lost (4016s for 4 clones, run 37123440609); separate
+    # JOBS are the parallelism this runner actually rewards.
+    #
+    # Each shard builds for testing itself: sharing a DerivedData artifact across
+    # runners costs a download in the same ballpark as the 248s build and adds a
+    # way to run against a stale bundle. Three cold builds run concurrently, so
+    # the wall clock is build + one third of the suite instead of build + all of it.
+    #
+    # The split comes from scripts/test_shards.py: it discovers every XCTestCase
+    # in the sources and packs them by case count, so a new test file lands in a
+    # shard without anyone updating a list.
+    name: Build and Test (${{ matrix.shard }}/3)
     needs: guard
     runs-on: macos-26
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
       DERIVED_DATA_PATH: DerivedData
-      RESULT_BUNDLE_PATH: TestResults.xcresult
+      RESULT_BUNDLE_PATH: TestResults-${{ matrix.shard }}.xcresult
       # MEASURED, AND REVERTED — the parallel-workers idea is rejected by data.
       #
       # Run 37123440609 with `-parallel-testing-worker-count 4`: the Test step
@@ -191,7 +208,9 @@ jobs:
           # Осторожно: это ГИПОТЕЗА, а не подтверждённый выигрыш. Ранее замеренный
           # эксперимент с 4 воркерами (4016s против 689s) отвергнут и остаётся
           # отвергнутым — речь только о параллелизме при одном воркере.
-          xcodebuild test-without-building \
+          SHARD_ARGS="$(python3 scripts/test_shards.py --count 3 --shard ${{ matrix.shard }})"
+          echo "shard ${{ matrix.shard }}/3: $(wc -w <<< "${SHARD_ARGS}") classes"
+          xcodebuild test-without-building $SHARD_ARGS \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
             -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
@@ -270,7 +289,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: ${{ env.RESULT_BUNDLE_PATH }}
           if-no-files-found: ignore
 
