@@ -1,3 +1,9 @@
+## 3.9.52 — P0: cache on transport failures, composer clears after send, compact UI
+- Network: transport failures (-1001/-1005/-1015/-1016/-1017, 408/502/503/504) now render the cached list instead of an empty screen; only idempotent reads retry — sends keep one attempt because the server has no client_message_id.
+- Composer: the outgoing text is no longer written into the durable draft before the request, so rehydration cannot hand a sent message back into the field.
+- Scheduled messages: one-line rows (clock, preview, chat · time) with actions behind a menu, down from ~120pt.
+- Clarification card: capped at 200pt (question 90, choices 110) so the chat stays visible above the keyboard.
+- Build: MainThreadWatchdog.setPerformanceContext gained its missing heavyOp parameter and CacheFallbackPolicy regained isTransportFailure — main has not compiled since 3.9.51.
 ## 3.9.51 — Diagnostics: correlation IDs, session tracking, query endpoint, telemetry improvements (freeze diagnostics, fault tree, server correlation)
 - HermexLogger: correlationId, seqNo, action log, ring buffer 100
 - MainThreadWatchdog: HeavyOperationTracker expanded (SSE, Cache, Decode, Markdown, Stream)
