@@ -26,6 +26,23 @@ enum CacheFallbackPolicy {
         outcome(for: error) == .retryWithCache
     }
 
+    /// Was the server never heard from at all?
+    ///
+    /// The session list uses this to decide whether the offline banner is enough
+    /// or the real error has to stay visible: a decode failure or an HTTP refusal
+    /// means the server DID answer, so hiding it would leave a stale list that
+    /// looks live. Kept separate from `outcome`, which also decides about retries.
+    static func isTransportFailure(_ error: Error) -> Bool {
+        switch error {
+        case APIError.network:
+            return true
+        case APIError.decoding, APIError.http:
+            return false
+        default:
+            return error is URLError
+        }
+    }
+
     static func outcome(for error: Error) -> CacheFailureOutcome {
         switch error {
         case APIError.network(let underlying):

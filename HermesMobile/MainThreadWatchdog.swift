@@ -314,7 +314,10 @@ final class MainThreadWatchdog {
         isScrolledNearBottom: Bool? = nil,
         scrollOwner: String? = nil,
         displayedRowCount: Int? = nil,
-        isFollowingBottom: Bool? = nil
+        isFollowingBottom: Bool? = nil,
+        // HERMEX-FORK: the body has always assigned this from a local `heavyOp`
+        // that was never a parameter — the file did not compile without it.
+        heavyOp: String? = nil
     ) {
         contextLock.lock()
         defer { contextLock.unlock() }
