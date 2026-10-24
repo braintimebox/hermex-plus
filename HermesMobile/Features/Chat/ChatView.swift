@@ -2529,7 +2529,13 @@ struct ChatView: View {
             draftRecords: lastSyncedDraftAttachments,
             stagedAttachmentIDs: Set(viewModel.pendingAttachments.map(\.id))
         )
-        draftStore.setContent(submittedContent, for: draftKey)
+        // Deliberately NOT re-writing the submitted content into the draft store here. The store
+        // already holds what the user typed, and `resolveSubmission` below restores `submitted`
+        // itself when the send never started. Writing it here made the durable draft still carry
+        // the sent text while the request was in flight, so any hydration that ran during the
+        // await put it back into `draftMessage`; `resolveSubmission` then saw a non-empty composer
+        // and treated the just-sent text as "the user typed during the send", keeping it in the
+        // field after a successful send.
         draftMessage = ""
         draftQuotes = []
 

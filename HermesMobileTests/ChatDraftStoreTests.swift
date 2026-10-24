@@ -429,6 +429,38 @@ final class ChatDraftStoreTests: XCTestCase {
         )
     }
 
+    /// The send path no longer re-writes the submitted content into the store before the
+    /// request (that copy is what a mid-flight hydrate put back into the composer, and what
+    /// `resolveSubmission` then mistook for text typed during the send). Losing that write must
+    /// not cost the draft when the send never starts, so the restore branch is pinned here on a
+    /// store that was never pre-written.
+    func testRestoreAfterFailedSendWorksWithoutAPreWrittenCopy() async {
+        let persistence = RecordingChatDraftPersistence()
+        let store = ChatDraftStore(persistence: persistence, debounceDuration: .seconds(10))
+        let key = ChatDraftKey(
+            serverID: "https://example.com",
+            context: .session("chat-restore")
+        )
+        let typed = "text that must survive a send that never started"
+
+        // Composer was cleared for the attempt, but nothing was written before the request.
+        let restored = store.resolveSubmission(
+            submittedText: typed,
+            currentText: "",
+            didStart: false,
+            draftWasEdited: false,
+            for: key
+        )
+
+        XCTAssertEqual(restored, typed)
+        let durable = await store.draft(for: key)
+        XCTAssertEqual(
+            durable?.text,
+            typed,
+            "a send that never started must keep the draft even though the pre-send write is gone"
+        )
+    }
+
     func testFailedSubmissionKeepsAttachmentsStaged() async {
         let persistence = RecordingChatDraftPersistence()
         let store = ChatDraftStore(persistence: persistence, debounceDuration: .seconds(10))
