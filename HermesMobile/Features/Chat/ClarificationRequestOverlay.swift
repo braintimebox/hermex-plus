@@ -30,11 +30,13 @@ struct ClarificationRequestOverlay: View {
 }
 
 struct ClarificationRequestCard: View {
-    /// Overall height cap for the card. Keeps a long question + many/long
-    /// choices from ballooning to fill the viewport (inner ScrollViews max at
-    /// 220+240). Used both here (containment) and by ChatView to lift the
-    /// floating controls above the card (collision avoidance).
-    static let maxClampedHeight: CGFloat = 420
+    /// Overall height cap for the card. Used both here (containment) and by
+    /// ChatView to lift the floating controls above the card (collision avoidance).
+    /// HERMEX-FORK (P0 UI): 420pt + the keyboard meant the card covered the whole
+    /// chat — a clarifying question is a short prompt, not a screen. Capped at
+    /// 200pt so the conversation stays visible while answering (question scrolls
+    /// at 90, choices at 110 instead of 220/240).
+    static let maxClampedHeight: CGFloat = 200
 
     let prompt: ClarificationPromptState
     let isResponding: Bool
@@ -109,8 +111,8 @@ struct ClarificationRequestCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 220)
-        .padding(12)
+        .frame(maxHeight: 90)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(questionBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
@@ -127,7 +129,7 @@ struct ClarificationRequestCard: View {
                 }
             }
         }
-        .frame(maxHeight: 240)
+        .frame(maxHeight: 110)
     }
 
     private var responseField: some View {

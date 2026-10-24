@@ -303,35 +303,58 @@ private struct ScheduledMessageRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(destinationLabel)
-                .font(.caption)
-                .foregroundColor(.accentColor)
+        // HERMEX-FORK (P0 UI): the row used to stack destination + three lines of
+        // text + a date line + three buttons — roughly 120pt per scheduled message,
+        // so a handful of them filled the whole list. Telegram shows a scheduled
+        // message as one line with a clock, and that is what people actually scan
+        // for: what will be sent, where, and when. One line, one menu.
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "clock")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
-            Text(text)
-                .font(.subheadline)
-                .lineLimit(3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            Text("Scheduled for \(scheduledAt, style: .date) at \(scheduledAt, style: .time)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            HStack(spacing: 12) {
-                Button("Send Now") { onSendNow() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(isSending)
-
-                Button("Edit") { onEdit() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                Button("Delete", role: .destructive) { onDelete() }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: 4)
+
+            Menu {
+                Button("Send Now") { onSendNow() }
+                    .disabled(isSending)
+                Button("Edit") { onEdit() }
+                Button("Delete", role: .destructive) { onDelete() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Scheduled message actions")
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
+    }
+
+    /// `destination · time` on one line: the date is only shown when it is not
+    /// today, because "today at 17:30" is the common case and the date is noise.
+    private var subtitle: String {
+        let calendar = Calendar.current
+        let time = scheduledAt.formatted(date: .omitted, time: .shortened)
+        if calendar.isDateInToday(scheduledAt) {
+            return "\(destinationLabel) · \(time)"
+        }
+        let day = scheduledAt.formatted(.dateTime.day().month(.abbreviated))
+        return "\(destinationLabel) · \(day), \(time)"
     }
 }
 
