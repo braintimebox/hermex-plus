@@ -153,10 +153,21 @@ final class OutboxSender {
 
     /// `send` performs the actual request. Kept as a closure so this type does
     /// not need to know about `APIClient`, `APIClient+Chat`, or the view model.
-    func start(send: @escaping (OutboxMessage) async throws -> Void) {
+    ///
+    /// Wiring only — no request is made here. Creating a view model must not put
+    /// traffic on the wire by itself: a test that builds one would race this
+    /// drain against its own mock handler. Delivery starts from `kick()`, from
+    /// the timer, or from the path monitor.
+    func configure(send: @escaping (OutboxMessage) async throws -> Void) {
         self.send = send
         startMonitorIfNeeded()
         startTimerIfNeeded()
+    }
+
+    /// Configures and makes an immediate attempt — for the moment a send has
+    /// just failed, when the queue is known to have work.
+    func start(send: @escaping (OutboxMessage) async throws -> Void) {
+        configure(send: send)
         Task { await drain() }
     }
 
@@ -193,6 +204,12 @@ final class OutboxSender {
     /// Sends every message whose backoff has elapsed. Re-entrancy is guarded:
     /// the timer, the path monitor and an explicit kick can all land at once.
     private func drain() async {
+        // Unit tests share one process-wide `MockURLProtocol` handler. A drain
+        // that outlives its test would consume the *next* test's handler and
+        // record requests that test never made — which is how an unrelated file
+        // listing test started seeing a stray "." request. The queue itself is
+        // exercised directly in tests; only the background pump is off.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         guard !isDraining, let send else { return }
         isDraining = true
         defer { isDraining = false }

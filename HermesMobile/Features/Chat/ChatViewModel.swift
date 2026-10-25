@@ -602,6 +602,9 @@ final class ChatViewModel {
     private let isCLISession: Bool
     private let server: URL
     let client: APIClient
+    /// Same client, held separately so the outbox closure captures this view
+    /// model weakly instead of retaining it through `client`.
+    @ObservationIgnored private(set) var outboxClient: APIClient?
     private let streamCoordinator: ChatStreamCoordinator
     private let pendingActionCoordinator: ChatPendingActionCoordinator
     private let attachmentCoordinator: ChatAttachmentCoordinator
@@ -878,12 +881,15 @@ final class ChatViewModel {
         let resolvedStreamClient = streamClient ?? SSEClient()
         let resolvedLiveActivityManager = liveActivityManager ?? AgentLiveActivityManager.shared
         self.client = resolvedClient
-        // Deliver anything a previous attempt could not send. Wired here, where
-        // the client is resolved, so the queue drives the same client the live
-        // sends do — and outlives this view model, which a chat can leave.
-        let outboxClient = resolvedClient
-        OutboxSender.shared.start { message in
-            _ = try await outboxClient.startChat(
+        // Wired, but not started: opening a chat must not fire requests on its
+        // own, or every test that builds a view model races a background drain
+        // against its own mock handler (that is exactly how
+        // testTwoReferencesInOneFolderCostOneListing saw an extra listing).
+        // Delivery begins on the timer or on the first failed send.
+        self.outboxClient = resolvedClient
+        OutboxSender.shared.configure { [weak self] message in
+            guard let client = self?.outboxClient else { return }
+            _ = try await client.startChat(
                 sessionID: message.sessionID,
                 message: message.text,
                 workspace: message.workspace,
@@ -3035,6 +3041,15 @@ final class ChatViewModel {
     /// Only retries failures where the request never reached the server (see
     /// `APIError.isRetryableConnectionFailure`); retrying a request that *did*
     /// reach the server would create a duplicate run, so those fall through.
+    /// Points the outbox at this view model's client and lets it run.
+    ///
+    /// Called when a send actually fails, and by the app at launch, so that a
+    /// queued message from a previous session is delivered without waiting for
+    /// the user to open that chat again.
+    func startOutbox() {
+        OutboxSender.shared.kick()
+    }
+
     private func startChatWithRetry(
         sessionID: String,
         message: String,
@@ -3236,6 +3251,7 @@ final class ChatViewModel {
                 nextAttemptAt: Date(),
                 lastFailureReason: (error as? APIError)?.privacySafeLogCategory
             )
+            startOutbox()
             await OutboxStore.shared.enqueue(queued)
             OutboxSender.shared.kick()
             cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
