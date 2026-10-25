@@ -1,3 +1,16 @@
+## 3.9.62 — The pipeline stops paying for signatures nobody checks
+
+CI only. The simulator does not verify code signatures, but both the test build
+and the test run were signing with an ad-hoc identity, and the test run also
+re-resolved the package graph that had just been restored from cache.
+
+- `CODE_SIGNING_ALLOWED=NO` for the simulator build and the test run; the
+  device build that produces the IPA is unchanged.
+- `-disableAutomaticPackageResolution` in the test run.
+
+Measured before the change: 131s between "resolved packages" and the first test
+case (install + runner startup), 32s of package resolution, 80s of actual tests.
+
 ## 3.9.61 — A send that survives a dropped connection
 
 Telemetry from 3.9.58 (`15:09:30`, `network.url.-1001`, `path=send`,

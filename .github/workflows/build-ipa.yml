@@ -192,8 +192,7 @@ jobs:
             COMPILATION_CACHE_ENABLE_CACHING=YES \
             SWIFT_ENABLE_COMPILE_CACHE=YES \
             CLANG_ENABLE_COMPILE_CACHE=YES \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY="-"
+            CODE_SIGNING_ALLOWED=NO
           echo "Build-for-testing: $((SECONDS - start_seconds))s"
 
       # Products + the .xctestrun file. The .xctestrun path is reproducible
@@ -401,8 +400,8 @@ jobs:
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             -resultBundlePath "${RESULT_BUNDLE_PATH}" \
             -parallel-testing-enabled NO \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY="-"
+            -disableAutomaticPackageResolution \
+            CODE_SIGNING_ALLOWED=NO
 
           echo "Tests (parallel disabled): $((SECONDS - start_seconds))s"
 
