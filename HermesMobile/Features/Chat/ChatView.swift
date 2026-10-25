@@ -4288,7 +4288,10 @@ struct ScheduleMessageSheet: View {
     let onCancel: () -> Void
 
     @State private var messageText: String = ""
-    @State private var scheduledDate = Date().addingTimeInterval(3600)
+    /// Default send time for a new scheduled message. Five minutes matches the
+    /// Telegram composer's default; an hour was the previous value here and read
+    /// as a bug ("if I need an hour I'll add it myself").
+    @State private var scheduledDate = Date().addingTimeInterval(5 * 60)
     @State private var attachToChat: Bool
     @State private var showEmptyAlert = false
     @State private var sessions: [SessionListItem] = []
