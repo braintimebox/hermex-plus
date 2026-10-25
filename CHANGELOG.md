@@ -1,4 +1,5 @@
-## 3.9.53 — P0: scheduled row without text, model catalog no flicker, OpenCode Free removed
+## 3.9.54 — P0: draft resurrection fix, scheduled row without text, model catalog no flicker
+- Draft store: always clear durable draft on successful send, even when user edited during send (fixes text resurrected in composer on return to chat)
 - Scheduled messages: message body dropped from row — only destination · time, text still editable
 - Model picker: /api/models + /api/models/live load before UI commit, no flashing name switch
 - Gateway: OpenCode Free returns empty catalog on 403 FreeTierError, no curated floor
