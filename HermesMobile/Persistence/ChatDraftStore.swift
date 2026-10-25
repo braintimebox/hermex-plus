@@ -701,20 +701,28 @@ final class ChatDraftStore {
             updateDraft(for: key) { $0.attachments = [] }
         }
 
-        if didStart {
-            // Content is consumed by the accepted send; always clear the
-            // durable store regardless of draftWasEdited. Otherwise the sent
-            // text survives in the store and hydrateDraftIfNeeded() resurrects
-            // it in the composer when the user returns to the chat.
-            updateDraft(for: key) { draft in
-                draft.text = ""
-                draft.quotes = []
-                draft.attachments = []
-            }
-            return .empty
+        guard !draftWasEdited else {
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
+            logDraftProbe("resolveSubmission.keptEdited", key: key, textLength: current.text.count)
+            return current
         }
 
-        guard !draftWasEdited else {
+        if didStart {
+            if current.isEmpty {
+                // Content is consumed by the accepted send; applicable settings
+                // stay so the context keeps them.
+                updateDraft(for: key) { draft in
+                    draft.text = ""
+                    draft.quotes = []
+                    draft.attachments = []
+                }
+            }
+            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
+            logDraftProbe("resolveSubmission.consumed", key: key, textLength: current.text.count)
+            return current
+        }
+
+        if current.isEmpty {
             setContent(submitted, for: key)
             // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("resolveSubmission.restored", key: key, textLength: submitted.text.count)

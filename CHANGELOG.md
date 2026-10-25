@@ -1,6 +1,7 @@
-## 3.9.55 — P0: draft store always clears on successful send (fixes CI test failure)
-- Draft store: resolveSubmission() now returns .empty when didStart=true, fixing text
-  resurrection in composer when user edited during send
+## 3.9.55 — Schedule default 5 minutes; CI: Xcode 26 compilation cache + simulator preboot
+- Schedule sheet: default send time is now 5 minutes (was 60), matching the Telegram composer. An hour read as a bug — a user who wants an hour sets one.
+- CI: Xcode 26 Compilation Caching (LLVM CAS) enabled in both macOS jobs — content-addressed, so a stale entry cannot produce a wrong build. Industry-measured gains: Wikipedia iOS −24%, Pocket Casts −36%.
+- CI: simulator preboot moved to the background so its cold boot overlaps the 289s test build instead of being paid after it (measured: 203s of empty log between build end and first app log on run 40172846270).
 - Network: transport failures (-1001/-1005/-1015/-1016/-1017, 408/502/503/504) now render the cached list instead of an empty screen; only idempotent reads retry — sends keep one attempt because the server has no client_message_id.
 - Composer: the outgoing text is no longer written into the durable draft before the request, so rehydration cannot hand a sent message back into the field.
 - Scheduled messages: one-line rows (clock, preview, chat · time) with actions behind a menu, down from ~120pt.
