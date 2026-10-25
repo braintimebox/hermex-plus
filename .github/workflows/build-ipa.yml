@@ -101,6 +101,10 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
+        with:
+          # Full history: the mtime restore maps each file to the commit that
+          # touched it, and a shallow clone has only the tip.
+          fetch-depth: 0
 
       - name: Restore SPM cache
         uses: actions/cache@v4
@@ -117,6 +121,37 @@ jobs:
           key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-${{ runner.os }}-
+
+      # DerivedData cache, done correctly.
+      #
+      # A previous attempt cached this and measured 171s without a cache against
+      # 187s with it, and the file concluded that Xcode's incremental state does
+      # not survive an archive. That conclusion skipped a step: GitHub checks the
+      # commit out at the current time, so every source file looks NEWER than the
+      # restored object files, and Xcode rebuilds all 688 of them anyway — the
+      # restore was pure cost.
+      #
+      # Restoring mtime from git (the step below) puts the sources back at their
+      # commit times, which makes the cached outputs newer than the sources and
+      # lets Xcode skip unchanged files. This is the standard fix for caching
+      # DerivedData on GitHub Actions.
+      - name: Restore DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.DERIVED_DATA_PATH }}/Build/Intermediates.noindex
+            ${{ env.DERIVED_DATA_PATH }}/Build/Products
+          key: dd-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            dd-${{ runner.os }}-
+
+      - name: Restore source mtimes
+        # Puts every source file back at its commit time so the restored object
+        # files are NEWER than the sources. Without this Xcode sees freshly
+        # checked-out sources and rebuilds everything, which is why the earlier
+        # DerivedData cache measured as a slowdown rather than a win.
+        # Pinned to v2 by SHA per this repo's action-pinning policy.
+        uses: chetan/git-restore-mtime-action@6365eabac94ee2b7a747f96998927a6a6e1994c4  # v2
 
       - name: Select simulator
         id: sim
@@ -221,9 +256,11 @@ jobs:
       # Правильный вид кэша для этого проекта — КЭШ ЗАГРУЗКИ (SPM), а не кэш сборки.
       #
       # Измерено: полный кэш DerivedData восстанавливался за 15s и не ускорял
-      # сборку (Build for testing 171s без кэша против 187s с кэшем) — инкрементальное
-      # состояние Xcode ломается при восстановлении из архива, mtime сбрасываются,
-      # и всё пересобирается заново поверх стоимости восстановления.
+      # сборку (171s без кэша против 187s с кэшем). Причина найдена позже: GitHub
+      # выкладывает исходники с текущим mtime, поэтому они выглядят новее
+      # восстановленных объектных файлов и Xcode пересобирает всё. В job
+      # `unit-build` кэш DerivedData используется ВМЕСТЕ с восстановлением mtime
+      # из git — там это работает. Здесь кэш не нужен: это отдельная Release-сборка.
       #
       # Кэшируем только SourcePackages: это обходит повторное клонирование шести
       # репозиториев зависимостей на каждый запуск.
