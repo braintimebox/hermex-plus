@@ -1180,18 +1180,20 @@ final class ChatViewModel {
 
     /// Refreshes the model catalog when a picker opens: refetch `/api/models`
     /// (so the sheet stops pinning the chat-load-time snapshot), then overlay
-    /// the active provider's live list from `/api/models/live`. Failures are
-    /// silent by design — the picker keeps whatever it already shows.
+    /// the active provider's live list from `/api/models/live`. Both sources
+    /// are loaded before the catalog is committed to the UI, so the picker
+    /// never flashes one set of names and then another.
+    /// Failures are silent by design — the picker keeps whatever it already shows.
     func refreshModelCatalogForPickerOpen() async {
-        if let response = try? await client.models() {
-            let groups = response.catalogGroups
-            if !groups.isEmpty {
-                modelCatalogGroups = groups
-            }
+        var groups: [ModelCatalogGroup] = []
+        if let response = try? await client.models(), !response.catalogGroups.isEmpty {
+            groups = response.catalogGroups
         }
-
         if let live = try? await client.modelsLive() {
-            modelCatalogGroups = modelCatalogGroups.mergingLiveModels(from: live)
+            groups = groups.mergingLiveModels(from: live)
+        }
+        if !groups.isEmpty {
+            modelCatalogGroups = groups
         }
     }
 
