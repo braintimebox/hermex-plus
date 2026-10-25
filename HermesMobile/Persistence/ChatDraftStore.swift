@@ -715,27 +715,6 @@ final class ChatDraftStore {
         }
 
         guard !draftWasEdited else {
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("resolveSubmission.keptEdited", key: key, textLength: current.text.count)
-            return current
-        }
-
-        if didStart {
-            if current.isEmpty {
-                // Content is consumed by the accepted send; applicable settings
-                // stay so the context keeps them.
-                updateDraft(for: key) { draft in
-                    draft.text = ""
-                    draft.quotes = []
-                    draft.attachments = []
-                }
-            }
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("resolveSubmission.consumed", key: key, textLength: current.text.count)
-            return current
-        }
-
-        if current.isEmpty {
             setContent(submitted, for: key)
             // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
             logDraftProbe("resolveSubmission.restored", key: key, textLength: submitted.text.count)
