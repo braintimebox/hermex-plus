@@ -292,6 +292,13 @@ enum HermesShareDraft {
         return nil
     }
 
+    /// Non-consuming probe for the fallback transport, used by the "a share is
+    /// waiting" banner. Reads without clearing, so the actual claim still goes
+    /// through `reserveNextPasteboardImport` and the payload is delivered once.
+    static func hasPasteboardImport() -> Bool {
+        loadFromPasteboard() != nil
+    }
+
     /// Clears the fallback pasteboard once its payload has been claimed, so a
     /// second launch cannot re-import the same share.
     static func clearPasteboard() {

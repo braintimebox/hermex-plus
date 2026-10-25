@@ -53,13 +53,23 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        // HERMEX-FORK: two transports, in order. The App Group container is
-        // primary — it is transactional and carries attachments of any size —
-        // but a sideloaded, re-signed extension does not reliably hold the App
-        // Group entitlement, and then `containerURL` returns nil. Where that
-        // happens the payload travels on a named pasteboard instead of being
-        // dropped, so a share works on a free Apple ID too.
-        var delivered = false
+        // HERMEX-FORK: write to BOTH transports, every time.
+        //
+        // The previous version trusted `containerURL()` as proof that the two
+        // processes share one container, and only fell back to the pasteboard
+        // when it returned nil. It does not prove that. After a SideStore
+        // re-sign each target can end up with its own sandbox-local container
+        // (SideStore#1437), so the extension's write is invisible to the app
+        // while `containerURL()` still hands back a perfectly valid path. The
+        // extension reported success, the app read an empty inbox, the payload
+        // was gone with no error — the exact "worked in 3.6.0, broken in 3.7.0"
+        // report.
+        //
+        // Mirroring onto the named pasteboard costs one in-memory copy and needs
+        // no entitlement, so a share survives on any signature. The app prefers
+        // the container and clears the pasteboard once it has claimed from it,
+        // so a working container still wins and nothing is imported twice.
+        var containerDelivered = false
 
         if let directory = HermesShareDraft.containerURL() {
             do {
@@ -68,20 +78,18 @@ final class ShareViewController: UIViewController {
                     attachments: input.attachments,
                     in: directory
                 )
-                delivered = true
+                containerDelivered = true
             } catch {
-                delivered = false
+                containerDelivered = false
             }
         }
 
-        if !delivered {
-            delivered = HermesShareDraft.saveToPasteboard(
-                draft: draft,
-                attachments: input.attachments
-            )
-        }
+        let pasteboardDelivered = HermesShareDraft.saveToPasteboard(
+            draft: draft,
+            attachments: input.attachments
+        )
 
-        guard delivered else {
+        guard containerDelivered || pasteboardDelivered else {
             showStatus("Could not save shared content.")
             completeRequest(after: 0.8)
             return

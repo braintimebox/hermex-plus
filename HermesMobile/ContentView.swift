@@ -161,6 +161,13 @@ struct ContentView: View {
             // the fallback pasteboard instead.
             if let reservation = pendingSharedImport {
                 logSharedImportSource(reservation.source)
+                // The extension now mirrors every share onto the pasteboard even
+                // when the container write succeeded, because a non-nil
+                // containerURL does not prove the two processes share one
+                // container. The container payload has just been claimed, so the
+                // pasteboard copy is a duplicate — drop it here or the same share
+                // imports again on the next launch.
+                HermesShareDraft.clearPasteboard()
             } else {
                 reservePasteboardSharedImportIfAvailable()
             }
@@ -235,7 +242,11 @@ struct ContentView: View {
     }
 
     private func refreshWaitingSharedImport(in directory: URL) {
-        hasWaitingSharedImport = (try? HermesShareDraft.hasPendingImport(in: directory)) ?? false
+        let inboxWaiting = (try? HermesShareDraft.hasPendingImport(in: directory)) ?? false
+        // The banner has to look at both transports for the same reason the
+        // import does: a re-signed build can have the payload on the pasteboard
+        // while its own App Group inbox stays empty forever.
+        hasWaitingSharedImport = inboxWaiting || HermesShareDraft.hasPasteboardImport()
     }
 }
 
