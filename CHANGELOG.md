@@ -1,3 +1,15 @@
+## 3.9.63 — A release no longer throws away its own cache
+
+- Cache keys no longer include `project.pbxproj`. It carries `MARKETING_VERSION`,
+  so every version bump produced a new key and a cold build: shipping was
+  invalidating the thing that makes shipping fast. Sources and package manifests
+  now define the keys; build-setting changes are left to Xcode's up-to-date check.
+
+Carried over from the scheduled-message work:
+
+- The schedule sheet no longer renders a "Message" block.
+- Scheduled delivery records its failures and sends a stable `clientMessageId`.
+
 ## 3.9.62 — The pipeline stops paying for signatures nobody checks
 
 CI only. The simulator does not verify code signatures, but both the test build

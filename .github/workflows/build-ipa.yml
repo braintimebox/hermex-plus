@@ -110,7 +110,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
           restore-keys: |
             spm-${{ runner.os }}-
 
@@ -118,7 +118,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
-          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
+          # NOTE: project.pbxproj is deliberately NOT in this key. It carries
+          # MARKETING_VERSION, so every release bump produced a new key and a
+          # cold build — the cache was invalidated by the very act of shipping.
+          # Sources and manifests define what is compiled; build-setting changes
+          # are picked up by Xcode's own up-to-date check.
+          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile/**/*.h', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-${{ runner.os }}-
 
@@ -141,7 +146,9 @@ jobs:
           path: |
             ${{ env.DERIVED_DATA_PATH }}/Build/Intermediates.noindex
             ${{ env.DERIVED_DATA_PATH }}/Build/Products
-          key: dd-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile.xcodeproj/project.pbxproj') }}
+          # Same reason as xcode-cas above: no pbxproj in the key, or a version
+          # bump costs a full rebuild.
+          key: dd-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile/**/*.h', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             dd-${{ runner.os }}-
 
@@ -271,9 +278,9 @@ jobs:
       # Кэшируем только SourcePackages: это обходит повторное клонирование шести
       # репозиториев зависимостей на каждый запуск.
       #
-      # Ключ хэширует project.pbxproj, а НЕ Package.resolved — тот файл в репозитории
-      # не закоммичен, hashFiles() по нему возвращал пустую строку и ключ получался
-      # постоянным, то есть кэш никогда не инвалидировался.
+      # The key hashes the package manifests. It used to hash project.pbxproj,
+      # which carries MARKETING_VERSION: every release bump changed the key and
+      # threw the cache away, so shipping a version made the next build cold.
       # Restored BEFORE the build artifact: `test-without-building` does not
       # compile, but it still resolves the package graph, and without this the
       # shard clones eight repositories on every run (measured: 108 of the 380
@@ -341,7 +348,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
           restore-keys: |
             spm-${{ runner.os }}-
 
@@ -501,7 +508,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
           restore-keys: |
             spm-${{ runner.os }}-
 
@@ -512,7 +519,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
-          key: xcode-cas-device-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
+          key: xcode-cas-device-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-device-${{ runner.os }}-
 
