@@ -148,11 +148,22 @@ jobs:
       # the 631s job, so a 25-35% cut is 70-105s. The cache is content-addressed
       # (keys are hashes of the inputs), so a stale entry cannot produce a wrong
       # build — unlike the DerivedData tar that was measured and rejected.
+      # Cache keys are keyed on the PROJECT, not on the commit.
+      #
+      # These used `github.sha`, so every release wrote a fresh ~240 MB entry and
+      # read none: 22 entries / 2.97 GB of 10 GB, almost all unreachable. A cache
+      # that never hits still costs restore time and evicts the entries that
+      # would. `hashFiles` on the project file is the real invalidation signal —
+      # it changes when targets, files or build settings change, which is exactly
+      # when compiled output becomes invalid.
+      #
+      # Restore-keys keep the previous generation reachable, so a project change
+      # costs a partial rebuild instead of a cold one.
       - name: Restore Xcode compilation cache
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
-          key: xcode-cas-${{ runner.os }}-${{ github.sha }}
+          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-${{ runner.os }}-
 
@@ -357,7 +368,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
-          key: xcode-cas-device-${{ runner.os }}-${{ github.sha }}
+          key: xcode-cas-device-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-device-${{ runner.os }}-
 
