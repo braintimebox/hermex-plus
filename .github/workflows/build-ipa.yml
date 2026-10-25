@@ -78,6 +78,102 @@ jobs:
           python3 -c "import yaml, sys" 2>/dev/null || pip install -q pyyaml
           python3 scripts/pipeline-precheck.py
 
+  unit-build:
+    # ONE BUILD FOR EVERY SHARD.
+    #
+    # This job used to be inside each shard: three runners compiled the same
+    # 688 Swift files independently (measured: 4.4 min on a fast runner, 11 min
+    # on a slow one, 2064 compilations for the run), and the slowest of the three
+    # set the wall clock. The old note here argued a shared artifact costs as much
+    # as a rebuild — that was measured against the full DerivedData (2+ GB), not
+    # against what `test-without-building` actually needs: Build/Products and the
+    # .xctestrun, a few hundred MB that download in well under a minute.
+    #
+    # The cache (SPM + CAS) lives here, where the only compilation happens. The
+    # shards do not restore it, because they never compile.
+    needs: guard
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      PROJECT_PATH: HermesMobile.xcodeproj
+      SCHEME: HermesMobile
+      DERIVED_DATA_PATH: DerivedData
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Restore Xcode compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
+          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
+          restore-keys: |
+            xcode-cas-${{ runner.os }}-
+
+      - name: Select simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          name=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          phones = [
+              device["name"]
+              for runtime, devices in data["devices"].items()
+              if "iOS" in runtime
+              for device in devices
+              if device.get("isAvailable") and device["name"].startswith("iPhone")
+          ]
+          preferred = "iPhone 17"
+          print(preferred if preferred in phones else phones[0] if phones else "")
+          ')
+          if [[ -z "${name}" ]]; then
+            echo "No available iPhone simulator found:" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Using simulator: ${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild build-for-testing \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            SWIFT_ENABLE_COMPILE_CACHE=YES \
+            CLANG_ENABLE_COMPILE_CACHE=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY="-"
+          echo "Build-for-testing: $((SECONDS - start_seconds))s"
+
+      # Products + the .xctestrun file. The .xctestrun path is reproducible
+      # because every job checks out to the same workspace path, so the absolute
+      # paths recorded inside it still resolve on the shard runners.
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-build
+          path: |
+            ${{ env.DERIVED_DATA_PATH }}/Build/Products
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 1
+
   test:
     # THREE SHARDS, ONE SUITE. The single-worker suite measured 689s of a ~23 min
     # run, so the test stage is the only lever left that matters. Workers inside
@@ -92,10 +188,10 @@ jobs:
     # The split comes from scripts/test_shards.py: it discovers every XCTestCase
     # in the sources and packs them by case count, so a new test file lands in a
     # shard without anyone updating a list.
-    name: Build and Test (${{ matrix.shard }}/3)
-    needs: guard
+    name: Test (shard ${{ matrix.shard }}/3)
+    needs: [guard, unit-build]
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -135,37 +231,13 @@ jobs:
       # Ключ хэширует project.pbxproj, а НЕ Package.resolved — тот файл в репозитории
       # не закоммичен, hashFiles() по нему возвращал пустую строку и ключ получался
       # постоянным, то есть кэш никогда не инвалидировался.
-      - name: Restore SPM cache
-        uses: actions/cache@v4
+      # No compilation happens here any more: the build job produced it once.
+      # A few hundred MB of Products + .xctestrun replaces 688 Swift files.
+      - name: Download test build
+        uses: actions/download-artifact@v4
         with:
-          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            spm-${{ runner.os }}-
-
-      # Xcode 26 Compilation Caching (LLVM CAS). Measured industry gains:
-      # Wikipedia iOS -24%, Pocket Casts -36%. Our Build-for-testing is 293s of
-      # the 631s job, so a 25-35% cut is 70-105s. The cache is content-addressed
-      # (keys are hashes of the inputs), so a stale entry cannot produce a wrong
-      # build — unlike the DerivedData tar that was measured and rejected.
-      # Cache keys are keyed on the PROJECT, not on the commit.
-      #
-      # These used `github.sha`, so every release wrote a fresh ~240 MB entry and
-      # read none: 22 entries / 2.97 GB of 10 GB, almost all unreachable. A cache
-      # that never hits still costs restore time and evicts the entries that
-      # would. `hashFiles` on the project file is the real invalidation signal —
-      # it changes when targets, files or build settings change, which is exactly
-      # when compiled output becomes invalid.
-      #
-      # Restore-keys keep the previous generation reachable, so a project change
-      # costs a partial rebuild instead of a cold one.
-      - name: Restore Xcode compilation cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
-          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj', 'Package.resolved', '**/Package.resolved') }}
-          restore-keys: |
-            xcode-cas-${{ runner.os }}-
+          name: test-build
+          path: ${{ env.DERIVED_DATA_PATH }}/Build/Products
 
       - name: Select simulator
         id: sim
@@ -204,23 +276,18 @@ jobs:
           nohup xcrun simctl boot "${SIMULATOR_NAME}" >/dev/null 2>&1 &
           echo "simulator boot started in background (overlaps the build)"
 
-      - name: Build for testing
-        env:
-          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+      # Fail here, not inside xcodebuild with a confusing message, if the
+      # artifact did not carry a runnable test plan.
+      - name: Verify test build
         run: |
           set -euo pipefail
-          start_seconds=${SECONDS}
-          xcodebuild build-for-testing \
-            -project "${PROJECT_PATH}" \
-            -scheme "${SCHEME}" \
-            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
-            -derivedDataPath "${DERIVED_DATA_PATH}" \
-            COMPILATION_CACHE_ENABLE_CACHING=YES \
-            SWIFT_ENABLE_COMPILE_CACHE=YES \
-            CLANG_ENABLE_COMPILE_CACHE=YES \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY="-"
-          echo "Build-for-testing: $((SECONDS - start_seconds))s"
+          plan=$(find "${DERIVED_DATA_PATH}/Build/Products" -maxdepth 1 -name '*.xctestrun' | head -1)
+          if [[ -z "${plan}" ]]; then
+            echo "No .xctestrun in the downloaded build:" >&2
+            find "${DERIVED_DATA_PATH}/Build/Products" -maxdepth 2 -type d >&2
+            exit 1
+          fi
+          echo "test plan: ${plan}"
 
       # Ad-hoc signing, not "no signing": an unsigned bundle carries no
       # entitlements and the OS answers Keychain calls with

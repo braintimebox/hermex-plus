@@ -114,7 +114,11 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertTrue(response.liveOptions.isEmpty)
     }
 
-    func testMergingLiveModelsReplacesOnlyTheMatchingProviderGroup() {
+    /// Curated is the catalogue we chose to offer; live is the provider's whole
+    /// inventory (Nous answers 424 ids against a curated 57). Live used to
+    /// replace the group outright, so Hermex Plus read "428" while Telegram,
+    /// reading the same curated list, showed 64. It must not overwrite curated.
+    func testMergingLiveModelsKeepsCuratedModels() {
         let groups = [
             ModelCatalogGroup(
                 id: "opencode-go",
@@ -134,7 +138,8 @@ final class ModelCatalogTests: XCTestCase {
                 providerID: "openai",
                 models: [
                     ModelCatalogOption(id: "@openai:gpt-5.5", displayName: "GPT-5.5", providerID: "openai")
-                ]
+                ],
+                extraModels: []
             )
         ]
 
@@ -149,14 +154,37 @@ final class ModelCatalogTests: XCTestCase {
 
         let merged = groups.mergingLiveModels(from: live)
 
-        // Live is authoritative for the matched group: addition shows up, stale model drops.
-        XCTAssertEqual(merged.first?.models.map(\.id), ["kept-model", "kimi-k2.7-code"])
-        XCTAssertEqual(merged.first?.models.last?.displayName, "Kimi K2.7 Code")
-        XCTAssertEqual(merged.first?.models.last?.providerID, "opencode-go")
+        // The curated list survives intact, including the model live does not know.
+        XCTAssertEqual(merged.first?.models.map(\.id), ["kept-model", "stale-model"])
+        XCTAssertEqual(merged.first?.extraModels.map(\.id), ["extra-model"])
         XCTAssertEqual(merged.first?.id, "opencode-go")
         XCTAssertEqual(merged.first?.name, "OpenCode Go")
-        XCTAssertEqual(merged.first?.extraModels.map(\.id), ["extra-model"])
         XCTAssertEqual(merged.last, groups.last)
+    }
+
+    /// A provider with no curated list yet (fresh or custom) still needs a
+    /// pickable list, so live fills an empty group.
+    func testMergingLiveModelsFillsAnEmptyGroup() {
+        let groups = [
+            ModelCatalogGroup(
+                id: "custom",
+                name: "Custom",
+                providerID: "custom",
+                models: [],
+                extraModels: []
+            )
+        ]
+
+        let live = ModelsLiveResponse(
+            provider: "custom",
+            models: [.object(["id": .string("only-model"), "label": .string("Only Model")])],
+            count: 1
+        )
+
+        let merged = groups.mergingLiveModels(from: live)
+
+        XCTAssertEqual(merged.first?.models.map(\.id), ["only-model"])
+        XCTAssertEqual(merged.first?.models.first?.providerID, "custom")
     }
 
     func testMergingLiveModelsLeavesGroupsUnchangedWhenNoGroupMatches() {

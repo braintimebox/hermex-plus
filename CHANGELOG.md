@@ -1,3 +1,25 @@
+## 3.9.60 — One build for all shards; the picker stops inventing models
+
+CI compiled the app four times per run: three shards each ran build-for-testing
+and the Release job built its own device copy. Three runners paid for the same
+688 Swift files (4.4 min on a fast one, 11 on a slow one), and the slowest set
+the wall clock. A new `unit-build` job compiles once, uploads Build/Products and
+the .xctestrun, and the shards run `test-without-building` against that artifact.
+The cache keys also stopped using the commit sha, which had produced 22
+unreachable entries (2.97 GB of a 10 GB budget) that no run could ever hit.
+
+Model picker, two defects that made the catalog disagree with Telegram:
+
+- The live endpoint overwrote the curated list for the active provider. Nous
+  answers 424 ids, so the picker read 428 while Telegram showed 57 + 7. Live is
+  now a fallback that fills an empty group, never an override.
+- The composer model menu rendered the bare model name, so favourites holding
+  the same id from different providers were indistinguishable. The provider now
+  rides in the title.
+
+The composer config cache is keyed on the app version. It held a catalog for 24
+hours regardless of what the build did, so a shipped catalog change could look
+like it never happened.
 ## 3.9.59 — Schedule sheet: the text comes from the composer
 
 The schedule sheet carried its own editable "Message" box, seeded from the

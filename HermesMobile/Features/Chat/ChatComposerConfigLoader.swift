@@ -62,8 +62,19 @@ struct ChatComposerConfigLoader {
     private let client: APIClient
     /// In-memory cache survives background/foreground transitions (iOS keeps the process alive).
     /// TTL = 24 hours because models, profiles, and workspaces rarely change.
-    private static var memoryCache: (state: ChatComposerConfigState, timestamp: Date)?
+    ///
+    /// The cached state also records the app version that produced it. A build
+    /// that changes how the catalog is assembled (curated instead of live, new
+    /// sections, different counts) would otherwise serve the previous build's
+    /// catalog for a day, and the change would look like it never shipped —
+    /// exactly what happened with the Nous count.
+    private static var memoryCache: (state: ChatComposerConfigState, timestamp: Date, appVersion: String)?
     private static let cacheTTL: TimeInterval = 86_400
+
+    /// The version the cache is keyed on. Reading it from the bundle means a
+    /// reinstall invalidates the cache without anyone remembering to.
+    private static let appVersion: String =
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
 
     /// True while the process is a test host.
     ///
@@ -105,7 +116,8 @@ struct ChatComposerConfigLoader {
         // background/foreground transitions, so this cache typically survives all
         // day. Skipped under test — see isRunningTests.
         if !Self.isRunningTests,
-           let (cachedState, ts) = Self.memoryCache,
+           let (cachedState, ts, cachedVersion) = Self.memoryCache,
+           cachedVersion == Self.appVersion,
            ts.timeIntervalSinceNow > -Self.cacheTTL,
            !cachedState.modelCatalogGroups.isEmpty {
             var result = cachedState
@@ -202,7 +214,7 @@ struct ChatComposerConfigLoader {
     }
 
     private func updateCache(_ state: ChatComposerConfigState) {
-        Self.memoryCache = (state, Date())
+        Self.memoryCache = (state, Date(), Self.appVersion)
     }
 
     private static func profileSummary(
