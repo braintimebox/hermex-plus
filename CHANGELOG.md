@@ -1,4 +1,7 @@
-## 3.9.52 — P0: cache on transport failures, composer clears after send, compact UI
+## 3.9.53 — P0: scheduled row without text, model catalog no flicker, OpenCode Free removed
+- Scheduled messages: message body dropped from row — only destination · time, text still editable
+- Model picker: /api/models + /api/models/live load before UI commit, no flashing name switch
+- Gateway: OpenCode Free returns empty catalog on 403 FreeTierError, no curated floor
 - Network: transport failures (-1001/-1005/-1015/-1016/-1017, 408/502/503/504) now render the cached list instead of an empty screen; only idempotent reads retry — sends keep one attempt because the server has no client_message_id.
 - Composer: the outgoing text is no longer written into the durable draft before the request, so rehydration cannot hand a sent message back into the field.
 - Scheduled messages: one-line rows (clock, preview, chat · time) with actions behind a menu, down from ~120pt.
