@@ -602,9 +602,6 @@ final class ChatViewModel {
     private let isCLISession: Bool
     private let server: URL
     let client: APIClient
-    /// Same client, held separately so the outbox closure captures this view
-    /// model weakly instead of retaining it through `client`.
-    @ObservationIgnored private(set) var outboxClient: APIClient?
     private let streamCoordinator: ChatStreamCoordinator
     private let pendingActionCoordinator: ChatPendingActionCoordinator
     private let attachmentCoordinator: ChatAttachmentCoordinator
@@ -886,10 +883,13 @@ final class ChatViewModel {
         // against its own mock handler (that is exactly how
         // testTwoReferencesInOneFolderCostOneListing saw an extra listing).
         // Delivery begins on the timer or on the first failed send.
-        self.outboxClient = resolvedClient
-        OutboxSender.shared.configure { [weak self] message in
-            guard let client = self?.outboxClient else { return }
-            _ = try await client.startChat(
+        // Capture the client itself, not `self`: this runs while the rest of the
+        // view model's stored properties are still uninitialised, and touching
+        // self here is a compile error. The client is an actor, so holding it in
+        // the closure cannot create a retain cycle back to this view model.
+        let outboxClient = resolvedClient
+        OutboxSender.shared.configure { message in
+            _ = try await outboxClient.startChat(
                 sessionID: message.sessionID,
                 message: message.text,
                 workspace: message.workspace,
