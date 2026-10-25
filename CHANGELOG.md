@@ -1,3 +1,7 @@
+## 3.9.56 — Share sheet: payload mirrored onto the pasteboard again (3.6.0 → 3.7.0 regression)
+- Share extension: every share is now written to BOTH the App Group container and the named pasteboard, unconditionally. The 1.6.0 sync removed the pasteboard and left the container as the only transport; a SideStore re-sign does not reliably keep the App Group entitlement, so each target got its own sandbox container, the extension's write was invisible to the app, and the share vanished with no error. The 3.9.22 fix only covered a nil containerURL(), which is not this failure mode.
+- Share import: the app still prefers the container inbox and now clears the pasteboard copy once claimed, so a working container wins and nothing imports twice.
+- Share banner: the "a share is waiting" hint probes both transports instead of the container only.
 ## 3.9.55 — Schedule default 5 minutes; CI: Xcode 26 compilation cache + simulator preboot
 - Schedule sheet: default send time is now 5 minutes (was 60), matching the Telegram composer. An hour read as a bug — a user who wants an hour sets one.
 - CI: Xcode 26 Compilation Caching (LLVM CAS) enabled in both macOS jobs — content-addressed, so a stale entry cannot produce a wrong build. Industry-measured gains: Wikipedia iOS −24%, Pocket Casts −36%.
