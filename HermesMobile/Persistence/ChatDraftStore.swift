@@ -711,6 +711,7 @@ final class ChatDraftStore {
                 draft.quotes = []
                 draft.attachments = []
             }
+            return .empty
         }
 
         guard !draftWasEdited else {

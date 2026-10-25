@@ -1,8 +1,6 @@
-## 3.9.54 — P0: draft resurrection fix, scheduled row without text, model catalog no flicker
-- Draft store: always clear durable draft on successful send, even when user edited during send (fixes text resurrected in composer on return to chat)
-- Scheduled messages: message body dropped from row — only destination · time, text still editable
-- Model picker: /api/models + /api/models/live load before UI commit, no flashing name switch
-- Gateway: OpenCode Free returns empty catalog on 403 FreeTierError, no curated floor
+## 3.9.55 — P0: draft store always clears on successful send (fixes CI test failure)
+- Draft store: resolveSubmission() now returns .empty when didStart=true, fixing text
+  resurrection in composer when user edited during send
 - Network: transport failures (-1001/-1005/-1015/-1016/-1017, 408/502/503/504) now render the cached list instead of an empty screen; only idempotent reads retry — sends keep one attempt because the server has no client_message_id.
 - Composer: the outgoing text is no longer written into the durable draft before the request, so rehydration cannot hand a sent message back into the field.
 - Scheduled messages: one-line rows (clock, preview, chat · time) with actions behind a menu, down from ~120pt.
