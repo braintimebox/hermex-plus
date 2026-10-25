@@ -1,3 +1,16 @@
+## 3.9.64 — The device build gets the cache the test build already had
+
+- `Package IPA` compiled all 688 Swift files on every release (6:18) because the
+  device build had no DerivedData cache. It now restores products and source
+  mtimes the same way `unit-build` does.
+- `SourcePackages` travels inside the `test-build` artifact instead of being
+  restored from a separate cache in the test job. That restore cost 101s of
+  download and untar — the same order as the 108s of cloning it replaced — so
+  the test job now has no package step at all.
+
+Still open, documented rather than solved: app-hosted tests install the 83 MB
+app on every run (2:49), and teardown waits 55s for background work to stop.
+
 ## 3.9.63 — A release no longer throws away its own cache
 
 - Cache keys no longer include `project.pbxproj`. It carries `MARKETING_VERSION`,

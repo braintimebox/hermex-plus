@@ -209,8 +209,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-build
+          # SourcePackages travels with the build. Restoring it from a cache in
+          # the test job cost 101s of download-and-untar, the same order as the
+          # 108s of cloning it replaced, so that cache was never a win. One
+          # artifact, one download, nothing left to resolve.
           path: |
             ${{ env.DERIVED_DATA_PATH }}/Build/Products
+            ${{ env.DERIVED_DATA_PATH }}/SourcePackages
           if-no-files-found: error
           retention-days: 3
           compression-level: 1
@@ -344,19 +349,13 @@ jobs:
           nohup xcrun simctl boot "${SIMULATOR_UDID}" > /tmp/simboot.log 2>&1 || true
           echo "boot started for ${SIMULATOR_UDID}; it overlaps cache restore and download"
 
-      - name: Restore SPM cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
-          restore-keys: |
-            spm-${{ runner.os }}-
-
       - name: Download test build
         uses: actions/download-artifact@v4
         with:
           name: test-build
-          path: ${{ env.DERIVED_DATA_PATH }}/Build/Products
+          # Extracted at DerivedData/ so both Build/Products and SourcePackages
+          # land exactly where the .xctestrun expects them.
+          path: ${{ env.DERIVED_DATA_PATH }}
 
       - name: Verify test build
         run: |
@@ -522,6 +521,24 @@ jobs:
           key: xcode-cas-device-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'Package.resolved', '**/Package.resolved') }}
           restore-keys: |
             xcode-cas-device-${{ runner.os }}-
+
+
+      # The device build had no DerivedData cache: every release recompiled all
+      # 688 Swift files for the IPA, 6:18 of the run. Same mechanism as
+      # unit-build — restore the products, then restore source mtimes from git,
+      # or Xcode treats every file as changed and the cache does nothing.
+      - name: Restore DerivedData (device)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.DERIVED_DATA_PATH }}/Build/Intermediates.noindex
+            ${{ env.DERIVED_DATA_PATH }}/Build/Products
+          key: dd-device-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile/**/*.h', 'Package.resolved', '**/Package.resolved') }}
+          restore-keys: |
+            dd-device-${{ runner.os }}-
+
+      - name: Restore source mtimes (device)
+        uses: chetan/git-restore-mtime-action@6365eabac94ee2b7a747f96998927a6a6e1994c4
 
       - name: Build for device
         run: |
