@@ -143,6 +143,19 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-
 
+      # Xcode 26 Compilation Caching (LLVM CAS). Measured industry gains:
+      # Wikipedia iOS -24%, Pocket Casts -36%. Our Build-for-testing is 293s of
+      # the 631s job, so a 25-35% cut is 70-105s. The cache is content-addressed
+      # (keys are hashes of the inputs), so a stale entry cannot produce a wrong
+      # build — unlike the DerivedData tar that was measured and rejected.
+      - name: Restore Xcode compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
+          key: xcode-cas-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            xcode-cas-${{ runner.os }}-
+
       - name: Select simulator
         id: sim
         run: |
@@ -168,6 +181,18 @@ jobs:
           echo "Using simulator: ${name}"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
 
+      # The 203s of silence between xcodebuild start and the first app log is
+      # simulator cold-boot + app install (measured on run 40172846270 shard 1:
+      # TEST BUILD SUCCEEDED 07:33:47, first app log 07:37:18). Boot the device
+      # in the background so the boot overlaps the 293s build instead of being
+      # paid after it. `|| true`: an already-booted device answers non-zero.
+      - name: Preboot simulator in background
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          nohup xcrun simctl boot "${SIMULATOR_NAME}" >/dev/null 2>&1 &
+          echo "simulator boot started in background (overlaps the build)"
+
       - name: Build for testing
         env:
           SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
@@ -179,6 +204,9 @@ jobs:
             -scheme "${SCHEME}" \
             -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            SWIFT_ENABLE_COMPILE_CACHE=YES \
+            CLANG_ENABLE_COMPILE_CACHE=YES \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_IDENTITY="-"
           echo "Build-for-testing: $((SECONDS - start_seconds))s"
@@ -322,6 +350,17 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-
 
+      # Same content-addressed CAS as the test job, separate path so the two
+      # jobs cannot clobber each other's entries. A Release build shares most
+      # of its compilation units with the test build.
+      - name: Restore Xcode compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
+          key: xcode-cas-device-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            xcode-cas-device-${{ runner.os }}-
+
       - name: Build for device
         run: |
           set -euo pipefail
@@ -332,6 +371,9 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            SWIFT_ENABLE_COMPILE_CACHE=YES \
+            CLANG_ENABLE_COMPILE_CACHE=YES \
             CODE_SIGNING_ALLOWED=NO \
             build
           echo "Build for device: $((SECONDS - start_seconds))s"
