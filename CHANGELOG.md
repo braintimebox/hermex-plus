@@ -1,3 +1,15 @@
+## 3.9.59 — Schedule sheet: the text comes from the composer
+
+The schedule sheet carried its own editable "Message" box, seeded from the
+composer. That duplicated the field the user had just typed into, and the box
+plus its keyboard pushed the date picker to the bottom of a four-section form —
+the calendar is the reason the sheet is opened at all.
+
+The editor is gone. The composer is the only place text is written; the sheet
+shows a two-line read-only preview so "what am I sending" stays answered, and
+the date and time now own the space. Behaviour, destination rules and the
+five-minute default are unchanged.
+
 ## 3.9.58 — Scheduled messages show their text; share reaches the chosen chat
 - Scheduled list: each row leads with the message body (two lines) and keeps
   destination + date + time underneath. The row had been reduced to

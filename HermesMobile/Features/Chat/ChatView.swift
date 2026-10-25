@@ -4287,7 +4287,6 @@ struct ScheduleMessageSheet: View {
     let onSchedule: (Date, String, ScheduledMessageTarget) -> Void
     let onCancel: () -> Void
 
-    @State private var messageText: String = ""
     /// Default send time for a new scheduled message. Five minutes matches the
     /// Telegram composer's default; an hour was the previous value here and read
     /// as a bug ("if I need an hour I'll add it myself").
@@ -4318,10 +4317,17 @@ struct ScheduleMessageSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                // No editor here. The text comes from the composer and is edited
+                // there; a second editable copy took ~80pt plus a keyboard, which
+                // pushed the date picker -- the reason this sheet exists -- off the
+                // screen and made four stacked sections look like four questions.
+                // One read-only line answers "what am I sending" without competing
+                // with the calendar.
                 Section {
-                    TextEditor(text: $messageText)
-                        .font(.body)
-                        .frame(minHeight: 80)
+                    Text(draftMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 } header: {
                     Text("Message")
                 }
@@ -4386,7 +4392,7 @@ struct ScheduleMessageSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Schedule") {
-                        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        guard !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                             showEmptyAlert = true
                             return
                         }
@@ -4400,7 +4406,7 @@ struct ScheduleMessageSheet: View {
                             screen: "ScheduleSheet",
                             message: "schedule confirmed target=\(target!)"
                         )
-                        onSchedule(scheduledDate, messageText, target!)
+                        onSchedule(scheduledDate, draftMessage, target!)
                     }
                 }
             }
@@ -4436,9 +4442,6 @@ struct ScheduleMessageSheet: View {
                     sessions = []
                 }
             }
-        }
-        .onAppear {
-            messageText = draftMessage
         }
         .presentationDetents([.medium, .large])
     }
