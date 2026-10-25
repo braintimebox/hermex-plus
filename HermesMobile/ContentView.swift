@@ -122,6 +122,18 @@ struct ContentView: View {
             return
         }
 
+        // Priority 1: the draft may ride inside the URL itself. That transport
+        // needs no App Group, so it is the only one that provably works on a
+        // re-signed sideloaded build — restore it first, before touching the
+        // container. Without this branch a text share arrives as a bare URL with
+        // nothing to import, which is the 3.7.0 regression.
+        if let reservation = HermesShareDraft.reservationFromURL(url) {
+            pendingSharedImport = reservation
+            hasRoutedSharedImport = true
+            logSharedImportSource(reservation.source)
+            return
+        }
+
         importPendingSharedDraftIfAvailable()
     }
 
@@ -222,7 +234,11 @@ struct ContentView: View {
             }
         }
 
-        guard let directory = HermesShareDraft.containerURL() else {
+        // Only a container-backed payload has an inbox record to acknowledge.
+        // URL and pasteboard payloads are consumed at claim time, so there is
+        // nothing to release and no directory to require.
+        guard reservation.source == .appGroup,
+              let directory = HermesShareDraft.containerURL() else {
             return
         }
 

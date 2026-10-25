@@ -53,22 +53,24 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        // HERMEX-FORK: write to BOTH transports, every time.
-        //
-        // The previous version trusted `containerURL()` as proof that the two
-        // processes share one container, and only fell back to the pasteboard
-        // when it returned nil. It does not prove that. After a SideStore
-        // re-sign each target can end up with its own sandbox-local container
-        // (SideStore#1437), so the extension's write is invisible to the app
-        // while `containerURL()` still hands back a perfectly valid path. The
-        // extension reported success, the app read an empty inbox, the payload
-        // was gone with no error — the exact "worked in 3.6.0, broken in 3.7.0"
-        // report.
-        //
-        // Mirroring onto the named pasteboard costs one in-memory copy and needs
-        // no entitlement, so a share survives on any signature. The app prefers
-        // the container and clears the pasteboard once it has claimed from it,
-        // so a working container still wins and nothing is imported twice.
+        // Text-only share that fits the URL: hand the draft over inline, exactly
+        // as 3.6.0 did. The system carries the payload to the containing app, so
+        // neither the shared container nor a named pasteboard is involved — and
+        // both of those are App-Group scoped, which a re-signed sideloaded
+        // extension does not have. This is the path that actually worked before
+        // 3.7.0 removed it.
+        let fitsInline = input.attachments.isEmpty
+            && draft.utf8.count <= HermesShareDraft.maximumURLDraftBytes
+
+        if fitsInline {
+            openHermes(withDraft: draft)
+            return
+        }
+
+        // HERMEX-FORK: attachments (or an oversized draft) need the container.
+        // Mirroring onto the pasteboard costs one in-memory copy and is a second
+        // chance where the container is unreachable, but it cannot be the only
+        // path: a named pasteboard is namespaced to the App Group too.
         var containerDelivered = false
 
         if let directory = HermesShareDraft.containerURL() {
@@ -103,9 +105,15 @@ final class ShareViewController: UIViewController {
         statusLabel.isHidden = false
     }
 
-    private func openHermes() {
-        let url = HermesShareDraft.openURL
+    private func openHermes(withDraft draft: String) {
+        openHermes(at: HermesShareDraft.openURL(withDraft: draft))
+    }
 
+    private func openHermes() {
+        openHermes(at: HermesShareDraft.openURL)
+    }
+
+    private func openHermes(at url: URL) {
         extensionContext?.open(url, completionHandler: { [weak self] success in
             Task { @MainActor [weak self] in
                 guard let self else { return }

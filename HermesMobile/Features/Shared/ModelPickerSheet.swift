@@ -459,9 +459,23 @@ struct ModelPickerSheet: View {
                 commit(option)
             } label: {
                 HStack(spacing: 12) {
-                    Text(option.displayName)
-                        .font(.body)
-                        .lineLimit(2)
+                    // The model id is the same string across providers — the
+                    // Nous Portal and OpenRouter both list
+                    // `anthropic/claude-fable-5` — so a bare name cannot tell
+                    // which provider will actually serve it. Print the provider
+                    // underneath, from the option's own providerID.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(option.displayName)
+                            .font(.body)
+                            .lineLimit(2)
+
+                        if let provider = option.providerID, !provider.isEmpty {
+                            Text(verbatim: provider)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
 
                     Spacer(minLength: 0)
 

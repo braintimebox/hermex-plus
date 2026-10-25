@@ -63,6 +63,10 @@ struct SharedImport: Equatable {
 enum ShareDeliverySource: String {
     case appGroup
     case pasteboard
+    /// The draft rode inside the open URL itself. Needs no App Group and no
+    /// pasteboard, so it is the only transport that provably works on a
+    /// re-signed sideloaded build. Carries text only.
+    case url
     case unavailable
 
     /// Human-readable cause for the diagnostics line, so the log says *why*
@@ -73,6 +77,8 @@ enum ShareDeliverySource: String {
             return "app group container"
         case .pasteboard:
             return "named pasteboard (app group unavailable)"
+        case .url:
+            return "inline in the open URL"
         case .unavailable:
             return "no transport: app group container nil and pasteboard empty"
         }
@@ -360,6 +366,77 @@ enum HermesShareDraft {
             preconditionFailure("Invalid share open URL configuration")
         }
         return url
+    }
+
+    /// Longest draft, in UTF-8 bytes, that rides inside the open URL.
+    ///
+    /// This is the 3.6.0 transport and it is the only one that needs no App
+    /// Group: the payload is part of the URL the system hands to the containing
+    /// app. Both the shared container and a *named* pasteboard are App-Group
+    /// scoped, so on a re-signed sideloaded build neither side sees the other's
+    /// write — which is exactly why the share worked in 3.6.0 and broke in 3.7.0
+    /// when the URL payload was removed and the container became the only path.
+    ///
+    /// The cap keeps the URL well inside what iOS delivers reliably; a larger
+    /// draft, or any share with attachments, goes through the container.
+    static let maximumURLDraftBytes = 6_000
+
+    /// The share URL, carrying the draft inline when it fits.
+    static func openURL(withDraft draft: String) -> URL {
+        var components = URLComponents()
+        components.scheme = urlScheme
+        components.host = shareURLHost
+
+        if !draft.isEmpty, draft.utf8.count <= maximumURLDraftBytes {
+            let encoded = Data(draft.utf8)
+                .base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            components.queryItems = [URLQueryItem(name: "d", value: encoded)]
+        }
+
+        guard let url = components.url else {
+            preconditionFailure("Invalid share open URL configuration")
+        }
+        return url
+    }
+
+    /// Decodes the inline draft. Returns nil for a plain share URL — the payload
+    /// was too large to inline, or attachments are coming through the container.
+    static func draftFromURL(_ url: URL) -> String? {
+        guard isShareOpenURL(url),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let encoded = components.queryItems?.first(where: { $0.name == "d" })?.value,
+              !encoded.isEmpty
+        else {
+            return nil
+        }
+
+        var base64 = encoded
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder > 0 {
+            base64 += String(repeating: "=", count: 4 - remainder)
+        }
+
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        let text = String(decoding: data, as: UTF8.self)
+        return text.isEmpty ? nil : text
+    }
+
+    /// Wraps an inline draft as a reservation so the app has one import path for
+    /// every transport.
+    static func reservationFromURL(_ url: URL) -> SharedImportReservation? {
+        guard let draft = draftFromURL(url) else { return nil }
+        return SharedImportReservation(
+            itemID: "url-\(UUID().uuidString)",
+            reservationID: UUID().uuidString,
+            createdAt: Date(),
+            sharedImport: SharedImport(draft: draft, attachments: []),
+            source: .url
+        )
     }
     static func isShareOpenURL(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == urlScheme else {
