@@ -280,20 +280,6 @@ jobs:
       # shard clones eight repositories on every run (measured: 108 of the 380
       # seconds a shard takes). The tests themselves run in 16 seconds; almost
       # all of a shard's wall clock is this resolution plus simulator boot.
-      - name: Restore SPM cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            spm-${{ runner.os }}-
-
-      - name: Download test build
-        uses: actions/download-artifact@v4
-        with:
-          name: test-build
-          path: ${{ env.DERIVED_DATA_PATH }}/Build/Products
-
       - name: Select simulator
         id: sim
         run: |
@@ -316,23 +302,56 @@ jobs:
             xcrun simctl list devices available >&2
             exit 1
           fi
-          echo "Using simulator: ${name}"
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in data["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable") and device["name"] == sys.argv[1]:
+                      print(device["udid"])
+                      raise SystemExit
+          ' "$name")
+          if [[ -z "${udid}" ]]; then
+            echo "Simulator ${name} has no UDID" >&2
+            exit 1
+          fi
+          echo "Using simulator: ${name} (${udid})"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "udid=${udid}" >> "$GITHUB_OUTPUT"
 
       # The 203s of silence between xcodebuild start and the first app log is
       # simulator cold-boot + app install (measured on run 40172846270 shard 1:
       # TEST BUILD SUCCEEDED 07:33:47, first app log 07:37:18). Boot the device
       # in the background so the boot overlaps the 293s build instead of being
       # paid after it. `|| true`: an already-booted device answers non-zero.
-      - name: Preboot simulator in background
+      # Started here, before the cache restore and the artifact download, so the
+      # cold boot overlaps ~70s of real work. Measured on 40213100922: boot,
+      # install and runner startup were 82.8s of silence inside xcodebuild.
+      - name: Boot simulator in background
         env:
-          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+          SIMULATOR_UDID: ${{ steps.sim.outputs.udid }}
         run: |
-          nohup xcrun simctl boot "${SIMULATOR_NAME}" >/dev/null 2>&1 &
-          echo "simulator boot started in background (overlaps the build)"
+          set -euo pipefail
+          # `|| true`: an already-booted device answers non-zero.
+          nohup xcrun simctl boot "${SIMULATOR_UDID}" > /tmp/simboot.log 2>&1 || true
+          echo "boot started for ${SIMULATOR_UDID}; it overlaps cache restore and download"
 
-      # Fail here, not inside xcodebuild with a confusing message, if the
-      # artifact did not carry a runnable test plan.
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Download test build
+        uses: actions/download-artifact@v4
+        with:
+          name: test-build
+          path: ${{ env.DERIVED_DATA_PATH }}/Build/Products
+
       - name: Verify test build
         run: |
           set -euo pipefail
@@ -352,9 +371,13 @@ jobs:
       - name: Test
         env:
           SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+          SIMULATOR_UDID: ${{ steps.sim.outputs.udid }}
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
+          # The background boot started before the cache restore; this blocks
+          # only for whatever of it is left.
+          xcrun simctl bootstatus "${SIMULATOR_UDID}" -b
           # MEASURED (run 38135481553): шаг Test = 492s, из них
           #   162.7s  — выполнение 2582 кейсов (медиана 0.002s, p90 0.020s)
           #   365s    — ТИХАЯ настройка симулятора между TEST BUILD SUCCEEDED и
@@ -374,7 +397,7 @@ jobs:
           xcodebuild test-without-building $SHARD_ARGS \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
-            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             -resultBundlePath "${RESULT_BUNDLE_PATH}" \
             -parallel-testing-enabled NO \
