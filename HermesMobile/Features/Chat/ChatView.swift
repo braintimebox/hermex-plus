@@ -4317,20 +4317,11 @@ struct ScheduleMessageSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                // No editor here. The text comes from the composer and is edited
-                // there; a second editable copy took ~80pt plus a keyboard, which
-                // pushed the date picker -- the reason this sheet exists -- off the
-                // screen and made four stacked sections look like four questions.
-                // One read-only line answers "what am I sending" without competing
-                // with the calendar.
-                Section {
-                    Text(draftMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } header: {
-                    Text("Message")
-                }
+                // No message block at all. The text lives in the composer and is
+                // edited there; a read-only copy still rendered as an empty-looking
+                // text field and cost vertical space that the date picker -- the
+                // reason this sheet exists -- needs. The user asked twice why a
+                // "message / text" field was still here: this is why.
 
                 if let title = chatTitle {
                     Section {

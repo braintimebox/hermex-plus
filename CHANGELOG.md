@@ -8,6 +8,18 @@ re-resolved the package graph that had just been restored from cache.
   device build that produces the IPA is unchanged.
 - `-disableAutomaticPackageResolution` in the test run.
 
+Scheduled messages:
+
+- The schedule sheet no longer shows a "Message" block. The text lives in the
+  composer; a read-only copy still read as an empty text field and took the
+  vertical space the date picker needs.
+- Scheduled delivery now records its failures. It used to swallow every error in
+  `catch { continue }`, so a user seeing "HTTP 501" left no trace in telemetry —
+  not even the attempt.
+- Scheduled delivery sends a stable `clientMessageId` (the schedule key), so a
+  retry after a timeout is deduplicated by the server instead of starting a
+  second turn.
+
 Measured before the change: 131s between "resolved packages" and the first test
 case (install + runner startup), 32s of package resolution, 80s of actual tests.
 

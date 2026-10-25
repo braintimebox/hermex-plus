@@ -1565,7 +1565,11 @@ final class SessionListViewModel {
                     sessionID: targetSessionId,
                     message: item.draftText,
                     workspace: nil,
-                    model: nil
+                    model: nil,
+                    // The schedule key is stable across retries, so a repeat that
+                    // follows a timeout is recognised by the server instead of
+                    // starting a second turn.
+                    clientMessageId: item.scheduleKey
                 )
                 // Delete the dispatched row off-main, then cancel the server timer
                 // so it is NOT re-sent at the scheduled time by the dispatcher.
@@ -1584,7 +1588,16 @@ final class SessionListViewModel {
                     serverURLString: item.serverURLString
                 )
             } catch {
-                // Skip, retry next cycle
+                // Record it: scheduled delivery used to swallow every failure
+                // here, so a user reporting "HTTP 501" left no trace in telemetry
+                // at all — not even the attempt. The row is deliberately kept so
+                // the next cycle retries it.
+                DeliveryTelemetry.record(
+                    error,
+                    path: .scheduled,
+                    screen: "ScheduledDelivery",
+                    detail: "scheduleKey=\(item.scheduleKey) textChars=\(item.draftText.count)"
+                )
                 continue
             }
         }
