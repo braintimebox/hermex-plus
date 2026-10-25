@@ -4677,6 +4677,39 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertNotNil(viewModel.sendErrorMessage)
     }
 
+    /// A connection-level failure must not hand the text back to the composer.
+    ///
+    /// The reported failure (3.9.58, `network.url.-1001`, `path=send`) ended with
+    /// the message in the draft and the user sending again by hand. The contract
+    /// now: the bubble stays, the message goes to the outbox, and delivery is the
+    /// app's job.
+    @MainActor
+    func testTransportTimeoutQueuesTheSendAndKeepsTheBubble() async throws {
+        await OutboxStore.shared.clear()
+        defer { Task { await OutboxStore.shared.clear() } }
+
+        let viewModel = try makeViewModel { request in
+            if request.url?.path == "/api/chat/start" {
+                throw URLError(.timedOut)
+            }
+            XCTFail("Unexpected request path: \(request.url?.path ?? "nil")")
+            throw URLError(.badURL)
+        }
+
+        let didStart = await viewModel.sendMessage("Survive the tunnel")
+
+        // True means ChatView keeps the bubble and does not restore a draft.
+        XCTAssertTrue(didStart, "a queued send must count as started")
+        XCTAssertEqual(viewModel.messages.count, 1, "the bubble stays while it waits")
+        XCTAssertEqual(viewModel.messages.first?.content, "Survive the tunnel")
+
+        let queued = await OutboxStore.shared.pending()
+        XCTAssertEqual(queued.count, 1, "the message is owned by the outbox")
+        XCTAssertEqual(queued.first?.text, "Survive the tunnel")
+        XCTAssertEqual(queued.first?.attempts, 0)
+        XCTAssertNotNil(queued.first?.id, "the outbox id is the idempotency id")
+    }
+
     @MainActor
     func testTransportErrorChecksStatusAndReattachesWhenStreamIsActive() async throws {
         let streamClient = SpySSEStreamingClient()

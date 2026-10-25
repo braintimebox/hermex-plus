@@ -3207,6 +3207,19 @@ final class ChatViewModel {
             // queue resolves to the same turn on the server instead of posting
             // the text twice.
             DeliveryTelemetry.record(error, path: .send, screen: "ChatViewModel")
+            // Only a connection-level failure is worth queueing: the request may
+            // simply not have arrived, and a retry resolves it. A server refusal
+            // (4xx/5xx) means the text will not be accepted however many times
+            // it is sent, so it goes back to the composer where the user can see
+            // and change it — queueing that would hide the failure in a loop.
+            guard let apiError = error as? APIError,
+                  apiError.isIdempotentRetryCandidate
+            else {
+                rollbackOptimisticMessage(id: localMessageID)
+                cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
+                restorePendingAttachments(attachmentsToRestoreOnFailure)
+                return false
+            }
             let queued = OutboxMessage(
                 id: outboxMessageID,
                 sessionID: sessionID,
