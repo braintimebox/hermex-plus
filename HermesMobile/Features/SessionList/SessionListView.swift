@@ -323,6 +323,15 @@ struct SessionListView: View {
                         pendingSharedDraft = nil
                         pendingSharedAttachments = []
                         showExistingSessionPicker = false
+                        // Consume-once, same as the New Chat and Cancel branches:
+                        // without releasing the reservation the destination dialog
+                        // re-arms on the next scene activation and asks the same
+                        // question again ("Send shared content to…" after every
+                        // return to the app).
+                        if let reservation = pendingSharedReservation {
+                            didRoutePendingSharedImport(reservation)
+                        }
+                        pendingSharedReservation = nil
                         navigationState.select(session)
                         persistLastSelectedSession()
                     },
@@ -555,6 +564,8 @@ struct SessionListView: View {
                 session: session,
                 server: server,
                 onAPIError: authManager.handleAPIError,
+                initialDraft: initialDraft,
+                initialAttachments: initialAttachments,
                 draftStore: draftStore
             )
                 .id(session.id)

@@ -314,13 +314,22 @@ private struct ScheduledMessageRow: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            // HERMEX-FORK (P0 UI): no message text row — only destination · time.
-            // The user asked to drop the body text; the action menu still opens
-            // with Send Now / Edit / Delete, and Edit shows the full text.
-            Text(subtitle)
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            // The row is what the user scans to answer "what am I sending, where,
+            // and when". Showing only destination · time made every row look the
+            // same and forced a tap into Edit just to recall the message — the
+            // body text leads, the destination and time sit underneath.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
 
             Spacer(minLength: 4)
 

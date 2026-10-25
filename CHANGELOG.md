@@ -1,3 +1,16 @@
+## 3.9.58 — Scheduled messages show their text; share reaches the chosen chat
+- Scheduled list: each row leads with the message body (two lines) and keeps
+  destination + date + time underneath. The row had been reduced to
+  "chat · time", so every entry looked alike and reading one required opening
+  Edit.
+- Share sheet → existing chat: the chosen chat now receives the shared text and
+  attachments. `ChatView` accepted `initialDraft`/`initialAttachments`, but the
+  navigation call computed them and never passed them on — the payload was
+  dropped silently.
+- Share sheet: choosing a chat now consumes the pending import (same as New
+  Chat and Cancel), so the destination dialog stops re-asking on every return
+  to the app.
+
 ## 3.9.57 — Share via URL payload, provider shown under each model, ProMotion enabled
 - Share sheet: a text share now travels inside the open URL again, exactly as 3.6.0 did. The 1.6.0 sync removed that path and left the App Group container as the only transport, but a SideStore re-sign does not reliably keep the App Group entitlement — so the extension wrote into one container, the app read another, and the share vanished silently. Neither the container nor a named pasteboard can fix that: both are App-Group scoped. Only the URL payload needs no entitlement.
 - Share sheet: a share with attachments (or text over 6 KB) still uses the container, with the pasteboard as a second chance.
