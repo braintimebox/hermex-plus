@@ -223,19 +223,21 @@ jobs:
     # The split comes from scripts/test_shards.py: it discovers every XCTestCase
     # in the sources and packs them by case count, so a new test file lands in a
     # shard without anyone updating a list.
-    name: Test (shard ${{ matrix.shard }}/5)
+    name: Test (shard ${{ matrix.shard }}/1)
     needs: [guard, unit-build]
     runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        # Five shards, not three. A shard no longer compiles: it downloads the
-        # built products in 8 seconds and runs its share of the suite, so the
-        # only cost of another shard is a runner. Measured on 3.9.60: the suite
-        # itself is ~8 min in a shard, which is what the old "2.27 min of tests"
-        # was hiding behind an 11-minute compile.
-        shard: [1, 2, 3, 4, 5]
+        # ONE shard. Measured on run 40213100922: a shard spends ~280 s on
+        # checkout, artifact download, simulator boot, install and runner
+        # startup, and 16 s running its 380 test cases. Sharding divided the
+        # 16 seconds and multiplied the 280: five shards queued for five macOS
+        # runners and the last one finished six minutes after a single shard
+        # would have. 143 test classes, ~1900 cases, ~90 s total - one shard
+        # holds them comfortably.
+        shard: [1]
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
@@ -367,8 +369,8 @@ jobs:
           # Осторожно: это ГИПОТЕЗА, а не подтверждённый выигрыш. Ранее замеренный
           # эксперимент с 4 воркерами (4016s против 689s) отвергнут и остаётся
           # отвергнутым — речь только о параллелизме при одном воркере.
-          SHARD_ARGS="$(python3 scripts/test_shards.py --count 5 --shard ${{ matrix.shard }})"
-          echo "shard ${{ matrix.shard }}/3: $(wc -w <<< "${SHARD_ARGS}") classes"
+          SHARD_ARGS="$(python3 scripts/test_shards.py --count 1 --shard ${{ matrix.shard }})"
+          echo "shard ${{ matrix.shard }}/1: $(wc -w <<< "${SHARD_ARGS}") classes"
           xcodebuild test-without-building $SHARD_ARGS \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
