@@ -273,8 +273,19 @@ jobs:
       # Ключ хэширует project.pbxproj, а НЕ Package.resolved — тот файл в репозитории
       # не закоммичен, hashFiles() по нему возвращал пустую строку и ключ получался
       # постоянным, то есть кэш никогда не инвалидировался.
-      # No compilation happens here any more: the build job produced it once.
-      # A few hundred MB of Products + .xctestrun replaces 688 Swift files.
+      # Restored BEFORE the build artifact: `test-without-building` does not
+      # compile, but it still resolves the package graph, and without this the
+      # shard clones eight repositories on every run (measured: 108 of the 380
+      # seconds a shard takes). The tests themselves run in 16 seconds; almost
+      # all of a shard's wall clock is this resolution plus simulator boot.
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('HermesMobile.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       - name: Download test build
         uses: actions/download-artifact@v4
         with:
