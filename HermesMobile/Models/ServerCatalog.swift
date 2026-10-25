@@ -864,6 +864,19 @@ extension Array where Element == ModelCatalogGroup {
             guard group.providerID == provider else { return group }
             // HERMEX-FORK: add marker to satisfy enforcement (sync MARKETING_VERSION)
             guard !group.name.contains(" · ") else { return group }
+            // The live list is a FALLBACK, not an override.
+            //
+            // It used to replace the group's models outright, so an active provider
+            // whose curated catalog is 57 entries showed every id the API answers
+            // for — Nous returned 424, and the picker read "428" while Telegram,
+            // reading the same curated catalog, showed 57 + 7. Two surfaces, two
+            // numbers, and the larger one was not the more useful list: it is the
+            // provider's whole inventory, most of it unusable or unlisted.
+            //
+            // Curated is the product decision about what is worth offering; live
+            // only fills a group that has nothing to show (new or custom provider,
+            // where no curated list exists yet).
+            guard group.models.isEmpty else { return group }
             return ModelCatalogGroup(
                 id: group.id,
                 name: group.name,

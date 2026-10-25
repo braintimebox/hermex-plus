@@ -218,8 +218,14 @@ struct ComposerModelEffortMenu: View {
     }
 
     private func modelAction(_ option: ModelCatalogOption) -> UIAction {
-        UIAction(
-            title: option.displayName,
+        // UIAction has no subtitle, so the provider has to ride in the title.
+        // Without it a favorites list is ambiguous by construction: we deliberately
+        // keep same-named models from different providers as separate entries, and
+        // the menu then showed several identical rows and a checkmark on one.
+        let provider = (option.providerID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = provider.isEmpty ? option.displayName : "\(option.displayName) · \(provider)"
+        return UIAction(
+            title: title,
             state: option.matchesSelection(
                 modelID: selection.model.id,
                 providerID: selection.modelProviderID
