@@ -1,3 +1,28 @@
+## 3.9.61 — A send that survives a dropped connection
+
+Telemetry from 3.9.58 (`15:09:30`, `network.url.-1001`, `path=send`,
+`retryable=false`) showed a send that never reached the server and came back to
+the composer as a draft. Two defects made that the outcome:
+
+- The send path called `startChat` directly. `startChatWithRetry` existed and had
+  never been called by anything — the retry loop was dead code.
+- `clientMessageId` did not exist, so a retry could not be told apart from a new
+  message and the app correctly refused to retry a timeout.
+
+Now every send carries a `clientMessageId` — the local message id, created once
+when send is pressed — and the server replays the first turn for a repeated id
+instead of starting a second one. With that guarantee, a timeout and a lost
+connection are retried instead of ending the send.
+
+A durable outbox takes over when the inline attempts run out: the message is
+kept in app storage, retried on a timer and immediately when the network path
+comes back, and the composer keeps no copy. The bubble stays in the transcript
+while it waits, so a queued message does not look like it disappeared.
+
+CI: five test shards instead of three. A shard no longer compiles — it downloads
+the built products in eight seconds — so the only cost of another shard is a
+runner. Measured on 3.9.60: a shard's suite is ~8 minutes, which the previous
+11-minute compile had been hiding.
 ## 3.9.60 — One build for all shards; the picker stops inventing models
 
 CI compiled the app four times per run: three shards each ran build-for-testing

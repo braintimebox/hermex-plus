@@ -878,6 +878,23 @@ final class ChatViewModel {
         let resolvedStreamClient = streamClient ?? SSEClient()
         let resolvedLiveActivityManager = liveActivityManager ?? AgentLiveActivityManager.shared
         self.client = resolvedClient
+        // Deliver anything a previous attempt could not send. Wired here, where
+        // the client is resolved, so the queue drives the same client the live
+        // sends do — and outlives this view model, which a chat can leave.
+        let outboxClient = resolvedClient
+        OutboxSender.shared.start { message in
+            _ = try await outboxClient.startChat(
+                sessionID: message.sessionID,
+                message: message.text,
+                workspace: message.workspace,
+                model: message.model,
+                modelProvider: message.modelProvider,
+                profile: message.profile,
+                explicitModelPick: message.explicitModelPick,
+                attachments: message.attachments,
+                clientMessageId: message.id
+            )
+        }
         self.streamCoordinator = ChatStreamCoordinator(
             client: resolvedClient,
             streamClient: resolvedStreamClient,
@@ -3026,8 +3043,15 @@ final class ChatViewModel {
         modelProvider: String?,
         profile: String?,
         explicitModelPick: Bool,
-        attachments: [JSONValue]?
+        attachments: [JSONValue]?,
+        /// Owned by the caller so a message that later leaves the outbox keeps
+        /// the same id — the server then recognises it as the same send.
+        clientMessageId: String
     ) async throws -> ChatStartResponse {
+        // Every attempt carries the caller's `clientMessageId`, so if an earlier
+        // attempt actually reached the server the retry replays that turn
+        // instead of posting the message a second time. That is what makes
+        // retrying a timeout safe.
         let maxAttempts = 3
         let retryDelays: [Duration] = [.seconds(0.5), .seconds(1)]
 
@@ -3041,12 +3065,13 @@ final class ChatViewModel {
                     modelProvider: modelProvider,
                     profile: profile,
                     explicitModelPick: explicitModelPick,
-                    attachments: attachments
+                    attachments: attachments,
+                    clientMessageId: clientMessageId
                 )
             } catch {
                 guard attempt < maxAttempts - 1,
                       let apiError = error as? APIError,
-                      apiError.isRetryableConnectionFailure
+                      apiError.isIdempotentRetryCandidate
                 else {
                     throw error
                 }
@@ -3084,6 +3109,13 @@ final class ChatViewModel {
         responseCompletionNeedsTranscriptRefresh = false
         defer { isStartingChat = false }
 
+        // The local message id doubles as the idempotency id: it is created once
+        // per user send, it is unique, and it is what the transcript already
+        // uses to identify this bubble. Retries inside this call and a later
+        // resend from the outbox therefore carry the same value, so the server
+        // can tell "the same message again" from "a new message".
+        let outboxMessageID = localMessageID
+
         let optimisticMessage = ChatMessage(
             role: "user",
             content: displayContent,
@@ -3098,7 +3130,11 @@ final class ChatViewModel {
         do {
             let explicitModelPick = explicitModelPickForChatStart()
             let sentAt = Date()
-            let response = try await client.startChat(
+            // Through the retry loop, not a bare call: a dropped connection or a
+            // timeout used to end the send on the first attempt, with the text
+            // going back to the composer. The idempotency id makes the retry
+            // safe, so the common transient failure now resolves itself.
+            let response = try await startChatWithRetry(
                 sessionID: sessionID,
                 message: messageForAPI,
                 workspace: currentWorkspace,
@@ -3106,7 +3142,8 @@ final class ChatViewModel {
                 modelProvider: requestModelProvider,
                 profile: requestProfileName,
                 explicitModelPick: explicitModelPick,
-                attachments: apiPayloads
+                attachments: apiPayloads,
+                clientMessageId: outboxMessageID
             )
 
             guard let streamID = response.streamId else {
@@ -3156,15 +3193,40 @@ final class ChatViewModel {
             }
             lastError = error
             sendErrorMessage = error.localizedDescription
-            // HERMEX-FORK: the send itself failed on the wire. The
-            // message stays in the draft (restored below) and the failure is
-            // recorded in the shared shape — reason, retryability, category — so
-            // the watchdog can group today's failures without being told.
+            // HERMEX-FORK: the send did not reach the server.
+            //
+            // The message is handed to the outbox, not back to the composer.
+            // Two reasons: the user asked for the send to complete without
+            // their involvement, and a copy in the composer is what made a
+            // failed send reappear as a draft. The outbox owns delivery from
+            // here — it retries on a timer and as soon as the network path
+            // comes back — and the optimistic bubble stays in the transcript so
+            // the message does not vanish while it waits.
+            //
+            // `clientMessageId` is this message's own id, so a retry from the
+            // queue resolves to the same turn on the server instead of posting
+            // the text twice.
             DeliveryTelemetry.record(error, path: .send, screen: "ChatViewModel")
-            rollbackOptimisticMessage(id: localMessageID)
+            let queued = OutboxMessage(
+                id: outboxMessageID,
+                sessionID: sessionID,
+                displayContent: displayContent,
+                text: messageForAPI,
+                workspace: currentWorkspace,
+                model: currentModel,
+                modelProvider: requestModelProvider,
+                profile: requestProfileName,
+                explicitModelPick: explicitModelPickForChatStart(),
+                attachments: apiPayloads,
+                createdAt: Date(),
+                attempts: 0,
+                nextAttemptAt: Date(),
+                lastFailureReason: (error as? APIError)?.privacySafeLogCategory
+            )
+            await OutboxStore.shared.enqueue(queued)
+            OutboxSender.shared.kick()
             cacheCurrentMessages(sessionID: sessionID, modelContext: modelContext)
-            restorePendingAttachments(attachmentsToRestoreOnFailure)
-            return false
+            return true
         }
     }
 

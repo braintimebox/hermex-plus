@@ -75,6 +75,27 @@ enum APIError: LocalizedError {
         }
     }
 
+    /// Connection failures that are safe to retry *because the request carries
+    /// an idempotency key*: the server replays the first turn instead of
+    /// starting a second one, so a repeat cannot duplicate a message.
+    ///
+    /// `.timedOut` and `.networkConnectionLost` are deliberately absent from
+    /// `isRetryableConnectionFailure` — without the key, a retry could post the
+    /// same text twice. With it, refusing to retry is what leaves a send stuck
+    /// and the text back in the composer, which is the failure the user sees.
+    var isIdempotentRetryCandidate: Bool {
+        if isRetryableConnectionFailure { return true }
+        guard case .network(let underlying) = self,
+              let urlError = underlying as? URLError
+        else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost:
+            return true
+        default:
+            return false
+        }
+    }
+
     var privacySafeLogCategory: String {
         switch self {
         case .invalidServerURL:

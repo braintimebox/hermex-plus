@@ -9,7 +9,10 @@ extension APIClient {
         modelProvider: String? = nil,
         profile: String? = nil,
         explicitModelPick: Bool = false,
-        attachments: [JSONValue]? = nil
+        attachments: [JSONValue]? = nil,
+        /// Generated once per user send and reused by every retry, so the server
+        /// can recognise a repeat instead of starting a second turn.
+        clientMessageId: String? = nil
     ) async throws -> ChatStartResponse {
         try await send(
             endpoint: .chatStart,
@@ -22,7 +25,8 @@ extension APIClient {
                 modelProvider: modelProvider,
                 profile: profile,
                 explicitModelPick: explicitModelPick ? true : nil,
-                attachments: attachments
+                attachments: attachments,
+                clientMessageId: clientMessageId
             )
         )
     }
@@ -170,6 +174,7 @@ private struct ChatStartRequest: Encodable {
     let profile: String?
     let explicitModelPick: Bool?
     let attachments: [JSONValue]?
+    let clientMessageId: String?
 }
 
 private struct ChatSteerRequest: Encodable {
