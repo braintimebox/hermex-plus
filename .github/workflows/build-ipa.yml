@@ -106,11 +106,27 @@ jobs:
           # touched it, and a shallow clone has only the tip.
           fetch-depth: 0
 
+      # The dependency state lives in project.pbxproj: the project pins packages
+      # with XCRemoteSwiftPackageReference ranges and commits no Package.resolved,
+      # so hashFiles('Package.resolved') returned an empty string and the key was
+      # the constant `spm-macOS--v2` — the cache never invalidated, not even when
+      # a package moved. Hashing only the package-reference section keeps the
+      # version file (MARKETING_VERSION lives in the same pbxproj) out of the key
+      # while tracking what is actually resolved.
+      - name: Compute SPM fingerprint
+        id: spm
+        run: |
+          set -euo pipefail
+          fp=$(awk '/Begin XCRemoteSwiftPackageReference section/,/End XCRemoteSwiftPackageReference section/' \
+                 "${PROJECT_PATH}/project.pbxproj" | sha256sum | cut -c1-16)
+          echo "Using SPM fingerprint: ${fp}"
+          echo "fingerprint=${fp}" >> "$GITHUB_OUTPUT"
+
       - name: Restore SPM cache
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
+          key: spm-${{ runner.os }}-${{ steps.spm.outputs.fingerprint }}-v3
           restore-keys: |
             spm-${{ runner.os }}-
 
@@ -216,6 +232,12 @@ jobs:
           path: |
             ${{ env.DERIVED_DATA_PATH }}/Build/Products
             ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+            # 83 MB of git mirrors, and the .xctestrun references nothing inside
+            # it (measured: 0 matches for SourcePackages/repositories against 6
+            # for checkouts/). `test-without-building` runs the built bundles and
+            # never fetches a package, so the mirrors only pay for transfer:
+            # artifact 185 MB → ~143 MB, download 152 s → ~115 s.
+            !${{ env.DERIVED_DATA_PATH }}/SourcePackages/repositories
           if-no-files-found: error
           retention-days: 3
           compression-level: 1
@@ -500,14 +522,23 @@ jobs:
         id: version
         run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
 
-      # Тот же SPM-кэш загрузки, что и в job `test`, — общий ключ: SourcePackages
+      # Тот же SPM-кэш загрузки, что и в job `unit-build`, — общий ключ: SourcePackages
       # не зависит от устройства или симулятора, раздельные ключи лишь удваивали
       # бы расход кэша при лимите 10 ГБ на репозиторий.
+      - name: Compute SPM fingerprint
+        id: spm
+        run: |
+          set -euo pipefail
+          fp=$(awk '/Begin XCRemoteSwiftPackageReference section/,/End XCRemoteSwiftPackageReference section/' \
+                 "${PROJECT_PATH}/project.pbxproj" | sha256sum | cut -c1-16)
+          echo "Using SPM fingerprint: ${fp}"
+          echo "fingerprint=${fp}" >> "$GITHUB_OUTPUT"
+
       - name: Restore SPM cache
         uses: actions/cache@v4
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', '**/Package.resolved') }}-v2
+          key: spm-${{ runner.os }}-${{ steps.spm.outputs.fingerprint }}-v3
           restore-keys: |
             spm-${{ runner.os }}-
 
