@@ -229,15 +229,17 @@ jobs:
           # the test job cost 101s of download-and-untar, the same order as the
           # 108s of cloning it replaced, so that cache was never a win. One
           # artifact, one download, nothing left to resolve.
+          #
+          # REVERTED 2026-10-27 after measuring run 40584077908: excluding
+          # SourcePackages/repositories (83 MB) shrank the artifact 185 → 103 MB
+          # and the download 152 → 99 s, but the Test step went 235 → 448 s
+          # because "Resolve Package Graph" then took 127 s (15 s with the
+          # mirrors present). xcodebuild resolves the graph even under
+          # -disableAutomaticPackageResolution, and the bare git mirrors are what
+          # makes that cheap. Net: −53 s transfer against +112 s resolution.
           path: |
             ${{ env.DERIVED_DATA_PATH }}/Build/Products
             ${{ env.DERIVED_DATA_PATH }}/SourcePackages
-            # 83 MB of git mirrors, and the .xctestrun references nothing inside
-            # it (measured: 0 matches for SourcePackages/repositories against 6
-            # for checkouts/). `test-without-building` runs the built bundles and
-            # never fetches a package, so the mirrors only pay for transfer:
-            # artifact 185 MB → ~143 MB, download 152 s → ~115 s.
-            !${{ env.DERIVED_DATA_PATH }}/SourcePackages/repositories
           if-no-files-found: error
           retention-days: 3
           compression-level: 1
