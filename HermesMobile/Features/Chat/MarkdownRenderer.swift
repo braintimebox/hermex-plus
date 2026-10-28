@@ -1,6 +1,7 @@
 import Highlightr
 import MarkdownUI
 import OSLog
+import QuartzCore   // HERMEX-FORK: 3.9.66 — CACurrentMediaTime for commit-cost measurement
 import Splash
 import SwiftUI
 import UIKit
@@ -91,6 +92,21 @@ struct MarkdownRenderer: View {
     }
 }
 
+/// Measures one streaming commit: the synchronous text assignment the renderer
+/// performs, plus whatever the caller's closure does with it. Extracted so the
+/// perf test can measure the SAME code path instead of re-implementing it.
+///
+/// Explicitly NOT covered: SwiftUI invalidation, layout and paint happen after
+/// the closure returns, so `commitMs` is commit cost, never frame time.
+enum StreamCommitMeasurement {
+    @inline(__always)
+    static func measure(_ apply: () -> Void) -> Double {
+        let start = CACurrentMediaTime()
+        apply()
+        return (CACurrentMediaTime() - start) * 1000.0
+    }
+}
+
 struct StreamingMarkdownRenderer: View {
     let content: String
     var forceFadeDisabled: Bool?
@@ -173,14 +189,27 @@ struct StreamingMarkdownRenderer: View {
         contentCommitTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             guard !Task.isCancelled else { return }
-            // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that is about
-            // to change `displayedContent`; nothing here affects rendering.
+            // deltaChars must be computed BEFORE the assignment below — reading
+            // it afterwards would always yield 0 and silently break the
+            // existing metric.
+            let deltaChars = max(0, latestContent.count - displayedContent.count)
+            let followActive = MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
+
+            // HERMEX-FORK: 3.9.66 — diagnostic (stage 1). The measured segment is
+            // the synchronous string assignment plus the SwiftUI invalidation it
+            // schedules. Layout and paint happen after this closure returns and
+            // are NOT included — this is commit cost, never frame cost. The same
+            // helper is exercised by StreamCommitCostTests.
+            let commitMs = StreamCommitMeasurement.measure { displayedContent = latestContent }
+
+            // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that just
+            // changed `displayedContent`; nothing here affects rendering.
             StreamCommitTelemetry.shared.recordCommit(
                 accumulatedChars: latestContent.count,
-                deltaChars: max(0, latestContent.count - displayedContent.count),
-                followActive: MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
+                deltaChars: deltaChars,
+                followActive: followActive,
+                commitMs: commitMs
             )
-            displayedContent = latestContent
         }
     }
 

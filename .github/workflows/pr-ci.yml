@@ -138,6 +138,26 @@ jobs:
           echo "Test-without-building duration: ${duration_seconds}s"
           echo "- Test without building (${TEST_WORKER_COUNT} workers): ${duration_seconds}s" >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Publish commit-cost baseline
+        if: always()
+        run: |
+          set -uo pipefail
+          found=""
+          for f in "$HOME"/Library/Developer/CoreSimulator/Devices/*/data/commit-cost.jsonl \
+                   "$HOME"/Library/Developer/CoreSimulator/Devices/*/data/Containers/Data/Application/*/Documents/commit-cost.jsonl; do
+            if [[ -f "$f" ]]; then found="$f"; fi
+          done
+          if [[ -z "$found" ]]; then
+            echo "commit-cost.jsonl not found — baseline unavailable"
+            exit 0
+          fi
+          echo "### Commit cost baseline" >> "${GITHUB_STEP_SUMMARY}"
+          echo '```json' >> "${GITHUB_STEP_SUMMARY}"
+          cat "$found" >> "${GITHUB_STEP_SUMMARY}"
+          echo '```' >> "${GITHUB_STEP_SUMMARY}"
+          echo "--- commit-cost.jsonl ---"
+          cat "$found"
+
       - name: Report slowest tests
         if: always()
         continue-on-error: true

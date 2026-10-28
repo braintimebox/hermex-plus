@@ -1,3 +1,18 @@
+## 3.9.66 — Diagnostic: measure the cost of a streaming commit
+
+Diagnostic build only. No rendering change, no user-visible behaviour change.
+
+- `MarkdownRenderer` measures the synchronous `displayedContent` assignment with
+  `CACurrentMediaTime()` and reports it as `commitMs`. The measured segment is
+  the assignment plus the SwiftUI invalidation it triggers — layout and paint
+  happen afterwards and are deliberately excluded, so this is commit cost, not
+  frame time.
+- `StreamCommitTelemetry` emits additive `commitAvgMs`, `commitMaxMs`,
+  `commitSamples` and per-window `commitP50Ms/P90Ms/P95Ms`. Aggregates alone
+  cannot answer "median per commit", so raw samples are kept per window.
+- Existing `frameAvgMs`/`frameMaxMs`/`durationMs` semantics are unchanged, and
+  events recorded before this build (no `commitMs`) stay readable.
+
 ## 3.9.64 — The device build gets the cache the test build already had
 
 - `Package IPA` compiled all 688 Swift files on every release (6:18) because the
