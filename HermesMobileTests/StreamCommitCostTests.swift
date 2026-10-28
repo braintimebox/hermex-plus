@@ -89,8 +89,26 @@ final class StreamCommitCostTests: XCTestCase {
             result.label, result.chars, result.samples,
             result.median, result.p90, result.p95, result.maxMs, result.mean
         )
-        print("COMMIT_COST_JSON \(json)")
+        // Two channels, because XCTest does not forward `print` to the
+        // xcodebuild log on success: stderr (sometimes surfaced) and a file
+        // inside the simulator container, which a CI step locates with find.
+        Self.persist(json)
         return result
+    }
+
+    /// Appends one machine-readable line to `commit-cost.jsonl`.
+    private static func persist(_ line: String) {
+        let payload = Data((line + "\n").utf8)
+        FileHandle.standardError.write(payload)
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let url = dir.appendingPathComponent("commit-cost.jsonl")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(payload)
+            try? handle.close()
+        } else {
+            try? payload.write(to: url, options: .atomic)
+        }
     }
 
     // MARK: - Baseline scenarios
