@@ -4847,14 +4847,15 @@ final class ChatViewModel {
                 // fork. It now runs on the session write queue with its own
                 // context, like every other cache writer.
                 let container = modelContext.container
-                CacheStore.sessionWriteQueue.async {
+                let serverURL = server
+                CacheStore.sessionWriteQueue.async { [weak self] in
                     let bgContext = ModelContext(container)
                     do {
-                        try CacheStore.cacheSession(forkedSession, serverURL: server, in: bgContext)
+                        try CacheStore.cacheSession(forkedSession, serverURL: serverURL, in: bgContext)
                     } catch {
                         let message = error.localizedDescription
                         HermexLogger.shared.log(type: "error", message: "cache write: \(message)")
-                        Task { @MainActor in cacheErrorMessage = message }
+                        Task { @MainActor in self?.cacheErrorMessage = message }
                     }
                 }
             }
