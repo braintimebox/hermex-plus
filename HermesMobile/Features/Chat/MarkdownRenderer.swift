@@ -92,6 +92,21 @@ struct MarkdownRenderer: View {
     }
 }
 
+/// Measures one streaming commit: the synchronous text assignment the renderer
+/// performs, plus whatever the caller's closure does with it. Extracted so the
+/// perf test can measure the SAME code path instead of re-implementing it.
+///
+/// Explicitly NOT covered: SwiftUI invalidation, layout and paint happen after
+/// the closure returns, so `commitMs` is commit cost, never frame time.
+enum StreamCommitMeasurement {
+    @inline(__always)
+    static func measure(_ apply: () -> Void) -> Double {
+        let start = CACurrentMediaTime()
+        apply()
+        return (CACurrentMediaTime() - start) * 1000.0
+    }
+}
+
 struct StreamingMarkdownRenderer: View {
     let content: String
     var forceFadeDisabled: Bool?
@@ -180,14 +195,12 @@ struct StreamingMarkdownRenderer: View {
             let deltaChars = max(0, latestContent.count - displayedContent.count)
             let followActive = MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
 
-            // HERMEX-FORK: 3.9.66 — diagnostic (stage 1). Measures the COMMIT
-            // itself: the synchronous string assignment plus the SwiftUI
-            // invalidation it schedules. It deliberately does NOT include the
-            // layout and paint that follow after this closure returns, and it is
-            // not a frame time — call it commit cost, never frame cost.
-            let commitStart = CACurrentMediaTime()
-            displayedContent = latestContent
-            let commitMs = (CACurrentMediaTime() - commitStart) * 1000.0
+            // HERMEX-FORK: 3.9.66 — diagnostic (stage 1). The measured segment is
+            // the synchronous string assignment plus the SwiftUI invalidation it
+            // schedules. Layout and paint happen after this closure returns and
+            // are NOT included — this is commit cost, never frame cost. The same
+            // helper is exercised by StreamCommitCostTests.
+            let commitMs = StreamCommitMeasurement.measure { displayedContent = latestContent }
 
             // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that just
             // changed `displayedContent`; nothing here affects rendering.

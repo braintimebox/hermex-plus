@@ -234,6 +234,7 @@
 		0B0C0D0E0F000000000001 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0C0D0E0F000000000002 /* OutboxStore.swift */; };
 		C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000004 /* ChatDraftStoreTests.swift */; };
 		870000000000000000000201 /* HitchMeterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000202 /* HitchMeterTests.swift */; };
+		47AC6714F15D4D8289099E4F /* StreamCommitCostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DEE233DA9E446F8996ED200 /* StreamCommitCostTests.swift */; };
 		870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000204 /* PhaseTelemetryTests.swift */; };
 		C28702000000000000000005 /* ChatDraftAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000006 /* ChatDraftAttachmentStore.swift */; };
 		C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */; };
@@ -730,6 +731,7 @@
 		0B0C0D0E0F000000000002 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000004 /* ChatDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStoreTests.swift; sourceTree = "<group>"; };
 		870000000000000000000202 /* HitchMeterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitchMeterTests.swift; sourceTree = "<group>"; };
+		1DEE233DA9E446F8996ED200 /* StreamCommitCostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCommitCostTests.swift"; sourceTree = "<group>"; };
 		870000000000000000000204 /* PhaseTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTelemetryTests.swift; sourceTree = "<group>"; };
 		C28702000000000000000006 /* ChatDraftAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStoreTests.swift; sourceTree = "<group>"; };
@@ -1084,6 +1086,7 @@
 				0B077A87C9D846D7A9D27D7A /* BotPendingRequestTests.swift */,
 				C28702000000000000000004 /* ChatDraftStoreTests.swift */,
 				870000000000000000000202 /* HitchMeterTests.swift */,
+				1DEE233DA9E446F8996ED200 /* StreamCommitCostTests.swift */,
 				870000000000000000000204 /* PhaseTelemetryTests.swift */,
 				C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */,
 				10CA110C0DE000000000C002 /* LocalizationCatalogTests.swift */,
@@ -2345,6 +2348,7 @@
 				B5A100000000000000000005 /* SharedDraftStoreTests.swift in Sources */,
 				C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */,
 				870000000000000000000201 /* HitchMeterTests.swift in Sources */,
+				47AC6714F15D4D8289099E4F /* StreamCommitCostTests.swift in Sources */,
 				870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */,
 				C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */,
 				B5A100000000000000000009 /* ShareInputReaderTests.swift in Sources */,
