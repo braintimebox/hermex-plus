@@ -1,3 +1,31 @@
+## 3.9.67 — The chat stops freezing while the cache is written
+
+- Session cache writes ran on the main thread. `CacheStore.cacheSessions` and
+  `cacheSession` were `@MainActor`, while their callers already ran on
+  `sessionWriteQueue` with a context created there — so every write hopped to
+  main and did fetch + upsert + save + maintenance there, against a context
+  owned by another queue. 3.9.64 telemetry: `Cache Write (sessions)` at 4 225 ms,
+  6 999 ms, 2 638 ms, 2 043 ms, with freezes of 3 262 ms and 3 053 ms in the
+  same period. Both writers are now non-isolated, like `cacheMessages` already
+  was, and the fork path writes through the same queue.
+- Freeze attribution was lying. `HeavyOperationTracker` kept one global label,
+  so a background write overwrote the main-thread label and its `end()` cleared
+  it: a 3 262 ms freeze was reported as `CacheStore.cacheMessages`, which runs
+  off-main. The tracker now ignores begin/end outside the main thread;
+  background work remains visible through its own phase.
+- Gate 11 (duplicate call arguments) grouped all `(` before all `)`, so on
+  `) ?? ModelCatalogOption(` the close removed the frame the open had pushed.
+  That produced a permanent false "providerID passed twice" on
+  `ModelPickerSheet.swift:881` — in code that compiles and whose suite is green.
+  Parentheses are now applied in source order.
+
+Not measured yet: whether the freezes are actually gone on device. That needs a
+build installed and new telemetry; no performance claim is made here.
+
+## 3.9.66 — Diagnostic: measure the cost of a streaming commit
+
+(Reserved for the instrumentation branch; not part of this release.)
+
 ## 3.9.65 — A scheduled message stops retrying what can never succeed
 
 - Scheduled delivery ignored `DeliveryFailure.retryable`. One message addressed to

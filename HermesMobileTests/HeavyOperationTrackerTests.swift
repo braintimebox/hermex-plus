@@ -15,6 +15,20 @@ final class HeavyOperationTrackerTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Runs `work` on a non-main thread and waits for it.
+    ///
+    /// Two constraints shaped this:
+    ///  * `sync` is wrong — libdispatch may run a `sync` block on the CALLING
+    ///    thread, i.e. main, so `Thread.isMainThread` stayed true and the first
+    ///    version of these tests failed because of the test, not the tracker;
+    ///  * `DispatchQueue.async` needs a `@Sendable` closure, and
+    ///    `XCTestExpectation` is not `Sendable`, so an expectation-based wait
+    ///    would not compile under Swift 6. `Task.detached` runs off-main and
+    ///    needs no expectation at all.
+    private func onBackgroundThread(_ work: @escaping @Sendable () -> Void) async {
+        await Task.detached(priority: .utility) { work() }.value
+    }
+
     func testMainThreadLabelIsReadable() {
         HeavyOperationTracker.begin("main-op")
         XCTAssertEqual(HeavyOperationTracker.currentLabelForTesting, "main-op")
@@ -22,10 +36,10 @@ final class HeavyOperationTrackerTests: XCTestCase {
         XCTAssertNil(HeavyOperationTracker.currentLabelForTesting)
     }
 
-    func testBackgroundOperationDoesNotOverwriteMainLabel() {
+    func testBackgroundOperationDoesNotOverwriteMainLabel() async {
         HeavyOperationTracker.begin("main-op")
 
-        DispatchQueue.global(qos: .utility).sync {
+        await onBackgroundThread {
             HeavyOperationTracker.begin("bg-op")
             HeavyOperationTracker.end()
         }
@@ -36,9 +50,9 @@ final class HeavyOperationTrackerTests: XCTestCase {
         )
     }
 
-    func testBackgroundBeginAloneIsIgnored() {
+    func testBackgroundBeginAloneIsIgnored() async {
         HeavyOperationTracker.end()
-        DispatchQueue.global(qos: .utility).sync {
+        await onBackgroundThread {
             HeavyOperationTracker.begin("bg-only")
         }
         XCTAssertNil(
@@ -47,10 +61,10 @@ final class HeavyOperationTrackerTests: XCTestCase {
         )
     }
 
-    func testBackgroundEndDoesNotClearMainLabel() {
+    func testBackgroundEndDoesNotClearMainLabel() async {
         HeavyOperationTracker.begin("main-op")
 
-        DispatchQueue.global(qos: .utility).sync {
+        await onBackgroundThread {
             HeavyOperationTracker.end()
         }
 
