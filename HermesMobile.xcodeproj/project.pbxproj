@@ -234,6 +234,8 @@
 		0B0C0D0E0F000000000001 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0C0D0E0F000000000002 /* OutboxStore.swift */; };
 		C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000004 /* ChatDraftStoreTests.swift */; };
 		870000000000000000000201 /* HitchMeterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000202 /* HitchMeterTests.swift */; };
+		4B1BD12CCB9C454F9BC8CDE1 /* ScheduledDeliveryRetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2EE9573D3394E0E9189AABB /* ScheduledDeliveryRetryTests.swift */; };
+		7161BE050D2F42718B88CE48 /* StreamCommitIntervalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED800B41B18440991C8096C /* StreamCommitIntervalTests.swift */; };
 		870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000204 /* PhaseTelemetryTests.swift */; };
 		C28702000000000000000005 /* ChatDraftAttachmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000006 /* ChatDraftAttachmentStore.swift */; };
 		C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */; };
@@ -429,6 +431,7 @@
 		105050000000000000000003 /* ComposerModelPickerSectionExpansionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */; };
 		2EDE1ED3AEBD4FA5B69A3ED3 /* SavedMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */; };
 		48B753130AAA2C79D932BF9F /* QuoteReplyBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9398CB8BAED7FCED582672 /* QuoteReplyBanner.swift */; };
+		C76CD23AFA304444AC23FAF1 /* ScheduledDeliveryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D700EBF0A9834FF79F57563B /* ScheduledDeliveryPolicy.swift */; };
 		87779DD870B04E3B8AFD3E98 /* PendingScheduledMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */; };
 		C1A0F0F0A11B4E0D9C7A3E11 /* ClarificationRequestOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0F0F1A11B4E0D9C7A3E12 /* ClarificationRequestOverlay.swift */; };
 		CA5E1EC7A11B4F0D9C7A3E01 /* SelectableResponseText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */; };
@@ -730,6 +733,8 @@
 		0B0C0D0E0F000000000002 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000004 /* ChatDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStoreTests.swift; sourceTree = "<group>"; };
 		870000000000000000000202 /* HitchMeterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitchMeterTests.swift; sourceTree = "<group>"; };
+		C2EE9573D3394E0E9189AABB /* ScheduledDeliveryRetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledDeliveryRetryTests.swift"; sourceTree = "<group>"; };
+		7ED800B41B18440991C8096C /* StreamCommitIntervalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCommitIntervalTests.swift"; sourceTree = "<group>"; };
 		870000000000000000000204 /* PhaseTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTelemetryTests.swift; sourceTree = "<group>"; };
 		C28702000000000000000006 /* ChatDraftAttachmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftAttachmentStoreTests.swift; sourceTree = "<group>"; };
@@ -930,6 +935,7 @@
 		105050000000000000000004 /* ComposerModelPickerSectionExpansionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerModelPickerSectionExpansionStateTests.swift; sourceTree = "<group>"; };
 		FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SavedMessage.swift"; sourceTree = "<group>"; };
 		7F9398CB8BAED7FCED582672 /* QuoteReplyBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QuoteReplyBanner.swift"; sourceTree = "<group>"; };
+		D700EBF0A9834FF79F57563B /* ScheduledDeliveryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduledDeliveryPolicy.swift"; sourceTree = "<group>"; };
 		2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PendingScheduledMessage.swift"; sourceTree = "<group>"; };
 		C1A0F0F1A11B4E0D9C7A3E12 /* ClarificationRequestOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClarificationRequestOverlay.swift"; sourceTree = "<group>"; };
 		B37A9F42C8D34E6BA15F2C02 /* SelectableResponseText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectableResponseText.swift"; sourceTree = "<group>"; };
@@ -1084,6 +1090,8 @@
 				0B077A87C9D846D7A9D27D7A /* BotPendingRequestTests.swift */,
 				C28702000000000000000004 /* ChatDraftStoreTests.swift */,
 				870000000000000000000202 /* HitchMeterTests.swift */,
+				C2EE9573D3394E0E9189AABB /* ScheduledDeliveryRetryTests.swift */,
+				7ED800B41B18440991C8096C /* StreamCommitIntervalTests.swift */,
 				870000000000000000000204 /* PhaseTelemetryTests.swift */,
 				C28702000000000000000008 /* ChatDraftAttachmentStoreTests.swift */,
 				10CA110C0DE000000000C002 /* LocalizationCatalogTests.swift */,
@@ -1295,6 +1303,7 @@
 				1A2B3C4D5E6F70000000211 /* Skills.swift */,
 				C14900000000000000000002 /* Kanban.swift */,
 				FA58853D89F9457F80AFC5D5 /* SavedMessage.swift */,
+				D700EBF0A9834FF79F57563B /* ScheduledDeliveryPolicy.swift */,
 				2EA82A32D41146988CFD9B50 /* PendingScheduledMessage.swift */,
 
 			);
@@ -2197,6 +2206,7 @@
 				B5A100000000000000000008 /* ShareInputReader.swift in Sources */,
 				2EDE1ED3AEBD4FA5B69A3ED3 /* SavedMessage.swift in Sources */,
 				48B753130AAA2C79D932BF9F /* QuoteReplyBanner.swift in Sources */,
+				C76CD23AFA304444AC23FAF1 /* ScheduledDeliveryPolicy.swift in Sources */,
 				87779DD870B04E3B8AFD3E98 /* PendingScheduledMessage.swift in Sources */,
 				C1A0F0F0A11B4E0D9C7A3E11 /* ClarificationRequestOverlay.swift in Sources */,
 				CA5E1EC7A11B4F0D9C7A3E01 /* SelectableResponseText.swift in Sources */,
@@ -2345,6 +2355,8 @@
 				B5A100000000000000000005 /* SharedDraftStoreTests.swift in Sources */,
 				C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */,
 				870000000000000000000201 /* HitchMeterTests.swift in Sources */,
+				4B1BD12CCB9C454F9BC8CDE1 /* ScheduledDeliveryRetryTests.swift in Sources */,
+				7161BE050D2F42718B88CE48 /* StreamCommitIntervalTests.swift in Sources */,
 				870000000000000000000203 /* PhaseTelemetryTests.swift in Sources */,
 				C28702000000000000000007 /* ChatDraftAttachmentStoreTests.swift in Sources */,
 				B5A100000000000000000009 /* ShareInputReaderTests.swift in Sources */,
@@ -2546,8 +2558,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2576,8 +2588,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2602,8 +2614,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2627,8 +2639,8 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2654,8 +2666,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2683,8 +2695,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).shareextension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2711,8 +2723,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -2739,8 +2751,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.9.64;
-				MARKETING_VERSION = 3.9.64;
+				MARKETING_VERSION = 3.9.65;
+				MARKETING_VERSION = 3.9.65;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).liveactivitywidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

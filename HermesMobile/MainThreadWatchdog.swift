@@ -571,7 +571,7 @@ final class MainThreadWatchdog {
             HermexLogger.shared.log(
                 type: "recovered",
                 durationMs: frozenFor * 1000,
-                message: "main thread recovered after \\(Int(frozenFor))s"
+                message: "main thread recovered after \(Int(frozenFor))s"
             )
         }
     }

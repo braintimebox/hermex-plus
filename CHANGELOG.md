@@ -1,3 +1,30 @@
+## 3.9.65 — A scheduled message stops retrying what can never succeed
+
+- Scheduled delivery ignored `DeliveryFailure.retryable`. One message addressed to
+  a chat the server no longer had produced **620** `POST /api/chat/start`
+  requests over 68 hours, every one answered `404`. A non-retryable failure is now
+  terminal on the first attempt; a retryable one stops at five attempts. The row
+  stays in the list with the reason, so the user sees what was not delivered
+  instead of a message that silently loops forever.
+- `intervalAvgMs` counted the pause across background as a commit interval. In
+  3.9.64, 27% of intervals were over 5 s, p95 was 163 570 ms and the maximum
+  19.5M ms. A pause now closes the stream, and its length is reported separately
+  as `intervalGapCount` / `intervalGapMaxMs` instead of being averaged in.
+- `draft setContent` recorded that a write happened but never how long it took:
+  3 437 events, all with `durationMs = 0`. The write itself is now measured.
+- The watchdog's recovery line printed its own template
+  (`main thread recovered after \(Int(frozenFor))s`) instead of the number.
+
+On the 404 itself: the session had never been written to disk and no longer
+existed on the server, so `POST /api/chat/start` had nothing to attach the
+message to. The client change stops the loop; re-creating a session
+automatically is deliberately **not** done, because that would silently fork the
+conversation context.
+
+`Stream Batch Apply` needed no change: it was reported as a constant 1.0 ms
+because the column read was `mutated` (0/1), not the duration. Actual durations
+span 0.001–123 ms.
+
 ## 3.9.64 — The device build gets the cache the test build already had
 
 - `Package IPA` compiled all 688 Swift files on every release (6:18) because the
