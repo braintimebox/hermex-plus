@@ -102,7 +102,11 @@ enum CacheStore {
         return cachedMessages.map(ChatMessage.init(cachedMessage:))
     }
 
-    @MainActor
+    /// NOT MainActor-isolated: same reasoning as `cacheMessages`. These writers
+    /// run on `sessionWriteQueue` with a context created on that queue. The
+    /// `@MainActor` annotation made every call hop to the main thread and do the
+    /// fetch + upsert + save there — 3.9.64 telemetry shows `Cache Write
+    /// (sessions)` at 4 225 ms, 6 999 ms and 2 638 ms, i.e. UI freezes.
     static func cacheSessions(
         _ sessions: [SessionSummary],
         serverURL: URL,
@@ -157,7 +161,8 @@ enum CacheStore {
         try context.save()
     }
 
-    @MainActor
+    /// NOT MainActor-isolated — see `cacheSessions`. Callers pass a context
+    /// created on the worker queue.
     static func cacheSession(
         _ session: SessionSummary,
         serverURL: URL,

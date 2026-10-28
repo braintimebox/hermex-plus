@@ -12,7 +12,18 @@ enum HeavyOperationTracker {
     private static var currentLabel: String?
     private static var currentStart: Date?
 
+    /// HERMEX-FORK: 3.9.65 — main thread only.
+    ///
+    /// The tracker is consumed by the main-thread freeze report, so a label set
+    /// by a background write is not "what was in flight on main" — it is a
+    /// coincidence that also *overwrites* the real main-thread label, and its
+    /// `end()` clears it. 3.9.64 freeze 3 262 ms was attributed to
+    /// `CacheStore.cacheMessages`, which runs on `CacheStore.writeQueue`; the
+    /// attribution was noise. Background work is already visible through its
+    /// own phase (`Cache Write`), so it loses nothing by staying out of this
+    /// tracker.
     static func begin(_ label: String) {
+        guard Thread.isMainThread else { return }
         lock.lock()
         currentLabel = label
         currentStart = Date()
@@ -20,10 +31,18 @@ enum HeavyOperationTracker {
     }
 
     static func end() {
+        guard Thread.isMainThread else { return }
         lock.lock()
         currentLabel = nil
         currentStart = nil
         lock.unlock()
+    }
+
+    /// Read-only view for tests: which main-thread operation is in flight.
+    static var currentLabelForTesting: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentLabel
     }
 
     /// HERMES-FORK: instrumented operation labels. Each label tells freeze
