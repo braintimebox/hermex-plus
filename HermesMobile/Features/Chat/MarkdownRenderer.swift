@@ -1,6 +1,7 @@
 import Highlightr
 import MarkdownUI
 import OSLog
+import QuartzCore   // HERMEX-FORK: 3.9.66 — CACurrentMediaTime for commit-cost measurement
 import Splash
 import SwiftUI
 import UIKit
@@ -173,14 +174,29 @@ struct StreamingMarkdownRenderer: View {
         contentCommitTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             guard !Task.isCancelled else { return }
-            // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that is about
-            // to change `displayedContent`; nothing here affects rendering.
+            // deltaChars must be computed BEFORE the assignment below — reading
+            // it afterwards would always yield 0 and silently break the
+            // existing metric.
+            let deltaChars = max(0, latestContent.count - displayedContent.count)
+            let followActive = MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
+
+            // HERMEX-FORK: 3.9.66 — diagnostic (stage 1). Measures the COMMIT
+            // itself: the synchronous string assignment plus the SwiftUI
+            // invalidation it schedules. It deliberately does NOT include the
+            // layout and paint that follow after this closure returns, and it is
+            // not a frame time — call it commit cost, never frame cost.
+            let commitStart = CACurrentMediaTime()
+            displayedContent = latestContent
+            let commitMs = (CACurrentMediaTime() - commitStart) * 1000.0
+
+            // HERMEX-FORK: 3.9.41 — diagnostic. Records the commit that just
+            // changed `displayedContent`; nothing here affects rendering.
             StreamCommitTelemetry.shared.recordCommit(
                 accumulatedChars: latestContent.count,
-                deltaChars: max(0, latestContent.count - displayedContent.count),
-                followActive: MainThreadWatchdog.snapshotPerformanceContext().isFollowingBottom
+                deltaChars: deltaChars,
+                followActive: followActive,
+                commitMs: commitMs
             )
-            displayedContent = latestContent
         }
     }
 

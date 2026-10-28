@@ -298,12 +298,26 @@ final class StreamCommitTelemetry {
     private var frameSumMs = 0.0
     private var frameMaxMs = 0.0
     private var frameSamples = 0
+    // HERMEX-FORK: 3.9.66 — commit cost (stage 1). Additive: 0 when the caller
+    // does not report it, so the existing frameAvgMs/frameMaxMs metrics keep
+    // exactly their previous meaning and old event histories stay comparable.
+    private var commitSumMs = 0.0
+    private var commitMaxMs = 0.0
+    private var commitSamples = 0
+    // Stage 1 needs a distribution, not just a mean: a mean hides the expensive
+    // commits. The window keeps raw samples (bounded) so p50/p90/p95 can be
+    // computed per window; without this only avg/max exist.
+    private var commitSampleMs: [Double] = []
+    private let maxCommitSamples = 512
 
     private init() {}
 
     /// One renderer commit of the streaming text.
     /// Called on the main actor, so the frame duration is read on main too.
-    func recordCommit(accumulatedChars: Int, deltaChars: Int, followActive: Bool) {
+    /// `commitMs` is the measured cost of the assignment itself (stage 1
+    /// diagnostic). It defaults to 0 so every existing caller keeps compiling
+    /// and the legacy frame metrics are untouched.
+    func recordCommit(accumulatedChars: Int, deltaChars: Int, followActive: Bool, commitMs: Double = 0) {
         let now = Date()
         let frameMs = FrameTimeMonitor.shared.lastFrameMs
         queue.sync {
@@ -330,6 +344,12 @@ final class StreamCommitTelemetry {
                 frameSumMs += frameMs
                 frameMaxMs = max(frameMaxMs, frameMs)
                 frameSamples += 1
+            }
+            if commitMs > 0 {
+                commitSumMs += commitMs
+                commitMaxMs = max(commitMaxMs, commitMs)
+                commitSamples += 1
+                if commitSampleMs.count < maxCommitSamples { commitSampleMs.append(commitMs) }
             }
 
             if now.timeIntervalSince(windowStart) >= windowDuration { flushLocked(at: now) }
@@ -364,12 +384,24 @@ final class StreamCommitTelemetry {
         }
     }
 
+    /// Nearest-rank percentile over ascending-sorted samples (0 when empty).
+    private func percentile(_ sorted: [Double], _ p: Double) -> Double {
+        guard !sorted.isEmpty else { return 0 }
+        let rank = Int((Double(sorted.count - 1) * p).rounded())
+        return sorted[min(max(rank, 0), sorted.count - 1)]
+    }
+
     private func flushLocked(at now: Date) {
         guard commits > 0 else {
             windowStart = now
             return
         }
         let avgFrame = frameSamples > 0 ? frameSumMs / Double(frameSamples) : 0
+        let avgCommit = commitSamples > 0 ? commitSumMs / Double(commitSamples) : 0
+        let sortedCommits = commitSampleMs.sorted()
+        let p50Commit = percentile(sortedCommits, 0.50)
+        let p90Commit = percentile(sortedCommits, 0.90)
+        let p95Commit = percentile(sortedCommits, 0.95)
         let ageMs = now.timeIntervalSince(streamStart) * 1000
         HermexLogger.shared.log(
             type: "streamCommit",
@@ -394,6 +426,17 @@ final class StreamCommitTelemetry {
                 "frameAvgMs": avgFrame,
                 "frameMaxMs": frameMaxMs,
                 "frameSamples": frameSamples,
+                // Stage 1 (3.9.66): cost of the commit itself. Always present so
+                // the analyser never has to special-case new windows, and 0 when
+                // the build did not measure it.
+                "commitAvgMs": avgCommit,
+                "commitMaxMs": commitMaxMs,
+                "commitSamples": commitSamples,
+                // Per-window distribution: aggregates alone cannot answer
+                // "median/p95 per commit". Nearest-rank over raw samples.
+                "commitP50Ms": p50Commit,
+                "commitP90Ms": p90Commit,
+                "commitP95Ms": p95Commit,
             ]
         )
 
@@ -410,6 +453,10 @@ final class StreamCommitTelemetry {
         frameSumMs = 0
         frameMaxMs = 0
         frameSamples = 0
+        commitSumMs = 0
+        commitMaxMs = 0
+        commitSamples = 0
+        commitSampleMs.removeAll(keepingCapacity: true)
         windowStart = now
     }
 }
