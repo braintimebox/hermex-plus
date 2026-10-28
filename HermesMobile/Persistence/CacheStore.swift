@@ -425,7 +425,9 @@ enum CacheStore {
         }
     }
 
-    @MainActor
+    /// NOT MainActor-isolated — pure SwiftData lookup on the caller's context.
+    /// It is called from `cacheSessions`/`cacheSession`, which now run on the
+    /// session write queue; keeping the isolation here blocks that move.
     private static func cachedSession(cacheKey: String, in context: ModelContext) throws -> CachedSession? {
         var descriptor = FetchDescriptor<CachedSession>(
             predicate: #Predicate { cachedSession in
