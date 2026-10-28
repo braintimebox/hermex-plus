@@ -143,10 +143,9 @@ jobs:
         run: |
           set -uo pipefail
           found=""
-          for dir in "$HOME"/Library/Developer/CoreSimulator/Devices/*/data/Containers/Data/Application/*; do
-            for f in "$dir"/Documents/commit-cost.jsonl "$dir"/tmp/commit-cost.jsonl; do
-              if [[ -f "$f" ]]; then found="$f"; fi
-            done
+          for f in "$HOME"/Library/Developer/CoreSimulator/Devices/*/data/commit-cost.jsonl \
+                   "$HOME"/Library/Developer/CoreSimulator/Devices/*/data/Containers/Data/Application/*/Documents/commit-cost.jsonl; do
+            if [[ -f "$f" ]]; then found="$f"; fi
           done
           if [[ -z "$found" ]]; then
             echo "commit-cost.jsonl not found — baseline unavailable"

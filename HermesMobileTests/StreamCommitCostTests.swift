@@ -100,14 +100,26 @@ final class StreamCommitCostTests: XCTestCase {
     private static func persist(_ line: String) {
         let payload = Data((line + "\n").utf8)
         FileHandle.standardError.write(payload)
-        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let url = dir.appendingPathComponent("commit-cost.jsonl")
-        if let handle = try? FileHandle(forWritingTo: url) {
-            handle.seekToEndOfFile()
-            handle.write(payload)
-            try? handle.close()
-        } else {
-            try? payload.write(to: url, options: .atomic)
+        // The app container of a cloned simulator is deleted when the test run
+        // ends, so the file has to live somewhere the host still sees afterwards.
+        // `SIMULATOR_SHARED_RESOURCES_DIRECTORY` is a host path shared by the
+        // simulator; the Documents copy stays as a fallback for local runs.
+        var targets: [URL] = []
+        if let shared = ProcessInfo.processInfo.environment["SIMULATOR_SHARED_RESOURCES_DIRECTORY"],
+           !shared.isEmpty {
+            targets.append(URL(fileURLWithPath: shared).appendingPathComponent("commit-cost.jsonl"))
+        }
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            targets.append(dir.appendingPathComponent("commit-cost.jsonl"))
+        }
+        for url in targets {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(payload)
+                try? handle.close()
+            } else {
+                try? payload.write(to: url, options: .atomic)
+            }
         }
     }
 
