@@ -70,8 +70,25 @@ final class StubURLProtocol: URLProtocol {
     }
 
     private static func record(_ request: URLRequest) {
+        // Inside a URLProtocol the body is a stream: URLSession moves httpBody
+        // into httpBodyStream before handing the request over, so reading
+        // httpBody alone records nothing and every delivery assertion fails.
+        let body = request.httpBody ?? request.httpBodyStream.flatMap(drain)
         lock.lock(); defer { lock.unlock() }
-        if let body = request.httpBody { receivedBodies.append(body) }
+        if let body { receivedBodies.append(body) }
+    }
+
+    private static func drain(_ stream: InputStream) -> Data? {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data.isEmpty ? nil : data
     }
 
     // MARK: - URLProtocol

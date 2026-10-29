@@ -372,13 +372,18 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         XCTAssertEqual(store.enqueue(event(type: "freeze", seq: 1)), .stored)
         XCTAssertEqual(store.enqueue(event(type: "error", seq: 2)), .stored)
         XCTAssertEqual(store.enqueue(event(type: "freeze", seq: 3)), .stored)
+        // Full of priority events: low-value events are refused rather than
+        // pushing a freeze/error out. Refusal is the documented behaviour, so
+        // it is asserted here instead of a silent eviction.
         for seq in 4...6 {
-            XCTAssertEqual(store.enqueue(event(type: "action", seq: seq)), .stored)
+            XCTAssertEqual(store.enqueue(event(type: "action", seq: seq)), .refusedQueueFull)
         }
 
         let types = store.events.compactMap { $0["type"] as? String }
         XCTAssertEqual(types, ["freeze", "error", "freeze"],
                        "priority events must never be evicted for action events")
+        XCTAssertEqual(store.eventsLostToQueueFull, 3,
+                       "every refused event is counted, none disappears silently")
     }
 
     func testQueueFullOfPriorityRefusesANonPriorityEvent() {
@@ -506,8 +511,10 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 8) { logger.pendingEventsForTesting().isEmpty })
 
         let keys = StubURLProtocol.receivedKeys
-        XCTAssertEqual(keys.count, 2)
-        XCTAssertEqual(keys[0], keys[1], "the dedup key is stable across retries")
+        XCTAssertEqual(keys.count, 2, "both attempts must reach the transport")
+        // No indexing here: empty keys used to trap on keys[0] and take the
+        // whole test process down instead of failing one assertion.
+        XCTAssertEqual(Set(keys).count, 1, "the dedup key is stable across retries")
     }
 
     // MARK: - 14. Incompatible server response
