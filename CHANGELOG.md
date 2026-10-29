@@ -1,3 +1,36 @@
+## 3.9.68 — Diagnostics survive the network and the crash
+
+`HermexLogger` was fire-and-forget: it removed an event from a memory array
+before the POST resolved, and passed an empty completion handler to
+`URLSession`. A dropped connection, a 5xx or a force-quit deleted diagnostics
+permanently — including the events logged right before a hang, which are the
+ones worth keeping. A separate measurement put the loss at 22.95% (12 332 of
+41 397 keyed events). Three things change.
+
+- Events are durable before they are sent. `TelemetryEventQueue` appends each
+  event to `Application Support/HermexTelemetry/pending-events.jsonl` before the
+  first network attempt and removes it only when the server confirms it. The
+  queue is restored on launch, so a kill mid-flight loses nothing.
+- The reply is actually read. `send()` now inspects the status, the body and
+  `ok`, and uses the server's `received` count to decide what to remove. A 2xx
+  with an unreadable body is not a confirmation. A retried batch legitimately
+  answers `stored: 0` with `received: N` — the server counts duplicates — so
+  only `received` is used as the ack.
+- Retries are bounded and categorised. Transport errors, timeouts and 5xx back
+  off 1 → 2 → 4 → 8 → 16 → 30 s, then once per 30 s; 429 honours `Retry-After`
+  (clamped to 1…600 s); 413 halves the batch instead of repeating it; permanent
+  4xx (400/401/403/404/…) are quarantined in place — kept on disk with the
+  reason attached — so one bad event cannot block the queue.
+
+Identity is `correlationId:seqNo`, the same key the server deduplicates on, so a
+resend after a lost response cannot create a duplicate. The queue is capped at
+10 000 events; overflow evicts the oldest non-priority event first and keeps
+`freeze`/`error` as long as possible, counting every drop.
+
+Not measured yet: whether delivery actually improves on a device. That needs a
+build installed and a run with the network cut; no reliability claim is made
+here.
+
 ## 3.9.67 — The chat stops freezing while the cache is written
 
 - Session cache writes ran on the main thread. `CacheStore.cacheSessions` and
