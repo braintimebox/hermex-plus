@@ -125,6 +125,17 @@ final class TelemetryEventQueue {
         events = parsed
         eventsLostToCorruption = bad
 
+        // Quarantine is not a death sentence. Give those events one more attempt
+        // on the next launch, so a transient cause — a bad deploy, a route that
+        // moved — heals itself instead of parking the evidence forever. The
+        // attempt is bounded (one per launch), so a genuinely malformed event
+        // costs a single batch and re-quarantines.
+        var requeued = 0
+        for index in events.indices where events[index]["deliveryError"] != nil {
+            events[index].removeValue(forKey: "deliveryError")
+            requeued += 1
+        }
+
         // Trim an oversized restored file with the same policy as the live path.
         while events.count > maxEvents {
             guard let victim = evictionIndex(incomingIsPriority: false) else { break }
@@ -139,6 +150,7 @@ final class TelemetryEventQueue {
         let needsNormalisation = bad > 0
             || (!text.isEmpty && !text.hasSuffix("\n"))
             || events.count != parsed.count
+            || requeued > 0
         if needsNormalisation {
             _ = rewrite(events)
         }

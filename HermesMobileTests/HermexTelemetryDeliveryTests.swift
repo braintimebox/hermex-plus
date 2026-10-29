@@ -302,6 +302,31 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         XCTAssertEqual(logger.countersSnapshot()["quarantined"] as? Int, 1)
     }
 
+    /// A quarantine must be recoverable, otherwise a 404 from a deploy in
+    /// progress parks the event until eviction, with no way back.
+    func testQuarantinedEventGetsAnotherChanceOnTheNextLaunch() {
+        StubURLProtocol.fallback = .init(status: 400,
+                                         body: Data(#"{"ok":false,"error":"invalid JSON"}"#.utf8))
+        let first = makeLogger(retryDelays: [0.01])
+
+        first.log(type: "error", message: "boom")
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        first.drainForTesting()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertNotNil(first.pendingEventsForTesting().first?["deliveryError"],
+                        "precondition: the event is quarantined")
+
+        // Fix the cause, then relaunch: the event must be attempted again.
+        StubURLProtocol.reset()
+        StubURLProtocol.fallback = .init(status: 200, body: ackBody(received: 1, stored: 1))
+        let second = makeLogger()
+
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 },
+                      "a quarantined event is retried on the next launch")
+        XCTAssertTrue(waitUntil { second.pendingEventsForTesting().isEmpty },
+                      "and leaves the queue once the server accepts it")
+    }
+
     /// A quarantined event must not block the rest of the queue.
     func testQuarantinedEventDoesNotBlockTheQueue() {
         // First batch → 400 (quarantined). Everything after → success.
