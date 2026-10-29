@@ -125,24 +125,22 @@ final class TelemetryEventQueue {
         events = parsed
         eventsLostToCorruption = bad
 
-        // Normalise the file before any further append. A torn tail without a
-        // trailing newline would otherwise swallow the next appended event into
-        // the same, unparseable line. Rewriting here also drops the garbage.
-        let needsNormalisation = bad > 0 || (!text.isEmpty && !text.hasSuffix("\n"))
-        if needsNormalisation {
-            _ = rewrite(parsed)
-        }
-
-        enforceCapacityForLoad()
-    }
-
-    /// A restored file may exceed the cap if the limit was lowered or the app
-    /// crashed while offline for a long time. Trim on load, same policy.
-    private func enforceCapacityForLoad() {
+        // Trim an oversized restored file with the same policy as the live path.
         while events.count > maxEvents {
             guard let victim = evictionIndex(incomingIsPriority: false) else { break }
             events.remove(at: victim)
             eventsLostToQueueFull += 1
+        }
+
+        // Normalise the file before any further append. A torn tail without a
+        // trailing newline would otherwise swallow the next appended event into
+        // the same, unparseable line; a trimmed queue must also be persisted so
+        // memory and disk stay identical.
+        let needsNormalisation = bad > 0
+            || (!text.isEmpty && !text.hasSuffix("\n"))
+            || events.count != parsed.count
+        if needsNormalisation {
+            _ = rewrite(events)
         }
     }
 

@@ -431,7 +431,8 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let reread = TelemetryEventQueue(fileURL: temp.fileURL)
         reread.load()
         XCTAssertEqual(reread.count, 2)
-        XCTAssertEqual(reread.eventsLostToCorruption, 1)
+        XCTAssertEqual(reread.eventsLostToCorruption, 0,
+                       "the load normalised the file, so the new append is clean")
     }
 
     // MARK: - 12. Concurrent events

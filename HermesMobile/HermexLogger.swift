@@ -347,7 +347,6 @@ final class HermexLogger {
         isSending = false
         switch outcome {
         case .confirmed(let count):
-            store.noteConfirmed(count)
             let confirmedKeys = count >= batchCount
                 ? Set(orderedKeys)
                 : Set(orderedKeys.prefix(count))
@@ -357,6 +356,9 @@ final class HermexLogger {
                 scheduleRetry(after: 5)
                 return
             }
+            // Count only what actually left the queue, so a failed rewrite can
+            // never inflate the confirmed counter.
+            store.noteConfirmed(count)
             retryAttempt = 0
             batchLimit = maxBatch
             if store.hasPending { scheduleFlush(after: 0) }
