@@ -153,12 +153,18 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         first.drainForTesting()
 
         let before = first.pendingEventsForTesting()
-        let originalKey = TelemetryEventQueue.key(for: before[0])
+        XCTAssertEqual(before.count, 1, "precondition: one event is queued")
+        let originalKey = before.first.flatMap { TelemetryEventQueue.key(for: $0) }
         XCTAssertNotNil(originalKey)
 
+        // Loading is asynchronous: wait for the restored queue instead of
+        // reading it straight after init, and never index a possibly empty array.
         let second = makeLogger()
+        XCTAssertTrue(waitUntil { !second.pendingEventsForTesting().isEmpty },
+                      "the restored queue must be readable before comparing")
         let after = second.pendingEventsForTesting()
-        XCTAssertEqual(TelemetryEventQueue.key(for: after[0]), originalKey)
+        XCTAssertEqual(after.first.flatMap { TelemetryEventQueue.key(for: $0) }, originalKey,
+                       "restore must not renumber correlationId:seqNo")
     }
 
     // MARK: - 5. Killed during a send
