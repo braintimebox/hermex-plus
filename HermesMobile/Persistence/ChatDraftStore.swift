@@ -1,5 +1,6 @@
 import Foundation
 import os
+import QuartzCore
 
 /// One staged composer attachment as referenced by a persisted draft. `file`
 /// names the durable app-owned copy in `ChatDraftAttachmentStore`. It remains
@@ -604,15 +605,27 @@ final class ChatDraftStore {
     /// visible in hermex-logs.jsonl rather than inferred from static reading.
     /// Session identifiers are truncated to 8 characters: enough to correlate events,
     /// not enough to reconstruct the id.
-    func logDraftProbe(_ point: String, key: ChatDraftKey, textLength: Int, detail: String = "") {
+    func logDraftProbe(
+        _ point: String,
+        key: ChatDraftKey,
+        textLength: Int,
+        detail: String = "",
+        durationMs: Double? = nil
+    ) {
         var extras: [String: Any] = [
             "point": point,
             "key": ChatDraftStore.probeLabel(key),
             "len": textLength,
         ]
         if !detail.isEmpty { extras["detail"] = detail }
+        // HERMEX-FORK: 3.9.65 — the probe recorded the fact of a write but never
+        // its cost: 3 437 `draft setContent` events in 3.9.64 all carried
+        // durationMs = 0, so a slow composer write was invisible. The duration is
+        // now measured around the write itself and emitted in the same field the
+        // rest of the telemetry uses.
         HermexLogger.shared.log(
             type: "draft",
+            durationMs: durationMs,
             screen: "ChatDraftStore",
             message: "draft \(point)",
             extras: extras
@@ -632,13 +645,19 @@ final class ChatDraftStore {
     }
 
     func setContent(_ content: ComposerDraftContent, for key: ChatDraftKey) {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("setContent", key: key, textLength: content.text.count)
+        // HERMEX-FORK: 3.9.65 — the measured segment is exactly the write this
+        // method performs (change marking + draft mutation + persistence touch
+        // inside updateDraft), not the caller's surrounding SwiftUI work.
+        // Behaviour is unchanged; only the duration is now reported.
+        let startedAt = CACurrentMediaTime()
         markChangedBeforeLoad(key)
         updateDraft(for: key) { draft in
             draft.text = content.text
             draft.quotes = content.quotes
         }
+        let durationMs = (CACurrentMediaTime() - startedAt) * 1000
+        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
+        logDraftProbe("setContent", key: key, textLength: content.text.count, durationMs: durationMs)
     }
 
     /// Replaces the draft's staged-attachment records without disturbing its

@@ -164,16 +164,23 @@ def scan(path: Path) -> list[str]:
                 else:
                     frame["labels"][label] = idx
 
+        # Parentheses must be applied in the order they appear on the line.
+        # Handling all `(` before all `)` breaks a line like
+        #     ) ?? ModelCatalogOption(
+        # where the first call closes and a second one opens: the pop then
+        # removes the frame just pushed, the closed call keeps its frame alive,
+        # and the next call's labels are compared against the previous call's.
+        # That produced a false "providerID passed twice" on ModelPickerSheet.
         opens_paren = line.count("(")
         closes_paren = line.count(")")
         opens_brace = line.count("{")
         closes_brace = line.count("}")
-
-        for _ in range(opens_paren):
-            stack.append({"labels": {}})
-        for _ in range(closes_paren):
-            if stack:
-                stack.pop()
+        for ch in line:
+            if ch == "(":
+                stack.append({"labels": {}})
+            elif ch == ")":
+                if stack:
+                    stack.pop()
 
         brace_depth += opens_brace - closes_brace
         while switch_stack and brace_depth < switch_stack[-1]:

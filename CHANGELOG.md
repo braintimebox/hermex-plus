@@ -1,3 +1,91 @@
+## 3.9.68 — Diagnostics survive the network and the crash
+
+`HermexLogger` was fire-and-forget: it removed an event from a memory array
+before the POST resolved, and passed an empty completion handler to
+`URLSession`. A dropped connection, a 5xx or a force-quit deleted diagnostics
+permanently — including the events logged right before a hang, which are the
+ones worth keeping. A separate measurement put the loss at 22.95% (12 332 of
+41 397 keyed events). Three things change.
+
+- Events are durable before they are sent. `TelemetryEventQueue` appends each
+  event to `Application Support/HermexTelemetry/pending-events.jsonl` before the
+  first network attempt and removes it only when the server confirms it. The
+  queue is restored on launch, so a kill mid-flight loses nothing.
+- The reply is actually read. `send()` now inspects the status, the body and
+  `ok`, and uses the server's `received` count to decide what to remove. A 2xx
+  with an unreadable body is not a confirmation. A retried batch legitimately
+  answers `stored: 0` with `received: N` — the server counts duplicates — so
+  only `received` is used as the ack.
+- Retries are bounded and categorised. Transport errors, timeouts and 5xx back
+  off 1 → 2 → 4 → 8 → 16 → 30 s, then once per 30 s; 429 honours `Retry-After`
+  (clamped to 1…600 s); 413 halves the batch instead of repeating it; permanent
+  4xx (400/401/403/404/…) are quarantined in place — kept on disk with the
+  reason attached — so one bad event cannot block the queue.
+
+Identity is `correlationId:seqNo`, the same key the server deduplicates on, so a
+resend after a lost response cannot create a duplicate. The queue is capped at
+10 000 events; overflow evicts the oldest non-priority event first and keeps
+`freeze`/`error` as long as possible, counting every drop.
+
+Not measured yet: whether delivery actually improves on a device. That needs a
+build installed and a run with the network cut; no reliability claim is made
+here.
+
+## 3.9.67 — The chat stops freezing while the cache is written
+
+- Session cache writes ran on the main thread. `CacheStore.cacheSessions` and
+  `cacheSession` were `@MainActor`, while their callers already ran on
+  `sessionWriteQueue` with a context created there — so every write hopped to
+  main and did fetch + upsert + save + maintenance there, against a context
+  owned by another queue. 3.9.64 telemetry: `Cache Write (sessions)` at 4 225 ms,
+  6 999 ms, 2 638 ms, 2 043 ms, with freezes of 3 262 ms and 3 053 ms in the
+  same period. Both writers are now non-isolated, like `cacheMessages` already
+  was, and the fork path writes through the same queue.
+- Freeze attribution was lying. `HeavyOperationTracker` kept one global label,
+  so a background write overwrote the main-thread label and its `end()` cleared
+  it: a 3 262 ms freeze was reported as `CacheStore.cacheMessages`, which runs
+  off-main. The tracker now ignores begin/end outside the main thread;
+  background work remains visible through its own phase.
+- Gate 11 (duplicate call arguments) grouped all `(` before all `)`, so on
+  `) ?? ModelCatalogOption(` the close removed the frame the open had pushed.
+  That produced a permanent false "providerID passed twice" on
+  `ModelPickerSheet.swift:881` — in code that compiles and whose suite is green.
+  Parentheses are now applied in source order.
+
+Not measured yet: whether the freezes are actually gone on device. That needs a
+build installed and new telemetry; no performance claim is made here.
+
+## 3.9.66 — Diagnostic: measure the cost of a streaming commit
+
+(Reserved for the instrumentation branch; not part of this release.)
+
+## 3.9.65 — A scheduled message stops retrying what can never succeed
+
+- Scheduled delivery ignored `DeliveryFailure.retryable`. One message addressed to
+  a chat the server no longer had produced **620** `POST /api/chat/start`
+  requests over 68 hours, every one answered `404`. A non-retryable failure is now
+  terminal on the first attempt; a retryable one stops at five attempts. The row
+  stays in the list with the reason, so the user sees what was not delivered
+  instead of a message that silently loops forever.
+- `intervalAvgMs` counted the pause across background as a commit interval. In
+  3.9.64, 27% of intervals were over 5 s, p95 was 163 570 ms and the maximum
+  19.5M ms. A pause now closes the stream, and its length is reported separately
+  as `intervalGapCount` / `intervalGapMaxMs` instead of being averaged in.
+- `draft setContent` recorded that a write happened but never how long it took:
+  3 437 events, all with `durationMs = 0`. The write itself is now measured.
+- The watchdog's recovery line printed its own template
+  (`main thread recovered after \(Int(frozenFor))s`) instead of the number.
+
+On the 404 itself: the session had never been written to disk and no longer
+existed on the server, so `POST /api/chat/start` had nothing to attach the
+message to. The client change stops the loop; re-creating a session
+automatically is deliberately **not** done, because that would silently fork the
+conversation context.
+
+`Stream Batch Apply` needed no change: it was reported as a constant 1.0 ms
+because the column read was `mutated` (0/1), not the duration. Actual durations
+span 0.001–123 ms.
+
 ## 3.9.64 — The device build gets the cache the test build already had
 
 - `Package IPA` compiled all 688 Swift files on every release (6:18) because the

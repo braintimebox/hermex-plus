@@ -1508,7 +1508,9 @@ final class SessionListViewModel {
             let now = Date()
             let descriptor = FetchDescriptor<PendingScheduledMessage>()
             let allMessages = (try? backgroundContext.fetch(descriptor)) ?? []
-            let due = allMessages.filter { $0.scheduledAt <= now }
+            // Terminal failures are never picked up again: the user's result is
+            // recorded on the row and shown in the list, not retried forever.
+            let due = allMessages.filter { $0.scheduledAt <= now && $0.terminalFailureReason == nil }
 
             // Drop stale entries (no server URL) right here on the background
             // context, then return sendable scalars for the genuinely-due ones.
@@ -1588,19 +1590,67 @@ final class SessionListViewModel {
                     serverURLString: item.serverURLString
                 )
             } catch {
-                // Record it: scheduled delivery used to swallow every failure
-                // here, so a user reporting "HTTP 501" left no trace in telemetry
-                // at all — not even the attempt. The row is deliberately kept so
-                // the next cycle retries it.
+                let failure = DeliveryFailure.classify(error, path: .scheduled)
                 DeliveryTelemetry.record(
-                    error,
-                    path: .scheduled,
+                    failure,
                     screen: "ScheduledDelivery",
                     detail: "scheduleKey=\(item.scheduleKey) textChars=\(item.draftText.count)"
+                )
+                // HERMEX-FORK: 3.9.65 — a non-retryable failure (e.g. HTTP 404
+                // because the server no longer has the session) used to be
+                // recorded and then retried on every cycle forever: one message
+                // produced 620 requests over 68 hours. `retryable` was computed
+                // but never consulted here. The row stays (the user must still
+                // see what was not delivered) and gets a terminal state instead
+                // of being retried; retryable failures still retry, but under an
+                // attempt cap so no error class can loop indefinitely.
+                await Self.markScheduledDeliveryFailure(
+                    scheduleKey: item.scheduleKey,
+                    container: modelContext.container,
+                    retryable: failure.retryable,
+                    reason: failure.reason.rawValue
                 )
                 continue
             }
         }
+    }
+
+    /// HERMEX-FORK: 3.9.65 — records a failed scheduled send and decides whether
+    /// automatic delivery continues.
+    ///
+    /// The row is never deleted here: a message the user scheduled and that could
+    /// not be delivered must stay visible with its reason. It stops being picked
+    /// up by `dispatchDueScheduledMessages` because the fetch filters terminal
+    /// rows out.
+    ///
+    /// Attempts are capped for retryable errors too, so no error class can keep
+    /// a message in flight forever — the rule itself lives in
+    /// `ScheduledDeliveryPolicy`, where it is unit-tested.
+    private static func markScheduledDeliveryFailure(
+        scheduleKey: String,
+        container: ModelContainer,
+        retryable: Bool,
+        reason: String
+    ) async {
+        await Task.detached(priority: .utility) {
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<PendingScheduledMessage>()
+            guard let rows = try? context.fetch(descriptor),
+                  let row = rows.first(where: { $0.scheduleKey == scheduleKey }) else { return }
+            let outcome = ScheduledDeliveryPolicy.outcome(
+                retryable: retryable,
+                reason: reason,
+                failedAttempts: row.failedAttemptCount
+            )
+            row.failedAttemptCount += 1
+            if case .terminal(let terminalReason) = outcome {
+                // Non-retryable: the reason itself. Exhausted: the cap, so the
+                // two outcomes stay distinguishable in the list and in telemetry.
+                row.terminalFailureReason = terminalReason
+                row.terminalFailureAt = Date()
+            }
+            try? context.save()
+        }.value
     }
 
     /// HERMEX-FORK: session cache writes used to run synchronously on the MainActor

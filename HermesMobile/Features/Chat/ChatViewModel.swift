@@ -4842,10 +4842,21 @@ final class ChatViewModel {
 
             let forkedSession = SessionSummary(from: forkedSessionDetail)
             if let modelContext {
-                do {
-                    try CacheStore.cacheSession(forkedSession, serverURL: server, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
+                // HERMEX-FORK: 3.9.65 — the fork's cache write ran on the caller's
+                // (main) context, so a fetch + save blocked the UI right after a
+                // fork. It now runs on the session write queue with its own
+                // context, like every other cache writer.
+                let container = modelContext.container
+                let serverURL = server
+                CacheStore.sessionWriteQueue.async { [weak self] in
+                    let bgContext = ModelContext(container)
+                    do {
+                        try CacheStore.cacheSession(forkedSession, serverURL: serverURL, in: bgContext)
+                    } catch {
+                        let message = error.localizedDescription
+                        HermexLogger.shared.log(type: "error", message: "cache write: \(message)")
+                        Task { @MainActor in self?.cacheErrorMessage = message }
+                    }
                 }
             }
             return forkedSession
