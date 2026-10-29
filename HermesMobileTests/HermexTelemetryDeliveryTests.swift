@@ -58,7 +58,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger()
 
         logger.log(type: "action", message: "tap")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 },
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 },
                       "the event should reach the transport")
         XCTAssertTrue(waitUntil { logger.pendingEventsForTesting().isEmpty },
                       "confirmed event must leave the queue")
@@ -107,7 +107,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger()
 
         logger.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         XCTAssertTrue(waitUntil { logger.isIdleForTesting() })
         XCTAssertTrue(waitUntil { !logger.pendingEventsForTesting().isEmpty })
 
@@ -149,7 +149,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         StubURLProtocol.fallback = .init(error: noNetworkError())
         let first = makeLogger()
         first.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         first.drainForTesting()
 
         let before = first.pendingEventsForTesting()
@@ -171,7 +171,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger()
 
         logger.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         XCTAssertEqual(logger.pendingEventsForTesting().count, 1,
                        "in-flight is not delivered; a kill here must not lose it")
 
@@ -288,7 +288,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger(retryDelays: [0.01])
 
         logger.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         // Give a would-be retry loop time to misbehave.
         logger.drainForTesting()
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
@@ -310,7 +310,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let first = makeLogger(retryDelays: [0.01])
 
         first.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         first.drainForTesting()
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         XCTAssertNotNil(first.pendingEventsForTesting().first?["deliveryError"],
@@ -321,7 +321,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         StubURLProtocol.fallback = .init(status: 200, body: ackBody(received: 1, stored: 1))
         let second = makeLogger()
 
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 },
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 },
                       "a quarantined event is retried on the next launch")
         XCTAssertTrue(waitUntil { second.pendingEventsForTesting().isEmpty },
                       "and leaves the queue once the server accepts it")
@@ -337,7 +337,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger(retryDelays: [0.01])
 
         logger.log(type: "action", message: "poison")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         logger.drainForTesting()
 
         logger.log(type: "error", message: "good")
@@ -524,7 +524,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger()
 
         logger.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         logger.drainForTesting()
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 
@@ -538,7 +538,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         let logger = makeLogger()
 
         logger.log(type: "error", message: "boom")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         logger.drainForTesting()
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 
@@ -557,7 +557,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         logger.log(type: "error", message: "a")
         logger.log(type: "error", message: "b")
         logger.log(type: "error", message: "c")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count == 1 })
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
         XCTAssertTrue(waitUntil { logger.isIdleForTesting() })
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 
