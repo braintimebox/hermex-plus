@@ -518,6 +518,190 @@ final class SharedDraftStoreTests: XCTestCase {
         XCTAssertEqual(reservation.source, .appGroup)
     }
 
+    // MARK: - 3.9.68 regression: URL draft byte limit
+
+    func testURLDraftAtLimitIsCarriedInline() {
+        let draft = String(repeating: "a", count: HermesShareDraft.maximumURLDraftBytes)
+        XCTAssertEqual(draft.utf8.count, HermesShareDraft.maximumURLDraftBytes)
+
+        let url = HermesShareDraft.openURL(withDraft: draft)
+        XCTAssertEqual(
+            HermesShareDraft.draftFromURL(url), draft,
+            "a draft exactly at the limit must ride in the URL"
+        )
+    }
+
+    func testURLDraftOverLimitIsNotInlined() {
+        let draft = String(repeating: "a", count: HermesShareDraft.maximumURLDraftBytes + 1)
+
+        let url = HermesShareDraft.openURL(withDraft: draft)
+        XCTAssertNil(
+            HermesShareDraft.draftFromURL(url),
+            "one byte over the limit must not be inlined; it goes through the container"
+        )
+    }
+
+    /// The cap is in BYTES, not characters: a multibyte draft that fits the
+    /// character count can still exceed the byte budget.
+    func testURLDraftLimitMeasuresBytesNotCharacters() {
+        let atLimit = String(repeating: "я", count: HermesShareDraft.maximumURLDraftBytes / 2)
+        XCTAssertEqual(atLimit.utf8.count, HermesShareDraft.maximumURLDraftBytes)
+        XCTAssertEqual(
+            HermesShareDraft.draftFromURL(HermesShareDraft.openURL(withDraft: atLimit)),
+            atLimit
+        )
+
+        let overLimit = String(repeating: "я", count: HermesShareDraft.maximumURLDraftBytes / 2 + 1)
+        XCTAssertGreaterThan(overLimit.utf8.count, HermesShareDraft.maximumURLDraftBytes)
+        XCTAssertNil(
+            HermesShareDraft.draftFromURL(HermesShareDraft.openURL(withDraft: overLimit)),
+            "3001 two-byte characters are 6002 bytes and must not be inlined"
+        )
+    }
+
+    func testEmptyDraftIsNotInlined() {
+        XCTAssertNil(HermesShareDraft.draftFromURL(HermesShareDraft.openURL(withDraft: "")))
+    }
+
+    /// The payload must be URL-safe base64: `+`, `/` and `=` inside a query
+    /// value can be re-encoded or truncated by a host before the app sees them,
+    /// and the receiver would then decode a different string. This is the
+    /// invariant that keeps extension and app agreeing on one format.
+    func testURLDraftPayloadIsURLSafeBase64() {
+        // Two-byte characters produce `+` and `/` in plain base64.
+        let draft = String(repeating: "ÿ", count: 300)
+        XCTAssertLessThanOrEqual(draft.utf8.count, HermesShareDraft.maximumURLDraftBytes)
+
+        let url = HermesShareDraft.openURL(withDraft: draft)
+        let encoded = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "d" })?.value ?? ""
+
+        XCTAssertFalse(encoded.isEmpty, "a draft under the limit must be inlined")
+        XCTAssertFalse(encoded.contains("+"), "base64 `+` must be rewritten to `-`")
+        XCTAssertFalse(encoded.contains("/"), "base64 `/` must be rewritten to `_`")
+        XCTAssertFalse(encoded.contains("="), "padding must be stripped and rebuilt on decode")
+        XCTAssertEqual(HermesShareDraft.draftFromURL(url), draft,
+                       "sender and receiver must agree on the payload format")
+    }
+
+    // MARK: - 3.9.68 regression: delivery and open outcomes
+
+    func testDeliveryOutcomePrefersContainerThenPasteboardThenGeneral() {
+        XCTAssertEqual(
+            HermesShareDraft.deliveryOutcome(
+                containerDelivered: true, namedPasteboardDelivered: true,
+                generalPasteboardDelivered: true
+            ),
+            .container
+        )
+        XCTAssertEqual(
+            HermesShareDraft.deliveryOutcome(
+                containerDelivered: false, namedPasteboardDelivered: true,
+                generalPasteboardDelivered: true
+            ),
+            .namedPasteboard
+        )
+        XCTAssertEqual(
+            HermesShareDraft.deliveryOutcome(
+                containerDelivered: false, namedPasteboardDelivered: false,
+                generalPasteboardDelivered: true
+            ),
+            .textOnlyGeneralPasteboard
+        )
+        XCTAssertEqual(
+            HermesShareDraft.deliveryOutcome(
+                containerDelivered: false, namedPasteboardDelivered: false,
+                generalPasteboardDelivered: false
+            ),
+            .unavailable
+        )
+    }
+
+    func testOnlyFullPayloadOutcomesCountAsCarried() {
+        XCTAssertTrue(HermesShareDraft.ShareDeliveryOutcome.container.carriedFullPayload)
+        XCTAssertTrue(HermesShareDraft.ShareDeliveryOutcome.namedPasteboard.carriedFullPayload)
+        XCTAssertFalse(HermesShareDraft.ShareDeliveryOutcome.textOnlyGeneralPasteboard.carriedFullPayload)
+        XCTAssertFalse(HermesShareDraft.ShareDeliveryOutcome.unavailable.carriedFullPayload)
+    }
+
+    func testUnavailableDeliveryNeverReportsSuccess() {
+        let outcome = HermesShareDraft.deliveryOutcome(
+            containerDelivered: false,
+            namedPasteboardDelivered: false,
+            generalPasteboardDelivered: false
+        )
+        XCTAssertEqual(outcome, .unavailable)
+        XCTAssertNotNil(
+            HermesShareDraft.statusMessage(forDelivery: outcome),
+            "an undelivered share must say so instead of finishing silently"
+        )
+    }
+
+    func testConfirmedDeliveryAndOpenStaySilent() {
+        XCTAssertNil(HermesShareDraft.statusMessage(forDelivery: .container))
+        XCTAssertNil(HermesShareDraft.statusMessage(forDelivery: .namedPasteboard))
+        XCTAssertNil(HermesShareDraft.statusMessage(forOpen: .confirmed))
+    }
+
+    /// A dispatched request is not an opened app: the user must be told to open
+    /// Hermex themselves instead of the extension silently claiming success.
+    func testUnconfirmedOpenIsNotReportedAsSuccess() {
+        XCTAssertNotNil(HermesShareDraft.statusMessage(forOpen: .dispatchedOnly))
+        XCTAssertNotNil(HermesShareDraft.statusMessage(forOpen: .failed))
+    }
+
+    func testTextOnlyFallbackWarnsAboutAttachments() {
+        let message = HermesShareDraft.statusMessage(forDelivery: .textOnlyGeneralPasteboard)
+        XCTAssertNotNil(message)
+        XCTAssertTrue(
+            message?.lowercased().contains("copied") == true,
+            "the text-only path must tell the user the text was copied for manual pasting"
+        )
+    }
+
+    func testGeneralPasteboardRejectsEmptyText() {
+        XCTAssertFalse(HermesShareDraft.saveTextToGeneralPasteboard("   \n\t "))
+    }
+
+    // MARK: - 3.9.68 regression: stranded reservation recovery
+
+    /// A share left in `reserved/` without reservation metadata — exactly what a
+    /// failed rollback leaves behind — must return to `pending/`, not vanish.
+    func testStrandedReservedItemIsRecoveredToPending() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try HermesShareDraft.savePendingImport(draft: "stranded", attachments: [], in: directory)
+
+        let inbox = directory.appendingPathComponent("share-inbox-v1", isDirectory: true)
+        let pendingDirectory = inbox.appendingPathComponent("pending", isDirectory: true)
+        let reservedDirectory = inbox.appendingPathComponent("reserved", isDirectory: true)
+        try FileManager.default.createDirectory(at: reservedDirectory, withIntermediateDirectories: true)
+
+        let itemName = try XCTUnwrap(
+            try FileManager.default.contentsOfDirectory(atPath: pendingDirectory.path).first
+        )
+        let pendingItem = pendingDirectory.appendingPathComponent(itemName)
+        let reservedItem = reservedDirectory.appendingPathComponent(itemName)
+
+        // Move it into reserved/ with NO metadata, then age it past the
+        // reservation lifetime so the recovery pass considers it abandoned.
+        try FileManager.default.moveItem(at: pendingItem, to: reservedItem)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -3600)],
+            ofItemAtPath: reservedItem.path
+        )
+
+        XCTAssertTrue(
+            try HermesShareDraft.hasPendingImport(in: directory),
+            "the recovery pass must bring the stranded item back to pending/"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: reservedItem.path),
+            "the item must not stay stuck in reserved/"
+        )
+    }
+
     private func skipUnlessPasteboardIsAvailable() throws {
         guard UIPasteboard(name: .init(HermesShareDraft.sharePasteboardName), create: true) == nil else {
             return

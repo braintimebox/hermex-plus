@@ -143,11 +143,14 @@ func ackBody(received: Int, stored: Int) -> Data {
 func waitUntil(timeout: TimeInterval = 5,
                _ condition: @escaping () -> Bool) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
+    while true {
         if condition() { return true }
+        if Date() >= deadline {
+            XCTFail("timed out after \(timeout)s waiting for the condition")
+            return false
+        }
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     }
-    return condition()
 }
 
 /// Per-test temporary directory for the queue file, removed on teardown.
