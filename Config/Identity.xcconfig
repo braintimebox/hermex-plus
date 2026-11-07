@@ -28,4 +28,4 @@ APP_DISPLAY_NAME = Hermex 4.0
 APP_PRODUCT_NAME = Hermex4
 
 // Reported in Settings → About so a phone can be identified at a glance.
-APP_LINE = 4.0
+APP_LINE = test
