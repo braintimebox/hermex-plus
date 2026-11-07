@@ -635,8 +635,51 @@ final class FrameTimeMonitor: NSObject {
     func start() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(frameTick(_:)))
+        // 3.9.70: ask for ProMotion explicitly. Without a preferred range the
+        // system keeps the link at 60 Hz, so every window reports p50 = 16.67 ms
+        // and a 90–120 fps regression is invisible. Paired with
+        // CADisableMinimumFrameDurationOnPhone in Info.plist.
+        if #available(iOS 15.0, *) {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120)
+        }
         link.add(to: .main, forMode: .common)
         displayLink = link
+        logDeviceContextOnce()
+    }
+
+    /// 3.9.70: one device/thermal record per launch. Freeze severity is not
+    /// comparable across devices or thermal states without it — a 4 s block on a
+    /// hot, low-power device is a different defect from the same block on a cold
+    /// one, and the old schema could not tell them apart. Emitted once, not per
+    /// frame, so the payload cost is negligible.
+    private func logDeviceContextOnce() {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        let thermal: String
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = "unknown"
+        }
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "Performance",
+            message: "device context",
+            extras: [
+                "deviceModel": UIDevice.current.model,
+                "systemName": UIDevice.current.systemName,
+                "iosVersion": UIDevice.current.systemVersion,
+                "buildNumber": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
+                "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                "refreshRate": scene?.screen.maximumFramesPerSecond ?? 0,
+                "thermalState": thermal,
+                "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+                "physicalMemoryMB": Int(ProcessInfo.processInfo.physicalMemory / 1_048_576),
+            ]
+        )
     }
 
     @objc private func frameTick(_ link: CADisplayLink) {
@@ -683,19 +726,38 @@ final class FrameTimeMonitor: NSObject {
         guard now.timeIntervalSince(lastReport) >= reportRateLimit else { return }
         lastReport = now
         let ctx = MainThreadWatchdog.snapshotPerformanceContext()
+        // 3.9.70: jank carried no attribution — 0 of 347 events had a heavyOp or
+        // a stack, so the most frequent symptom could not name its cause. Only
+        // capture the (expensive) stack when the frame actually blew the budget.
+        var extras: [String: Any] = [
+            "maxFrameMs": maxMs,
+            "isStreaming": ctx.isStreaming,
+            "messageCount": ctx.messageCount,
+            "isUserInteracting": ctx.isUserInteracting,
+            "isScrolledNearBottom": ctx.isScrolledNearBottom,
+            "scrollOwner": ctx.scrollOwner,
+            "displayedRowCount": ctx.displayedRowCount,
+        ]
+        if maxMs > 100 {
+            let inFlight = HeavyOperationTracker.currentLabelForTesting ?? ""
+            extras["heavyOp"] = ctx.heavyOp.isEmpty ? inFlight : ctx.heavyOp
+            extras["stack"] = Self.topSymbols(MainThreadStackCapture.capture(), limit: 3)
+        }
         HermexLogger.shared.log(
             type: "jank",
             durationMs: avgMs,
             message: String(format: "UI jank avg %.0fms (%.0f fps) max %.0fms", avgMs, avgFps, maxMs),
-            extras: [
-                "maxFrameMs": maxMs,
-                "isStreaming": ctx.isStreaming,
-                "messageCount": ctx.messageCount,
-                "isUserInteracting": ctx.isUserInteracting,
-                "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                "scrollOwner": ctx.scrollOwner,
-            ]
+            extras: extras
         )
+    }
+
+    /// First `limit` frames of a captured stack, joined for compact telemetry.
+    private static func topSymbols(_ stack: String, limit: Int) -> String {
+        guard !stack.isEmpty else { return "" }
+        let frames = stack.components(separatedBy: "<-")
+        return frames.prefix(limit)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: " <- ")
     }
 
     // HERMEX-FORK: 3.9.40 — emit the frame distribution of one window.

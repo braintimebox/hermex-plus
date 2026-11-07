@@ -325,6 +325,10 @@ struct ChatView: View {
     private let transcriptMessageSpacing: CGFloat = 10
     private let transcriptBlockSpacing: CGFloat = 6
     @State private var followScrollGeneration = 0
+    /// 3.9.70: previous logged composer height, so the height event carries
+    /// prev → next and the oscillation (218 ↔ 253) becomes diagnosable instead
+    /// of merely observable. Diagnostics only — nothing reads it for layout.
+    @State private var lastLoggedComposerHeight: CGFloat = 0
     /// While true the transcript's bottom size-change anchor and follow-driven
     /// scrolls are suspended so a disclosure toggle grows or shrinks in place.
     @State private var isDisclosureSettling = false
@@ -592,8 +596,16 @@ struct ChatView: View {
                 HermexLogger.shared.log(
                     type: "event",
                     screen: "ChatView",
-                    message: "composer height c=\(Int(height)) inset=\(Int(transcriptBottomInsetHeight)) acc=\(Int(composerAccessorySpacerHeight)) focused=\(composerIsFocused)"
+                    message: "composer height c=\(Int(height)) inset=\(Int(transcriptBottomInsetHeight)) acc=\(Int(composerAccessorySpacerHeight)) focused=\(composerIsFocused)",
+                    extras: [
+                        "prevHeight": Int(lastLoggedComposerHeight),
+                        "nextHeight": Int(height),
+                        "deltaHeight": Int(height - lastLoggedComposerHeight),
+                        "hasAccessory": composerAccessorySpacerHeight > 0,
+                        "isFocused": composerIsFocused,
+                    ]
                 )
+                lastLoggedComposerHeight = height
             },
             onPhotoItemSelected: { item in
                 Task { await handlePhotoSelection(item) }

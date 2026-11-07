@@ -325,6 +325,10 @@ private struct ComposerTextView: UIViewRepresentable {
         var onDropFileProviders: ([NSItemProvider]) -> Void = { _ in }
         var onDropImageProviders: ([NSItemProvider]) -> Void = { _ in }
         private var pendingFocusTarget: Bool?
+        /// Bumped on every focus request. A deferred task captures the value at
+        /// schedule time and aborts if it changed — so an older queued blur can
+        /// never close a newer editing session (upstream fix 1.8.0/1.9.0).
+        private var focusGeneration: Int = 0
         private var lastReportedHeight: CGFloat = 0
         /// HERMEX-FORK: width the last height was measured at — the height guard
         /// in `reportHeight` compares both, so a stale narrow-width measurement
@@ -501,12 +505,19 @@ private struct ComposerTextView: UIViewRepresentable {
             guard pendingFocusTarget != target else { return }
 
             pendingFocusTarget = target
+            focusGeneration &+= 1
+            let generation = focusGeneration
             Task { @MainActor [weak self, weak textView] in
                 await Task.yield()
                 guard let self, let textView else { return }
+                // A newer focus request superseded this one while it was queued.
+                // Acting now would fight the newer session — the "keyboard drops
+                // while I type" race.
+                guard generation == self.focusGeneration else { return }
 
                 if target, textView.window == nil {
                     try? await Task.sleep(nanoseconds: 60_000_000)
+                    guard generation == self.focusGeneration else { return }
                 }
 
                 self.pendingFocusTarget = nil
@@ -514,7 +525,11 @@ private struct ComposerTextView: UIViewRepresentable {
                 if target {
                     guard self.isFocused, textView.isEditable, textView.window != nil else { return }
                     textView.becomeFirstResponder()
-                } else if textView.isFirstResponder {
+                } else if !self.isFocused, textView.isFirstResponder {
+                    // UIKit can begin a new editing session while this blur is
+                    // queued. Recheck the binding, just as the focus path does,
+                    // so an older request cannot dismiss the new session
+                    // (upstream 1.8.0 / 1.9.0).
                     textView.resignFirstResponder()
                 }
             }

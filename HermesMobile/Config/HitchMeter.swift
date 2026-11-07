@@ -83,6 +83,14 @@ final class HitchMeter: NSObject {
     func start() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(frameDidArrive(_:)))
+        // 3.9.70: without an explicit range the display link never asks for
+        // ProMotion, so the histogram can only ever report 16.67 ms as its
+        // floor — the 90–120 fps target stays unmeasurable rather than merely
+        // unmet. Info.plist carries CADisableMinimumFrameDurationOnPhone; this
+        // is the second half of that permission.
+        if #available(iOS 15.0, *) {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120)
+        }
         link.add(to: .main, forMode: .common)
         displayLink = link
     }

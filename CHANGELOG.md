@@ -1,3 +1,38 @@
+## 3.9.70 — Keyboard focus survives, and telemetry starts naming causes
+
+Baseline measured on 3.9.68 before any change (22 557 events, 31.10–07.11):
+scroll frames over 33 ms 2.52 %, scroll+stream 5.33 %, stream 7.68 %; jank
+15.38 per 1000; stalls 0.44 per 1000; `transcriptMessages.fullRecompute`
+69–111 ms; composer oscillation 6 cycles; share 57.7 % (received → agent
+stream); draft completion 99.4 %. Of 347 jank events, 0 carried a `heavyOp`
+or a stack — the most frequent symptom could not name its cause. The frame
+histogram reported p50 = 16.67 ms in 96.4 % of scroll windows, so a 90–120 fps
+target was unmeasurable rather than merely unmet.
+
+- **Keyboard: a queued blur can no longer close a newer editing session.** The
+  deferred focus task rechecked only `textView.isFirstResponder` before calling
+  `resignFirstResponder()`, so a task scheduled before a new focus session could
+  dismiss it — the reported "keyboard drops while I type". It now bumps a
+  generation on every request and rechecks both the generation and `isFocused`
+  (upstream 1.8.0 / 1.9.0).
+- **ProMotion is requested explicitly** on both display links. `Info.plist`
+  already carried `CADisableMinimumFrameDurationOnPhone`, but without
+  `preferredFrameRateRange` the link stays at 60 Hz and every window reports
+  16.67 ms. This makes the frame budget measurable; it does not by itself
+  raise the frame rate.
+- **Jank carries attribution.** Above a 100 ms frame the event now records the
+  in-flight `heavyOp` and the top three stack symbols, so a jank spike names its
+  cause instead of only its size. Full stacks are not captured per frame.
+- **Device context once per launch:** model, iOS version, build number, screen
+  refresh rate, thermal state, low-power mode and physical memory. Freeze
+  severity is not comparable across devices or thermal states without it.
+- **Composer height events carry prev → next**, so the 218 ↔ 253 oscillation
+  can be diagnosed rather than merely counted. Diagnostics only; no smoothing
+  or delay was added to hide it.
+
+No optimisation of the transcript or scroll path is included: neither is claimed
+until it is measured. 90–120 fps is not claimed for this build.
+
 ## 3.9.68 — Diagnostics survive the network and the crash
 
 `HermexLogger` was fire-and-forget: it removed an event from a memory array
