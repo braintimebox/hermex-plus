@@ -1,3 +1,30 @@
+## 3.9.74 — scheduled messages keep their attachments
+
+A scheduled message always arrived without its files. The model has carried
+`attachmentsJSON`, `setAttachments` and an `init(pending:)` bridge all along, but
+nothing ever filled the field: `saveScheduledMessage` built the row from the text
+alone, so the composer's attachments were dropped at schedule time — before any
+delivery code ran.
+
+- **Capture at schedule time.** The composer's pending attachments are mapped
+  into `ScheduledMessageAttachment` and stored on the row; the composer is then
+  cleared, because those attachments now belong to the pending message and would
+  otherwise be sent twice.
+- **Attachment-only messages are allowed.** Scheduling a file with no text is a
+  legitimate send, so the emptiness guard accepts either text or attachments.
+- **Same-chat delivery restores them.** "Send Now" into the current chat hands
+  the stored server-side paths back to the composer (`restorePendingAttachments`)
+  before sending, so the upload is not repeated and the send carries the files.
+- **Cross-chat delivery passes them to the API.** `startChat` has always accepted
+  `attachments`; the scheduled path simply never used it. A small
+  `toJSONValue()` mirrors `PendingAttachment`'s payload exactly.
+- **Server sync includes them.** The autonomous dispatcher can only deliver what
+  it was told about, so the webhook body now carries the same attachment list
+  when non-empty. A host that ignores the field behaves exactly as before.
+
+Existing rows keep `attachmentsJSON = nil` and remain text-only — no migration is
+required, and none was performed.
+
 ## 3.9.73 — attachments stay available while the agent is working
 
 Picking an attachment stalled whenever a run was in flight: the Attach menu

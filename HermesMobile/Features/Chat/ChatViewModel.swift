@@ -1723,6 +1723,13 @@ final class ChatViewModel {
         attachmentCoordinator.clearPendingAttachments()
     }
 
+    /// Put already-uploaded attachments back into the composer. Used by scheduled
+    /// delivery, where the upload happened when the message was scheduled and the
+    /// send must carry the same `path` values rather than uploading again.
+    func restorePendingAttachments(_ attachments: [PendingAttachment]) {
+        attachmentCoordinator.restorePendingAttachments(attachments)
+    }
+
     func removePendingAttachment(id: UUID) {
         attachmentCoordinator.removePendingAttachment(id: id)
     }

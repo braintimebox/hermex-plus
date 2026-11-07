@@ -94,6 +94,37 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
         self.draftFileName = draftFileName
     }
 
+    /// Payload shape the chat API expects for a sent attachment. Mirrors
+    /// `PendingAttachment.toJSONValue()` exactly, so a scheduled send carries the
+    /// same fields an immediate send carries.
+    func toJSONValue() -> JSONValue {
+        var object: [String: JSONValue] = [
+            "name": .string(name),
+            "path": .string(path),
+            "mime": .string(mime),
+        ]
+        if let size {
+            object["size"] = .number(Double(size))
+        }
+        object["is_image"] = .bool(isImage)
+        return .object(object)
+    }
+
+    /// Rebuild a composer attachment for the same-chat delivery path, which sends
+    /// through the normal machinery. The upload already happened when the message
+    /// was scheduled, so only the server-side `path` matters here.
+    func toPendingAttachment() -> PendingAttachment {
+        PendingAttachment(
+            name: name,
+            path: path,
+            mime: mime,
+            size: size,
+            isImage: isImage,
+            thumbnailData: nil,
+            draftFileName: draftFileName
+        )
+    }
+
     init(pending: PendingAttachment) {
         self.init(
             name: pending.name,
