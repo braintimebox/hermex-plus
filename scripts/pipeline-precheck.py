@@ -91,7 +91,7 @@ def blockers(items: list[str]) -> int:
 # --- check 1: release invariants --------------------------------------------
 
 def check_release() -> int:
-    print("[1/9] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
+    print("[1] release invariants (VERSION / CHANGELOG / pbxproj / tag)")
     script = ROOT / "scripts" / "release-check.py"
     if not script.exists():
         return blockers(["scripts/release-check.py missing"])
@@ -110,7 +110,7 @@ def check_release() -> int:
 # --- check 2: conflict markers ----------------------------------------------
 
 def check_conflict_markers() -> int:
-    print("[2/9] conflict markers in tracked files")
+    print("[2] conflict markers in tracked files")
     tracked = [f for f in git("diff", "--name-only", "HEAD").splitlines() if f.strip()]
     dirty = [f for f in git("diff", "--cached", "--name-only").splitlines() if f.strip()]
     candidates = sorted(set(tracked) | set(dirty))
@@ -149,7 +149,7 @@ def check_pbxproj_registration() -> int:
         `grep -c` said "4 refs, registered" for both — which is why counting
         references is not the check.
     """
-    print("[3/13] pbxproj: every .swift registered, every id unique")
+    print("[3] pbxproj: every .swift registered, every id unique")
     pbx = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
     if not pbx.exists():
         return blockers(["project.pbxproj missing"])
@@ -253,7 +253,7 @@ def _group_path_mismatches(text: str, tracked: list[str]) -> list[str]:
 # --- check 4: upstream-owned files untouched --------------------------------
 
 def check_upstream_owned() -> int:
-    print("[4/9] upstream-owned files not modified")
+    print("[4] upstream-owned files not modified")
     changed = set()
     for args in (("diff", "--name-only", "HEAD"), ("diff", "--cached", "--name-only")):
         changed |= {f.strip() for f in git(*args).splitlines() if f.strip()}
@@ -286,7 +286,7 @@ def check_upstream_drift() -> int:
     it can and always returns 0. Check 4 (upstream-owned files) is the one with
     teeth, because touching upstream files is what actually breaks a sync.
     """
-    print("[5/9] upstream drift (advisory)")
+    print("[5] upstream drift (advisory)")
     script = ROOT / "scripts" / "sync-upstream"
     if not script.exists():
         print("      scripts/sync-upstream not present — skipped")
@@ -314,7 +314,7 @@ def check_test_lint() -> int:
     hours later in the same session — a note asks the next person to remember and
     to judge whether it applies; a gate does not.
     """
-    print("[6/9] test-lint (race-shaped assertions)")
+    print("[6] test-lint (race-shaped assertions)")
     script = ROOT / "scripts" / "lint-tests.py"
     if not script.exists():
         print("      linter not found — skipped")
@@ -343,7 +343,7 @@ def check_doc_references() -> int:
     it is gone — is recognised by the absence wording on the same line, which is
     how the tools register already writes those entries.
     """
-    print("[7/9] doc references resolve")
+    print("[7] doc references resolve")
     script = ROOT / "scripts" / "check-doc-references.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -378,7 +378,7 @@ def check_swift_structural_balance() -> int:
 
     Blocking, not advisory: a dropped brace is never a judgment call.
     """
-    print("[8/13] swift structural balance vs both parents")
+    print("[8] swift structural balance vs both parents")
     script = ROOT / "scripts" / "check-swift-structural-balance.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -388,7 +388,7 @@ def check_swift_structural_balance() -> int:
     )
     # the script prints its own banner; drop it so the gate header is not doubled
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[8/8]")]
+            if not ln.startswith("[8]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -412,7 +412,7 @@ def check_duplicate_declarations() -> int:
     matters: an earlier version grouped by indentation alone and produced 2505
     false hits, which is a gate someone switches off.
     """
-    print("[9/13] duplicate declarations in the same type scope")
+    print("[9] duplicate declarations in the same type scope")
     script = ROOT / "scripts" / "check-duplicate-declarations.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -421,7 +421,7 @@ def check_duplicate_declarations() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[9/9]")]
+            if not ln.startswith("[9]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -442,7 +442,7 @@ def check_initializer_completeness() -> int:
     property and its decoder, while `init(sessionId:title:)` (which upstream
     does not have) still listed 32 of 34 fields. One line, one full CI round.
     """
-    print("[10/13] initializer completeness (all stored properties set)")
+    print("[10] initializer completeness (all stored properties set)")
     script = ROOT / "scripts" / "check-initializer-completeness.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -451,7 +451,7 @@ def check_initializer_completeness() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[10/13]")]
+            if not ln.startswith("[10]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -473,7 +473,7 @@ def check_duplicate_call_arguments() -> int:
     `onSelectReasoningEffort:` and second `onDismissKeyboard:` all came in
     that way in the 1.6.0 merge.
     """
-    print("[11/13] duplicate call arguments (same label twice in one call)")
+    print("[11] duplicate call arguments (same label twice in one call)")
     script = ROOT / "scripts" / "check-duplicate-call-arguments.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -482,7 +482,7 @@ def check_duplicate_call_arguments() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[11/13]")]
+            if not ln.startswith("[11]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -504,7 +504,7 @@ def check_fork_preserved() -> int:
     `docs/agents/fork-manifest.json` (`pending_triage`) so it is usable today;
     a NEW disappearance blocks.
     """
-    print("[12/13] fork-owned symbols still present")
+    print("[12] fork-owned symbols still present")
     script = ROOT / "scripts" / "check-fork-preserved.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -513,7 +513,7 @@ def check_fork_preserved() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[12/13]")]
+            if not ln.startswith("[12]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -539,7 +539,7 @@ def check_sync_surface() -> int:
     `docs/agents/sync-surface.json`, not blocked, so the gate is usable on the
     day it lands. A NEW unmarked hunk blocks.
     """
-    print("[13/13] local changes are identifiable (sync surface)")
+    print("[13] local changes are identifiable (sync surface)")
     script = ROOT / "scripts" / "check-sync-surface.py"
     if not script.exists():
         print("      checker not found — skipped")
@@ -548,7 +548,7 @@ def check_sync_surface() -> int:
         [sys.executable, str(script)], cwd=ROOT, capture_output=True, text=True
     )
     body = [ln for ln in (r.stdout or "").strip().splitlines()
-            if not ln.startswith("[13/13]")]
+            if not ln.startswith("[13]")]
     for line in body:
         print(f"      {line}")
     if r.returncode != 0 and r.stderr.strip():
@@ -557,53 +557,134 @@ def check_sync_surface() -> int:
 
 
 def check_fork_identity() -> int:
-    """Gate 14 — the fork signs under its own bundle identifier.
+    """Gate 14 — the fork signs under its own identity, whichever line it builds.
 
-    `Config/Shared.xcconfig` is upstream-owned and upstream signs as
-    `com.uzairansar.hermesmobile`. Sharing that string makes Hermex Plus and
-    Hermex the same app to iOS: the two cannot be installed side by side, and
-    installing beside an App Store Hermex is refused outright — which is how
-    four released builds went uninstalled while the phone stayed on an older
-    version.
+    iOS identifies an app by its bundle identifier alone. Sharing upstream's
+    `com.uzairansar.*` makes our build and the App Store Hermex the SAME app:
+    the two cannot be installed side by side and an install can be refused.
 
-    The value is one line in a file nobody reads, so a merge that takes
-    upstream's side restores the collision silently. Pin it here rather than
-    trust a comment.
+    This gate used to pin one literal (`com.braintimebox.hermexplus`), which made
+    a second installable line impossible — the test line's `...hermex4` tripped
+    it and the build never ran (run 42391831464). The invariant is not "this
+    exact string"; it is "not upstream's namespace, and the app group matches
+    the bundle id". Any number of lines satisfies that.
     """
-    print("[14/14] the fork signs under its own bundle identifier")
-    expected = "com.braintimebox.hermexplus"
-    path = ROOT / "Config" / "Shared.xcconfig"
+    print("[14] the fork signs under its own identity")
+    path = ROOT / "Config" / "Identity.xcconfig"
     if not path.exists():
-        print("      Config/Shared.xcconfig is missing")
+        print("      Config/Identity.xcconfig is missing")
         return 1
 
-    text = path.read_text(encoding="utf-8")
-    bundle = re.search(r"^APP_BUNDLE_IDENTIFIER\s*=\s*([^\n$]+)", text, re.M)
-    group = re.search(r"^APP_GROUP_IDENTIFIER\s*=\s*([^\n$]+)", text, re.M)
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        values[key.strip()] = value.strip().strip('"')
 
-    problems: list[str] = []
+    bundle = values.get("APP_BUNDLE_IDENTIFIER", "")
+    group = values.get("APP_GROUP_IDENTIFIER", "")
+    scheme = values.get("APP_URL_SCHEME_NAME", "")
+    display = values.get("APP_DISPLAY_NAME", "")
+    product = values.get("APP_PRODUCT_NAME", "")
+    line_id = values.get("APP_LINE", "")
+
+    problems = []
     if not bundle:
         problems.append("APP_BUNDLE_IDENTIFIER is not set")
-    elif bundle.group(1).strip() != expected:
-        problems.append(
-            f"APP_BUNDLE_IDENTIFIER is {bundle.group(1).strip()!r}, expected {expected!r}"
-        )
+    elif bundle.startswith("com.uzairansar"):
+        problems.append(f"APP_BUNDLE_IDENTIFIER {bundle!r} is upstream's namespace")
+
+    base = bundle.split("$")[0]
+    group_base = group.split("$")[0]
     if not group:
         problems.append("APP_GROUP_IDENTIFIER is not set")
-    elif group.group(1).strip() != f"group.{expected}":
-        problems.append(
-            f"APP_GROUP_IDENTIFIER is {group.group(1).strip()!r}, "
-            f"expected {'group.' + expected!r}"
-        )
+    elif group_base != f"group.{base}":
+        problems.append(f"APP_GROUP_IDENTIFIER is {group_base!r}, expected {'group.' + base!r}")
+
+    if not scheme:
+        problems.append("APP_URL_SCHEME_NAME is not set")
+    elif scheme == "hermes-agent":
+        problems.append("APP_URL_SCHEME_NAME is upstream's scheme")
+
+    if not display:
+        problems.append("APP_DISPLAY_NAME is not set")
+    if not product:
+        problems.append("APP_PRODUCT_NAME is not set (drives the IPA file name)")
+    elif not product.replace("-", "").isalnum():
+        problems.append(f"APP_PRODUCT_NAME {product!r} must be alphanumeric")
+    if line_id not in {"stable", "test"}:
+        problems.append(f"APP_LINE {line_id!r} must be 'stable' or 'test'")
 
     if problems:
         for problem in problems:
             print(f"      {problem}")
-        print("      The fork's identity regressed — a merge most likely took")
-        print("      upstream's side of Config/Shared.xcconfig.")
+        print("      Fix Config/Identity.xcconfig — do not edit project.pbxproj.")
         return 1
 
-    print(f"      ok  bundle id {expected}, group group.{expected}")
+    print(f"      ok  line={line_id} bundle={base} scheme={scheme} product={product}")
+    return 0
+
+
+def check_version_source() -> int:
+    """Gate 18 — one source of truth for version and build number.
+
+    Version used to be typed into VERSION, 16 MARKETING_VERSION entries and 8
+    CURRENT_PROJECT_VERSION entries. A release that bumped one of them shipped
+    builds whose About screen, file name and CI artifact disagreed — exactly the
+    confusion this gate exists to prevent. Now Config/Version.xcconfig is the
+    only place with numbers; pbxproj references it and VERSION is a generated
+    mirror.
+    """
+    print("[18] version and build come from Config/Version.xcconfig")
+    path = ROOT / "Config" / "Version.xcconfig"
+    if not path.exists():
+        print("      Config/Version.xcconfig is missing")
+        return 1
+
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        values[key.strip()] = value.strip().strip('"')
+
+    version = values.get("APP_VERSION", "")
+    build = values.get("APP_BUILD", "")
+    problems = []
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        problems.append(f"APP_VERSION {version!r} is not MAJOR.MINOR.PATCH")
+    if not build.isdigit():
+        problems.append(f"APP_BUILD {build!r} is not numeric")
+
+    mirror_path = ROOT / "VERSION"
+    mirror = mirror_path.read_text(encoding="utf-8").strip() if mirror_path.exists() else ""
+    if mirror != version:
+        problems.append(
+            f"VERSION is {mirror!r} but Config/Version.xcconfig says {version!r} "
+            "(run: python3 scripts/sync-version.py)"
+        )
+
+    pbx = (ROOT / "HermesMobile.xcodeproj" / "project.pbxproj").read_text(encoding="utf-8")
+    ref_version = pbx.count('MARKETING_VERSION = "$(APP_VERSION)";')
+    ref_build = pbx.count('CURRENT_PROJECT_VERSION = "$(APP_BUILD)";')
+    if ref_version != 16:
+        problems.append(f"expected 16 MARKETING_VERSION references, found {ref_version}")
+    if ref_build != 8:
+        problems.append(f"expected 8 CURRENT_PROJECT_VERSION references, found {ref_build}")
+    if re.search(r"MARKETING_VERSION = \d", pbx) or re.search(r"CURRENT_PROJECT_VERSION = \d", pbx):
+        problems.append("project.pbxproj still carries a numeric version literal")
+    if "APP_DISPLAY_NAME" in pbx:
+        problems.append("APP_DISPLAY_NAME belongs in Config/Identity.xcconfig, not project.pbxproj")
+
+    if problems:
+        for problem in problems:
+            print(f"      {problem}")
+        return 1
+
+    print(f"      ok  version={version} build={build} mirror and pbxproj agree")
     return 0
 
 
@@ -629,7 +710,7 @@ def check_readme_feature_drift() -> int:
     the inventory row, so ordinary rewording stays allowed while silently
     dropping a feature does not.
     """
-    print("[15/15] README features match the fork inventory")
+    print("[15] README features match the fork inventory")
     readme = ROOT / "README.md"
     inventory = ROOT / "docs" / "agents" / "fork-inventory.md"
     for path in (readme, inventory):
@@ -725,7 +806,7 @@ def check_dead_callback_wiring() -> int:
 
     Blocking: a callback nobody calls is a feature that silently does not work.
     """
-    print("[16/16] stored callbacks all have a caller")
+    print("[16] stored callbacks all have a caller")
     app_root = ROOT / "HermesMobile"
     if not app_root.is_dir():
         print("      HermesMobile/ not found — skipped")
@@ -785,7 +866,7 @@ def check_non_optional_bindings() -> int:
     repository's compiler lives in CI, so the ledger below stands in for it: the
     APIs this fork has already been burned by, checked locally in a second.
     """
-    print("[17/17] conditional bindings on APIs recorded as non-optional")
+    print("[17] conditional bindings on APIs recorded as non-optional")
     # (API, pattern that matches a conditional binding against it)
     ledger = [
         ("UIPasteboard.items", re.compile(r"(?:guard|if)\s+let\s+\w+\s*=\s*[^\n]*?\bitems\b")),
@@ -829,6 +910,7 @@ CHECKS = {
     15: check_readme_feature_drift,
     16: check_dead_callback_wiring,
     17: check_non_optional_bindings,
+    18: check_version_source,
 }
 
 # Advisory notes raised by checks that return 0. A check that warns but does not

@@ -1,0 +1,31 @@
+// HERMEX-FORK: single source of the app's identity.
+//
+// This file is the ONLY place that decides which app the build installs over.
+// A line is defined by these values and nothing else — to produce the test line
+// beside the stable one, change this file (or include a line-specific override
+// after it) rather than editing project.pbxproj.
+//
+// iOS identifies an app by its bundle identifier alone. Sharing upstream's
+// `com.uzairansar.*` makes Hermex Plus and the App Store Hermex the SAME app, so
+// they can never be installed together. Everything downstream derives from the
+// values below: share extension and live-activity widget bundle ids, the app
+// group, the Keychain service and the URL scheme.
+//
+// Note on Xcode *schemes* (.xcscheme): those are developer run/build
+// configurations, not app identity. They are not derived from this file and do
+// not need to change per line — only the bundle id decides what installs where.
+
+// --- stable line (default) -------------------------------------------------
+APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
+APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
+APP_URL_SCHEME_NAME = hermesplus
+
+// Use only [A-Za-z0-9 .-]: iOS truncates long home-screen names, and the value
+// reaches CFBundleDisplayName of the app, the share extension and the widget.
+APP_DISPLAY_NAME = Hermex Plus
+
+// Product name drives the IPA file name in CI: <APP_PRODUCT_NAME>-<APP_VERSION>.ipa
+APP_PRODUCT_NAME = HermexPlus
+
+// Reported in Settings → About so a phone can be identified at a glance.
+APP_LINE = stable

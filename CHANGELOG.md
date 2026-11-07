@@ -1,3 +1,34 @@
+## 3.9.72 — one source for version, build number and identity
+
+Version and identity were typed into many places at once, so a release could
+ship a build whose About screen, IPA file name and CI artifact disagreed. This
+release removes the places where that is possible.
+
+- **`Config/Version.xcconfig` is the only place with numbers.** `APP_VERSION` and
+  `APP_BUILD` live there; the project's 16 `MARKETING_VERSION` and 8
+  `CURRENT_PROJECT_VERSION` entries now reference them, and `VERSION` is a
+  generated mirror written by `scripts/sync-version.py`.
+- **`Config/Identity.xcconfig` is the only place with identity.** Bundle id, app
+  group, URL scheme, display name, product name and line. `APP_DISPLAY_NAME` left
+  `project.pbxproj` (it was duplicated there), so renaming an app is one line.
+- **A line is a file, not a merge.** The test line installs beside the stable one
+  by changing `Identity.xcconfig` only; nothing in the project knows which line
+  it is.
+- **Gate 14 no longer pins one literal bundle id.** It used to require exactly
+  `com.braintimebox.hermexplus`, which made a second installable line impossible:
+  the test line's `...hermex4` tripped the gate and the build never ran (run
+  42391831464). The invariant is now "not upstream's namespace, and the app group
+  matches the bundle id".
+- **Gate 18 is new:** it fails when `VERSION`, `Config/Version.xcconfig` and
+  `project.pbxproj` disagree, when a numeric version literal reappears in the
+  project, or when `APP_DISPLAY_NAME` is set outside the identity file.
+- **`release-check.py` resolves `$(APP_VERSION)`** instead of only accepting a
+  numeric literal, so the single-source form passes the release invariants.
+- Gate headers no longer print a denominator: the numbers were stale (9, 13, 15,
+  16, 17 coexisted) and contradicted each other in the same run.
+
+No runtime behaviour changes: no view, model or networking code was touched.
+
 ## 3.9.71 — ProMotion request reverted: it made streaming choppier
 
 3.9.70 asked both display links for `preferredFrameRateRange 60...120` to make a

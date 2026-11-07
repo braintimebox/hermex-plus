@@ -520,9 +520,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version
+      - name: Read version and identity
         id: version
-        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+        # APP_PRODUCT_NAME decides the IPA file name, so a test line produces
+        # Hermex4-<ver>.ipa instead of borrowing the stable line's name. Both
+        # values come from the single source of truth in Config/.
+        run: |
+          echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+          PRODUCT=$(grep -E '^APP_PRODUCT_NAME[[:space:]]*=' Config/Identity.xcconfig | head -1 | cut -d= -f2 | tr -d ' "' )
+          if [ -z "$PRODUCT" ]; then
+            echo "APP_PRODUCT_NAME missing from Config/Identity.xcconfig" >&2
+            exit 1
+          fi
+          echo "PRODUCT=$PRODUCT" >> $GITHUB_OUTPUT
+          echo "artifact: $PRODUCT-$(cat VERSION).ipa"
 
       # Тот же SPM-кэш загрузки, что и в job `unit-build`, — общий ключ: SourcePackages
       # не зависит от устройства или симулятора, раздельные ключи лишь удваивали
@@ -596,7 +607,7 @@ jobs:
 
       - name: Package IPA
         run: |
-          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "HermesPlus-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
+          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
 
       - name: Upload IPA
         # The artifact is what `publish` hands to the Release — and, on a red
@@ -604,7 +615,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ipa
-          path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
+          path: ${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30
 
   publish:
@@ -627,9 +638,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version
+      - name: Read version and identity
         id: version
-        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+        # APP_PRODUCT_NAME decides the IPA file name, so a test line produces
+        # Hermex4-<ver>.ipa instead of borrowing the stable line's name. Both
+        # values come from the single source of truth in Config/.
+        run: |
+          echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+          PRODUCT=$(grep -E '^APP_PRODUCT_NAME[[:space:]]*=' Config/Identity.xcconfig | head -1 | cut -d= -f2 | tr -d ' "' )
+          if [ -z "$PRODUCT" ]; then
+            echo "APP_PRODUCT_NAME missing from Config/Identity.xcconfig" >&2
+            exit 1
+          fi
+          echo "PRODUCT=$PRODUCT" >> $GITHUB_OUTPUT
+          echo "artifact: $PRODUCT-$(cat VERSION).ipa"
 
       - name: Download IPA
         uses: actions/download-artifact@v4
@@ -715,7 +737,7 @@ jobs:
           tag_name: v${{ steps.version.outputs.VER }}
           name: Hermex Plus ${{ steps.version.outputs.VER }}
           body_path: CHANGELOG.md
-          files: HermesPlus-${{ steps.version.outputs.VER }}.ipa
+          files: ${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa
           draft: false
           prerelease: false
         env:
