@@ -16,16 +16,16 @@
 // not need to change per line — only the bundle id decides what installs where.
 
 // --- stable line (default) -------------------------------------------------
-APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
-APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
-APP_URL_SCHEME_NAME = hermesplus
+APP_BUNDLE_IDENTIFIER = com.braintimebox.hermex4
+APP_GROUP_IDENTIFIER = group.com.braintimebox.hermex4
+APP_URL_SCHEME_NAME = hermex4
 
 // Use only [A-Za-z0-9 .-]: iOS truncates long home-screen names, and the value
 // reaches CFBundleDisplayName of the app, the share extension and the widget.
-APP_DISPLAY_NAME = Hermex Plus
+APP_DISPLAY_NAME = Hermex 4.0
 
 // Product name drives the IPA file name in CI: <APP_PRODUCT_NAME>-<APP_VERSION>.ipa
-APP_PRODUCT_NAME = HermexPlus
+APP_PRODUCT_NAME = Hermex4
 
 // Reported in Settings → About so a phone can be identified at a glance.
-APP_LINE = stable
+APP_LINE = 4.0

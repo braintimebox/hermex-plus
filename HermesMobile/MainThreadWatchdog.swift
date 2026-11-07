@@ -377,6 +377,7 @@ final class MainThreadWatchdog {
     private var lastFreezeReportAt = Date(timeIntervalSince1970: 0)
     private var nextEscalationInterval: TimeInterval = 5.0
     private var timer: DispatchSourceTimer?
+    private var memoryTimer: DispatchSourceTimer?
     private var currentScreen: String?
     private var lastStutterReport = Date(timeIntervalSince1970: 0)
 
@@ -431,6 +432,23 @@ final class MainThreadWatchdog {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
+
+        // HERMEX-FORK: memory used to be sampled only when we froze, so a session
+        // that climbed to 1.5 GB left no trace until it died. A cheap 30 s sample
+        // turns "it got heavy" into a curve we can read after the fact.
+        let mem = DispatchSource.makeTimerSource(queue: queue)
+        mem.schedule(deadline: .now() + 30, repeating: 30, leeway: .seconds(5))
+        mem.setEventHandler {
+            guard let bytes = MemoryFootprint.currentBytes() else { return }
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "Memory",
+                message: "memory sample",
+                extras: ["memoryMB": Int64(bytes / 1_048_576)]
+            )
+        }
+        mem.resume()
+        memoryTimer = mem
     }
 
     /// Optional context for the next freeze event (e.g. the active screen).

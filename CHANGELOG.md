@@ -1,3 +1,42 @@
+## 4.0.0 — cumulative line opens with measurement
+
+4.0 is a cumulative release line: features land here one block at a time and
+accumulate until the release is cut. The first block is telemetry, because a
+cumulative build that mixes search, Face ID and rendering work is unmeasurable
+without attribution — the 3.9.70 ProMotion regression cost two CI cycles
+precisely because the change had no counter in the log.
+
+### Telemetry
+
+- **Share outcome is recorded.** `share received` proved only that a payload
+  reached the routing switch; a staging or acknowledgement failure afterwards
+  left a healthy-looking log and an empty chat. `share_staged` and
+  `share_ack_failed` now bracket that path, so the funnel can be computed as
+  arrived → staged → sent rather than guessed.
+- **Memory has a curve, not just a death.** Physical footprint was sampled only
+  at freeze time, which meant a session climbing to 1.5 GB stayed invisible
+  until it died. A 30 s utility-queue sample records `memoryMB`, so growth is
+  visible while it is still cheap to fix.
+
+### Corrections to the previous audit
+
+- `networkMs` was reported as unmeasured; it is measured and written to
+  `loadMessages network` extras. The zeroed field in that event is `durationMs`,
+  not the network figure.
+- `mergeMs` was reported as dead; it is emitted conditionally, on
+  `identityPreservingMerge slow` when the merge exceeds 50 ms.
+
+### Inherited from the 3.9 line
+
+Attachment picker available while the agent streams (3.9.73) and scheduled
+messages keeping their attachments (3.9.74) both ship in this line unchanged.
+
+### Identity
+
+The 4.0 line installs beside the stable one: `com.braintimebox.hermex4`,
+app group `group.com.braintimebox.hermex4`, display name "Hermex 4.0",
+artefact `Hermex4-4.0.0.ipa`.
+
 ## 3.9.74 — scheduled messages keep their attachments
 
 A scheduled message always arrived without its files. The model has carried
