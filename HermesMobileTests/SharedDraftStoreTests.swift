@@ -417,8 +417,12 @@ final class SharedDraftStoreTests: XCTestCase {
             "hermes-agent",
             "the share scheme must not be the one upstream's App Store build claims"
         )
+        // A line owns its scheme (hermesplus for stable, hermes4 for the test
+        // line), so pinning one literal here made every second line fail. The
+        // invariant is the namespace: a fork-owned "hermes*" scheme that is not
+        // the one upstream's App Store build claims.
         XCTAssertTrue(
-            HermesShareDraft.urlScheme.hasPrefix("hermesplus"),
+            HermesShareDraft.urlScheme.hasPrefix("hermes"),
             "expected a fork-owned share scheme, got \(HermesShareDraft.urlScheme)"
         )
     }
