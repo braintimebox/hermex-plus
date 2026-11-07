@@ -21,8 +21,12 @@ target was unmeasurable rather than merely unmet.
   16.67 ms. This makes the frame budget measurable; it does not by itself
   raise the frame rate.
 - **Jank carries attribution.** Above a 100 ms frame the event now records the
-  in-flight `heavyOp` and the top three stack symbols, so a jank spike names its
-  cause instead of only its size. Full stacks are not captured per frame.
+  in-flight `heavyOp`, the rendered row count and the streaming/scroll context,
+  so a jank spike names its cause instead of only its size. Stack capture is
+  deliberately absent: `MainThreadStackCapture` reads the *main* thread's
+  registers and is unsafe when called from the main thread (it crashed the test
+  host with SIGSEGV). A safe capture needs a background hop plus correlation;
+  that is a separate change, and per-frame stack traces are excluded by design.
 - **Device context once per launch:** model, iOS version, build number, screen
   refresh rate, thermal state, low-power mode and physical memory. Freeze
   severity is not comparable across devices or thermal states without it.

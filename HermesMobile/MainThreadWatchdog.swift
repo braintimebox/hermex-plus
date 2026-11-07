@@ -741,7 +741,12 @@ final class FrameTimeMonitor: NSObject {
         if maxMs > 100 {
             let inFlight = HeavyOperationTracker.currentLabelForTesting ?? ""
             extras["heavyOp"] = ctx.heavyOp.isEmpty ? inFlight : ctx.heavyOp
-            extras["stack"] = Self.topSymbols(MainThreadStackCapture.capture(), limit: 3)
+            // NOTE: deliberately no stack capture here. `frameTick` runs on the
+            // main thread, and MainThreadStackCapture reads the MAIN thread's
+            // registers via thread_get_state — unsafe from the main thread
+            // itself (it crashed the test host with SIGSEGV). A safe capture
+            // needs a background hop and correlation; deferred until it is
+            // designed, per "no per-frame stack traces".
         }
         HermexLogger.shared.log(
             type: "jank",
@@ -749,15 +754,6 @@ final class FrameTimeMonitor: NSObject {
             message: String(format: "UI jank avg %.0fms (%.0f fps) max %.0fms", avgMs, avgFps, maxMs),
             extras: extras
         )
-    }
-
-    /// First `limit` frames of a captured stack, joined for compact telemetry.
-    private static func topSymbols(_ stack: String, limit: Int) -> String {
-        guard !stack.isEmpty else { return "" }
-        let frames = stack.components(separatedBy: "<-")
-        return frames.prefix(limit)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .joined(separator: " <- ")
     }
 
     // HERMEX-FORK: 3.9.40 — emit the frame distribution of one window.
