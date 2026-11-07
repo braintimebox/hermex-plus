@@ -21,8 +21,8 @@ APP_IDENTIFIER_SUFFIX =
 // first build lands as a fresh install and the previous install keeps working
 // until it is deleted; the Keychain access group changes, so the saved server
 // URL and password must be entered once more. Server-side data is untouched.
-APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
-APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
+APP_BUNDLE_IDENTIFIER = com.braintimebox.hermex4$(APP_IDENTIFIER_SUFFIX)
+APP_GROUP_IDENTIFIER = group.com.braintimebox.hermex4$(APP_IDENTIFIER_SUFFIX)
 
 // HERMEX-FORK: the fork must also open its links under a URL scheme of its own.
 // Upstream declares `hermes-agent`, and iOS resolves a scheme to ONE app. With
@@ -32,7 +32,7 @@ APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
 // from this namespace cannot be claimed by anyone else, which is what makes the
 // share round-trip deterministic. Branch builds keep their suffix, as the
 // bundle identifier does.
-APP_URL_SCHEME_NAME = hermesplus
+APP_URL_SCHEME_NAME = hermes4
 
 // Optional per-machine overrides. This include must stay last: later
 // assignments win, so Local.xcconfig values override the defaults above.

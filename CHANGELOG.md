@@ -1,3 +1,30 @@
+## 4.0.0 — test line, installs beside the stable build
+
+This is a **test line**, not the next stable release. It carries the same code as
+3.9.71 and changes only the app's identity, so it can be installed next to
+Hermex Plus 3.9.x and the App Store Hermex without any of them replacing another.
+
+| поле | 3.9.x (stable) | 4.0 (test) |
+|---|---|---|
+| Bundle identifier | `com.braintimebox.hermexplus` | `com.braintimebox.hermex4` |
+| App group | `group.com.braintimebox.hermexplus` | `group.com.braintimebox.hermex4` |
+| URL scheme | `hermesplus` | `hermes4` |
+| Display name | Hermex Plus | Hermex 4.0 |
+
+All four derive from three variables in `Config/Shared.xcconfig`
+(`APP_BUNDLE_IDENTIFIER`, `APP_GROUP_IDENTIFIER`, `APP_URL_SCHEME_NAME`) plus
+`APP_DISPLAY_NAME`, so the share extension and the live-activity widget follow
+automatically. The URL scheme is read from `HermesURLScheme` at runtime
+(`SharedDraftStore.swift`, `HermesDeepLink.swift`), so no code hard-codes it.
+
+Consequence for an existing install: a new identifier is a new app. It installs
+fresh, the previous build keeps working, and the saved server URL and password
+must be entered once more because the Keychain access group changes. Server-side
+data is untouched.
+
+No behaviour change is included in this build: hypotheses for the streaming
+stutter land afterwards, one per build.
+
 ## 3.9.71 — ProMotion request reverted: it made streaming choppier
 
 3.9.70 asked both display links for `preferredFrameRateRange 60...120` to make a
