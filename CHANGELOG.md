@@ -1,3 +1,24 @@
+## 3.9.73 — attachments stay available while the agent is working
+
+Picking an attachment stalled whenever a run was in flight: the Attach menu
+(File / Photos / Camera) was disabled together with the configuration controls,
+because both used `isConfigurationControlDisabled`, which includes
+`isWaitingForStream` (`ChatComposerView.swift`).
+
+- **The Attach menu has its own gate now** — `isReadOnly || isUploadingAttachment`.
+  Staging an attachment only fills the draft and leaves with the next send, so a
+  running stream is no reason to close the picker. A second upload in flight still
+  blocks another one.
+- Configuration controls keep the stricter gate: changing the model, workspace or
+  profile during a run is still refused.
+
+Version bump is a single line in `Config/Version.xcconfig`; `VERSION` is
+regenerated and the 16 + 8 project references follow.
+
+Not included: scheduled messages still drop attachments at creation time
+(`ChatView.swift` builds `PendingScheduledMessage` without `attachmentsJSON`).
+That is a separate change and a separate build.
+
 ## 3.9.72 — one source for version, build number and identity
 
 Version and identity were typed into many places at once, so a release could

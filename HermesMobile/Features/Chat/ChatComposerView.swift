@@ -995,7 +995,7 @@ struct MessageComposerView: View {
             composerOptionsMenu()
         }
         .tint(metaControlColor)
-        .disabled(isConfigurationControlDisabled)
+        .disabled(isAttachMenuDisabled)
         .accessibilityLabel("Composer options")
     }
 
@@ -1255,6 +1255,19 @@ struct MessageComposerView: View {
 
     private var isConfigurationControlDisabled: Bool {
         isReadOnly || isSending || isCompressingSession || isWaitingForStream || isUpdatingConfiguration
+    }
+
+    /// Whether the Attach menu (File / Photos / Camera) is disabled.
+    ///
+    /// Deliberately NOT gated on `isWaitingForStream`. Picking an attachment only
+    /// stages it in the draft; it leaves with the next send, so a running stream
+    /// is no reason to close the picker. It used to share
+    /// `isConfigurationControlDisabled`, which meant that while the agent was
+    /// thinking the attach menu was greyed out — reported as "не могу прикрепить
+    /// фото, пока агент думает". Configuration controls keep their stricter gate
+    /// above; an upload already in flight still blocks a second one.
+    private var isAttachMenuDisabled: Bool {
+        isReadOnly || isUploadingAttachment
     }
 
     private var isVoiceInputDisabled: Bool {
