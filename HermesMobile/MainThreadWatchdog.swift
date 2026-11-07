@@ -635,13 +635,11 @@ final class FrameTimeMonitor: NSObject {
     func start() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(frameTick(_:)))
-        // 3.9.70: ask for ProMotion explicitly. Without a preferred range the
-        // system keeps the link at 60 Hz, so every window reports p50 = 16.67 ms
-        // and a 90–120 fps regression is invisible. Paired with
-        // CADisableMinimumFrameDurationOnPhone in Info.plist.
-        if #available(iOS 15.0, *) {
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120)
-        }
+        // 3.9.71: preferredFrameRateRange REVERTED. Asking for 60...120 on a
+        // pipeline that renders at ~60 fps produced uneven pacing instead of
+        // higher rates: stream frames >33 ms went 7.61% (3.9.68) -> 17.37%
+        // (3.9.70) with frameAvg 43-66 ms per commit. Restore the previous
+        // default pacing until the frame budget is actually freed.
         link.add(to: .main, forMode: .common)
         displayLink = link
         logDeviceContextOnce()
@@ -656,6 +654,11 @@ final class FrameTimeMonitor: NSObject {
         let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first
+        // 3.9.70 shipped refreshRate = 0: at watchdog start the scene is often
+        // not connected yet, so the value was silently absent. Fall back to the
+        // screen's own maximum so the field is always populated.
+        let refreshRate = scene?.screen.maximumFramesPerSecond
+            ?? UIScreen.main.maximumFramesPerSecond
         let thermal: String
         switch ProcessInfo.processInfo.thermalState {
         case .nominal: thermal = "nominal"
@@ -674,7 +677,7 @@ final class FrameTimeMonitor: NSObject {
                 "iosVersion": UIDevice.current.systemVersion,
                 "buildNumber": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
                 "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-                "refreshRate": scene?.screen.maximumFramesPerSecond ?? 0,
+                "refreshRate": refreshRate,
                 "thermalState": thermal,
                 "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
                 "physicalMemoryMB": Int(ProcessInfo.processInfo.physicalMemory / 1_048_576),

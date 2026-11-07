@@ -1,3 +1,35 @@
+## 3.9.71 — ProMotion request reverted: it made streaming choppier
+
+3.9.70 asked both display links for `preferredFrameRateRange 60...120` to make a
+90–120 fps target measurable. On-device telemetry from a 3.9.70 session (build
+202611071504, iPhone, iOS 27.2, thermal fair, 149 events) shows the opposite of
+the intent:
+
+| scenario | 3.9.68 | 3.9.70 |
+|---|---|---|
+| stream, frames > 33 ms | 7.61 % | **17.37 %** |
+| stream, frames > 16.7 ms | 3.07 % | **8.42 %** |
+| `frameAvgMs` per stream commit | ~16–35 ms | **31–66 ms** |
+
+An average frame of 43–66 ms during generation is 15–23 fps. The range made the
+system target a rate the pipeline cannot hold, so frames arrived unevenly
+instead of simply at 60 Hz. Sample is small (190 stream frames) but the direction
+matches the reported symptom.
+
+- **Range removed from both display links.** Default pacing is restored. ProMotion
+  is not the path to smoothness while the frame budget is still exceeded; the
+  budget has to be freed first.
+- **`refreshRate` now always has a value.** 3.9.70 recorded `refreshRate: 0`
+  because the window scene is not connected when the watchdog starts; it now
+  falls back to the screen's maximum.
+
+Unchanged: the keyboard focus fix (generation guard + `isFocused` recheck), jank
+`heavyOp` attribution, device context, composer prev → next diagnostics. None of
+them touch the streaming render path.
+
+No FPS claim. The next step is measuring whether the revert restores 3.9.68
+streaming numbers before any further work on frame pacing.
+
 ## 3.9.70 — Keyboard focus survives, and telemetry starts naming causes
 
 Baseline measured on 3.9.68 before any change (22 557 events, 31.10–07.11):
