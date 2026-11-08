@@ -310,3 +310,43 @@ extension ChatMessageActionItem {
         return image
     }
 }
+
+// MARK: - UIKit menu for the item list
+
+extension Array where Element == ChatMessageActionItem {
+    @MainActor
+    func uiMenu() -> UIMenu {
+        var children: [UIMenuElement] = []
+        var tapbacks: [UIAction] = []
+        func closeTapbackRow() {
+            guard !tapbacks.isEmpty else { return }
+            children.append(UIMenu(options: .displayInline, preferredElementSize: .small, children: tapbacks))
+            tapbacks = []
+        }
+        for item in self {
+            let image: UIImage?
+            if case .react(let emoji) = item.kind {
+                image = ChatMessageActionItem.emojiImage(emoji)
+            } else {
+                image = UIImage(systemName: item.systemImage)
+            }
+            let action = UIAction(title: item.title, image: image) { _ in
+                item.perform()
+            }
+            if !item.isEnabled {
+                action.attributes = .disabled
+            }
+            if item.isSelected {
+                action.state = .on
+            }
+            if case .react = item.kind {
+                tapbacks.append(action)
+            } else {
+                closeTapbackRow()
+                children.append(action)
+            }
+        }
+        closeTapbackRow()
+        return UIMenu(children: children)
+    }
+}
