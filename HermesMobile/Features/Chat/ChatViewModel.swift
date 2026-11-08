@@ -6962,7 +6962,9 @@ private final class ActiveChatStreamSnapshotStore {
     }
 }
 
-private struct QueuedSlashMessage {
+/// Internal rather than file-private: `ChatDraftStore` persists these queued
+/// slash messages, and the draft store lives in its own file.
+struct QueuedSlashMessage {
     let text: String
     let attachments: [PendingAttachment]
 }
