@@ -171,3 +171,9 @@ actor ChatDraftAttachmentStore: ChatDraftAttachmentStoring {
         return trimmed.isEmpty ? "attachment" : trimmed
     }
 }
+
+extension ChatDraftAttachmentStoring {
+    /// A store that cannot measure its copies reports nothing; the draft store
+    /// then budgets from zero, which is what a fixture wants.
+    func retainedFileBytes() async throws -> [String: Int] { [:] }
+}

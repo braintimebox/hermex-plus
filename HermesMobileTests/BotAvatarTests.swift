@@ -142,7 +142,14 @@ func botAvatarDataURL(side: Int) -> String {
     var calls: [(String, [String: BotJSON])] = []
     func connect() async throws {}
     func close() {}
-    func call(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+    /// The protocol's typed request, answered by the same string-keyed switch the
+    /// fixture already had: the fixture exists to script replies, not to model
+    /// `HermesCall`, so it adapts rather than duplicating every case.
+    func call(_ call: HermesCall, validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+        try await callLegacy(call.method, try call.params(), validateDispatch: validateDispatch)
+    }
+
+    func callLegacy(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
         try validateDispatch?()
         calls.append((method, params))
         guard method == "profiles.get_asset" else { throw BotFailure.unsupported }
