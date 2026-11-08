@@ -947,3 +947,30 @@ final class ChatDraftStore {
         }
     }
 }
+
+/// Held across restore, upload, queueing and send; a live owner protects its files
+/// even when they temporarily leave the pending strip.
+@MainActor
+final class ChatDraftAttachmentLease {
+    var key: ChatDraftKey? = nil
+    var files: Set<String> = []
+    var slotIDs: Set<UUID> = []
+    var filesByAttachmentID: [UUID: String] = [:]
+    init(key: ChatDraftKey? = nil) { self.key = key }
+}
+
+private struct WeakDraftAttachmentLease {
+    weak var value: ChatDraftAttachmentLease?
+}
+
+enum ChatDraftStorageError: Error, LocalizedError {
+    case unavailable
+    case attachmentLimit
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable: return String(localized: "Attachment storage is busy. Try again shortly.")
+        case .attachmentLimit: return String(localized: "A draft can have up to 10 attachments.")
+        }
+    }
+}

@@ -447,3 +447,19 @@ enum AgentRunActivityStateReducer {
         )
     }
 }
+
+/// A bot's bounded work summary ("Plan 2 of 5", "2 workers"): counts only, never
+/// reply text, so it is safe on a locked phone. Nil for a webui session, and
+/// optional so an activity persisted by an older build still decodes (#489).
+struct AgentRunActivityBot: Codable, Hashable {
+    /// `bot:<connection UUID>:<Profile name>`.
+    let key: String
+    /// The `hermes-agent://bot?...` route a tap opens.
+    let destinationURL: URL
+    /// File name of the rendered avatar in `AgentRunActivityAvatarFile.directory`,
+    /// or nil when none could be written; the widget then keeps the status dot.
+    var avatarFile: String?
+    /// Stored agent session ID (`session_key`, the resolved compression tip) used
+    /// by plugin hooks and the relay. Never the gateway runtime ID or chat root.
+    var pushSessionID: String? = nil
+}

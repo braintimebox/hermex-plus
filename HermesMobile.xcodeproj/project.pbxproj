@@ -536,6 +536,9 @@
 		8E3441EA4C4EEE6DC2208827 /* PushPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = D264E313AAC69FCE97E1C842 /* PushPreview.swift */; };
 		28CDAF759C30550B41ACE004 /* PushEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCE8384B2284FFB07873708 /* PushEnvironment.swift */; };
 		A333A413569FF4741F165D81 /* PushNotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */; };
+		6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8078D913316506A806558A9B /* PushPairing.swift */; };
+		A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */; };
+		B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1103,6 +1106,9 @@
 		D264E313AAC69FCE97E1C842 /* PushPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPreview.swift"; sourceTree = "<group>"; };
 		FCCE8384B2284FFB07873708 /* PushEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushEnvironment.swift"; sourceTree = "<group>"; };
 		60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushNotificationRouter.swift"; sourceTree = "<group>"; };
+		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Push/PushPairing.swift"; sourceTree = "<group>"; };
+		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
+		D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1518,7 +1524,8 @@
 				8078D913316506A806558A9A /* HermexPushPairing.swift */,
 				C7F6800957BF8B1334DD918F /* HermexPushProvisioner.swift */,
 				95CECF058BC39F0455AEB57C /* HermexPushSectionView.swift */,
-);
+
+				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -1561,7 +1568,8 @@
 				C0366000000000000000002 /* ModelPickerSheet.swift */,
 				C0366000000000000000004 /* ModelPickerConfiguration.swift */,
 				C0DE512E0000000000000203 /* SectionCard.swift */,
-			);
+			
+				F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */,);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -1930,7 +1938,8 @@
 				D264E313AAC69FCE97E1C842 /* PushPreview.swift */,
 				FCCE8384B2284FFB07873708 /* PushEnvironment.swift */,
 				60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */,
-			);
+			
+				8078D913316506A806558A9B /* PushPairing.swift */,);
 			path = Push;
 			sourceTree = "<group>";
 		};
@@ -2482,7 +2491,8 @@
 				8E3441EA4C4EEE6DC2208827 /* PushPreview.swift in Sources */,
 				28CDAF759C30550B41ACE004 /* PushEnvironment.swift in Sources */,
 				A333A413569FF4741F165D81 /* PushNotificationRouter.swift in Sources */,
-);
+
+				6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A2B3C4D5E6F700000000052 /* Sources */ = {
@@ -2641,7 +2651,9 @@
 				A04500000000000000000008 /* LiveActivityTests.swift in Sources */,
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
-			);
+			
+				A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */,
+				B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B5A100000000000000000021 /* Sources */ = {

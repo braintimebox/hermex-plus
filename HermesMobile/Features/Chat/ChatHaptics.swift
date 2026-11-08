@@ -8,6 +8,31 @@ enum ChatHapticFeedback: Equatable {
     case warning
 }
 
+/// A Bot Chat or room action the host confirmed, published by the model for its
+/// view to play through `ChatHaptics.botFeedback`. Models set it only on a success
+/// path that already passed their stale-reply checks. `id` grows with every event,
+/// so two identical events in a row both reach the view's `onChange`.
+struct BotFeedback: Equatable {
+    enum Event: Equatable {
+        case sent
+        case approved(BotApprovalRequest.Choice)
+        /// A clarify answer or skip, or a credential value or skip.
+        case answered
+        case stopped
+        /// A turn this screen watched go from busy to idle.
+        case turnCompleted
+    }
+
+    let event: Event
+    let id: Int
+
+    /// The event that follows `previous`, with a fresh id.
+    init(_ event: Event, after previous: BotFeedback?) {
+        self.event = event
+        id = (previous?.id ?? 0) + 1
+    }
+}
+
 @MainActor
 enum ChatHaptics {
     typealias Performer = @MainActor (ChatHapticFeedback) -> Void
