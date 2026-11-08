@@ -46,6 +46,14 @@ import SwiftUI
         showsThreadOverview ? Set<Int>() : BotRoomEvent.gapStarts(in: roomVisibleEvents)
     }
 
+    /// The thread a row opens, when the room is not already inside one. Kept out
+    /// of `body`: the inline ternary with a closure inside it was enough to make
+    /// the type checker give up on the row.
+    private func threadPreview(for event: BotRoomEvent) -> BotRoomThread? {
+        guard threadID == nil else { return nil }
+        return reader.threads.first { $0.latest.seq == event.seq }
+    }
+
     private var roomDisplayedRows: [BotRoomTranscriptRow] {
         let visible = Array(roomVisibleEvents)
         let ordered = showsThreadOverview ? Array(visible.reversed()) : visible
@@ -85,9 +93,7 @@ import SwiftUI
                             BotRoomRowView(
                                 event: row.event,
                                 showsSeparator: gapStarts.contains(row.event.seq),
-                                thread: threadID == nil
-                                    ? reader.threads.first(where: { $0.latest.seq == row.event.seq })
-                                    : nil,
+                                thread: threadPreview(for: row.event),
                                 room: reader.room,
                                 roster: roster,
                                 avatars: avatars,
