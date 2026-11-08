@@ -1,8 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42526244808
-Commit: f998dcb9bf12f544935831d3a8763696f2437d48
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/42528096954
+Commit: b57f9103999253bf65075b07ead580da6532dd7b
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:254:42: error: contextual closure type '() -> Void' expects 0 arguments, but 1 was used in closure body
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:256:29: error: type 'ChatHaptics' has no member 'botFeedback'
 ```
