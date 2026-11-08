@@ -376,6 +376,12 @@ final class HermexAttachmentCameraController: NSObject, ObservableObject, @unche
     }
 }
 
+private enum HermexAttachmentCameraError: Error {
+    case cameraUnavailable
+    case sessionUnavailable
+    case missingPhotoData
+}
+
 struct HermexAttachmentCameraPanel: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
