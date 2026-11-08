@@ -28,6 +28,10 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     /// Server-measured wall-clock seconds for the whole turn, set on its final
     /// assistant message (`_turnDuration`). Absent on older transcripts.
     let turnDuration: Double?
+    /// Metadata the host attaches for presentation only (reactions, custom tags).
+    /// The Bots screens read reactions from it; the field is optional and absent
+    /// on older hosts, so every reader treats nil as "no metadata".
+    let displayMetadata: [String: JSONValue]?
 
     init(
         role: String?,
@@ -43,7 +47,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         attachments: [MessageAttachment]? = nil,
         turnTps: Double? = nil,
         serverID: Int? = nil,
-        turnDuration: Double? = nil
+        turnDuration: Double? = nil,
+        displayMetadata: [String: JSONValue]? = nil
     ) {
         self.role = role
         self.content = content
@@ -59,6 +64,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         self.attachments = attachments
         self.turnTps = turnTps
         self.turnDuration = turnDuration
+        self.displayMetadata = displayMetadata
     }
 
     enum CodingKeys: String, CodingKey {
@@ -76,6 +82,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         case turnTps = "_turnTps"
         case turnDuration = "_turnDuration"
         case underscoredTimestamp = "_ts"
+        case displayMetadata = "display_metadata"
+        case displayMetadataCamel = "displayMetadata"
     }
 
     init(from decoder: Decoder) throws {
@@ -97,6 +105,10 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         attachments = Self.attachments(decodedAttachments, enrichedByMarkerIn: content)
         turnTps = container.decodeLossyDoubleIfPresent(forKey: .turnTps)
         turnDuration = container.decodeLossyDoubleIfPresent(forKey: .turnDuration)
+        // The host has spelled this key both ways; a strict single-key decode
+        // silently dropped reactions whenever the other spelling arrived.
+        displayMetadata = (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadata))
+            ?? (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadataCamel))
     }
 
     private static func attachments(
