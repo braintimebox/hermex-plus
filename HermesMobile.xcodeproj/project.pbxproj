@@ -537,8 +537,8 @@
 		28CDAF759C30550B41ACE004 /* PushEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCE8384B2284FFB07873708 /* PushEnvironment.swift */; };
 		A333A413569FF4741F165D81 /* PushNotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */; };
 		6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8078D913316506A806558A9B /* PushPairing.swift */; };
-		A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */; };
-		B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */; };
+		5F503DA8EA448215E7F2D6B6 /* CustomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */; };
+		FE2F18C77C5BF3D93D345F05 /* QuickLookFilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1107,8 +1107,8 @@
 		FCCE8384B2284FFB07873708 /* PushEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushEnvironment.swift"; sourceTree = "<group>"; };
 		60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushNotificationRouter.swift"; sourceTree = "<group>"; };
 		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPairing.swift"; sourceTree = "<group>"; };
-		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
-		D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
+		E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
+		826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1525,7 +1525,9 @@
 				C7F6800957BF8B1334DD918F /* HermexPushProvisioner.swift */,
 				95CECF058BC39F0455AEB57C /* HermexPushSectionView.swift */,
 
-				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,);
+				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,
+				E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */,
+				826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -2652,8 +2654,9 @@
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
 			
-				A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */,
-				B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */,);
+				B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */,
+				5F503DA8EA448215E7F2D6B6 /* CustomAttachmentPicker.swift in Sources */,
+				FE2F18C77C5BF3D93D345F05 /* QuickLookFilePreview.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B5A100000000000000000021 /* Sources */ = {
