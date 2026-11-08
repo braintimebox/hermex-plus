@@ -26,6 +26,9 @@ struct KeychainStore: KeychainStoring {
         // lives in the Keychain, not UserDefaults (#15).
         case servers = "servers"
         case botConnection = "bot_connection"
+        // One push pairing per server, written by the dashboard provisioning
+        // flow and read by the notification service extension.
+        case pushPairing = "push_pairing"
     }
 
     private let keychain: Keychain

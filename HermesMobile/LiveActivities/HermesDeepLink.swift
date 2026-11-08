@@ -126,4 +126,19 @@ enum HermesDeepLink {
         let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    /// The deep link a webui completion push opens: the host marks the route and
+    /// both the server and the session travel as query items, so a signed-out app
+    /// can switch servers instead of silently dropping the tap.
+    static func webuiSessionURL(server: URL, sessionID: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "webui-push"
+        components.queryItems = [
+            URLQueryItem(name: "server", value: server.absoluteString),
+            URLQueryItem(name: "id", value: sessionID)
+        ]
+        return components.url
+    }
+
 }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 import UserNotifications
@@ -543,6 +544,42 @@ struct ResponseCompletionNotificationRequest: Equatable {
     var userInfo: [String: String] {
         guard let sessionID, !sessionID.isEmpty else { return [:] }
         return ["session_id": sessionID]
+    }
+
+    /// Lowercase hex SHA-256 of the server's URL. The alert keeps the hash rather
+    /// than the URL: iOS retains delivered notifications, and a server URL is
+    /// credential-like enough not to sit in plain text there.
+    static func serverHash(_ server: URL) -> String {
+        SHA256.hash(data: Data(server.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    /// The chat a tapped alert names, on a server that is still configured.
+    ///
+    /// Three payload shapes reach this: a relay push carrying `server_hash`, an
+    /// alert carrying the server URL outright, and this fork's own minimal
+    /// `session_id`-only alert. The last one is unambiguous exactly when a single
+    /// server is configured, so it resolves then and stays nil otherwise rather
+    /// than guessing the wrong host.
+    static func destination(userInfo: [AnyHashable: Any], servers: [URL]) -> WebuiPushDestination? {
+        guard let rawSession = (userInfo["session_id"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawSession.isEmpty
+        else { return nil }
+
+        if let hash = userInfo["server_hash"] as? String,
+           let server = servers.first(where: { serverHash($0) == hash }) {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        if let rawServer = userInfo["server"] as? String,
+           let server = servers.first(where: { $0.absoluteString == rawServer }) {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        if servers.count == 1, let server = servers.first {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        return nil
     }
 }
 

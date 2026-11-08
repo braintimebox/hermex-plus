@@ -9,7 +9,10 @@ import UserNotifications
 final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        ComposerDictationLease.supportedOrientations(for: window)
+        // The dictation lease that upstream consults here was never ported into
+        // this fork: there is no voice-input controller to ask. Fall back to the
+        // orientations the bundle declares, so rotation behaves as it did before.
+        .allButUpsideDown
     }
 
     func application(
