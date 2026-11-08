@@ -18,84 +18,26 @@ struct SelectableTextPresentation: Identifiable, Equatable {
 /// One entry of the message action menu. The SwiftUI menu and the UIKit
 /// context-menu interaction both build from this list so they never drift.
 struct ChatMessageActionItem: Identifiable {
-    enum Kind: Hashable {
+    enum Kind: String {
         case listen
         case regenerate
         case edit
         case fork
         case copy
-        /// One Tapback; consecutive ones form the menu's inline emoji row.
-        case react(String)
-        case removeReaction
+        case selectText
+        case reply
+        case forward
+        case save
+        case pin
     }
 
     let kind: Kind
-    /// The menu title, and the VoiceOver name of a Tapback, which shows only its emoji.
     let title: String
     let systemImage: String
     let isEnabled: Bool
     let perform: () -> Void
-    /// Draws the item checked; the Tapback row highlights your current reaction.
-    var isSelected = false
 
     var id: Kind { kind }
-
-    @MainActor private static var emojiImages: [String: UIImage] = [:]
-
-    /// A Tapback's emoji drawn as its menu image. A small-element menu row
-    /// shows images only, so the item title stays free for VoiceOver.
-    @MainActor
-    static func emojiImage(_ emoji: String) -> UIImage {
-        if let image = emojiImages[emoji] { return image }
-        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 22)]
-        let text = emoji as NSString
-        let image = UIGraphicsImageRenderer(size: text.size(withAttributes: attributes)).image { _ in
-            text.draw(at: .zero, withAttributes: attributes)
-        }.withRenderingMode(.alwaysOriginal)
-        emojiImages[emoji] = image
-        return image
-    }
-}
-
-/// The long-press menu is built from the item list alone, so any transcript
-/// that can name its own actions — Sessions, a Bot chat, a group room — gets
-/// the same UIKit menu without owning a chat view model.
-extension Array where Element == ChatMessageActionItem {
-    @MainActor
-    func uiMenu() -> UIMenu {
-        var children: [UIMenuElement] = []
-        var tapbacks: [UIAction] = []
-        func closeTapbackRow() {
-            guard !tapbacks.isEmpty else { return }
-            children.append(UIMenu(options: .displayInline, preferredElementSize: .small, children: tapbacks))
-            tapbacks = []
-        }
-        for item in self {
-            let image: UIImage?
-            if case .react(let emoji) = item.kind {
-                image = ChatMessageActionItem.emojiImage(emoji)
-            } else {
-                image = UIImage(systemName: item.systemImage)
-            }
-            let action = UIAction(title: item.title, image: image) { _ in
-                item.perform()
-            }
-            if !item.isEnabled {
-                action.attributes = .disabled
-            }
-            if item.isSelected {
-                action.state = .on
-            }
-            if case .react = item.kind {
-                tapbacks.append(action)
-            } else {
-                closeTapbackRow()
-                children.append(action)
-            }
-        }
-        closeTapbackRow()
-        return UIMenu(children: children)
-    }
 }
 
 struct ChatMessageActionMenu: View {
@@ -111,6 +53,12 @@ struct ChatMessageActionMenu: View {
     let onEdit: (MessageActionContext) -> Void
     let onFork: (MessageActionContext) -> Void
     let onCopy: (MessageActionContext) -> Void
+    let onSelectText: ((MessageActionContext) -> Void)?
+    let onReply: (MessageActionContext) -> Void
+    let onForward: (MessageActionContext) -> Void
+    let onSave: (MessageActionContext) -> Void
+    let onPin: ((MessageActionContext) -> Void)?
+    let isPinned: Bool
 
     var body: some View {
         ForEach(items) { item in
@@ -123,8 +71,14 @@ struct ChatMessageActionMenu: View {
         }
     }
 
-    /// The actions for this message in display order. Mutating actions are
-    /// disabled while the transcript is cached or a stream is active.
+    /// The actions for this message in display order.
+    ///
+    /// HERMEX-FORK: a running response no longer disables the actions that only
+    /// read a message or label it locally — Reply, Forward, Save and Pin stay
+    /// available mid-run. A pin is screen-local state and the others only read,
+    /// so gating them bought nothing and cost the whole menu until the reply
+    /// finished (long answers run for minutes). The actions that rewrite history
+    /// a stream is still writing — Edit, Fork, Regenerate — stay disabled.
     var items: [ChatMessageActionItem] {
         var items: [ChatMessageActionItem] = []
 
@@ -162,13 +116,58 @@ struct ChatMessageActionMenu: View {
             isEnabled: !(isViewingCachedData || hasActiveStream || isForkingMessage),
             perform: { onFork(context) }
         ))
-        if context.role == .user {
+        // HERMEX-FORK: Copy restored for every role. Upstream 1.6.0's rework of
+        // this menu scoped the Copy item to `context.role == .user`, so assistant
+        // replies lost their only copy path: the meta-row copy button renders
+        // only in the branch where there is no action context, and assistant
+        // messages always have one. In v3.6.0 (pre-sync) Copy was unconditional —
+        // this returns it. Gate 16 could not catch this: the callback is called,
+        // the role condition is what disappeared.
+        items.append(ChatMessageActionItem(
+            kind: .copy,
+            title: String(localized: "Copy"),
+            systemImage: "doc.on.doc",
+            isEnabled: true,
+            perform: { onCopy(context) }
+        ))
+
+        if let onSelectText {
             items.append(ChatMessageActionItem(
-                kind: .copy,
-                title: String(localized: "Copy"),
-                systemImage: "doc.on.doc",
+                kind: .selectText,
+                title: String(localized: "Select Text"),
+                systemImage: "text.cursor",
                 isEnabled: true,
-                perform: { onCopy(context) }
+                perform: { onSelectText(context) }
+            ))
+        }
+        items.append(ChatMessageActionItem(
+            kind: .reply,
+            title: String(localized: "Reply"),
+            systemImage: "arrowshape.turn.up.left",
+            isEnabled: !isViewingCachedData,
+            perform: { onReply(context) }
+        ))
+        items.append(ChatMessageActionItem(
+            kind: .forward,
+            title: String(localized: "Forward"),
+            systemImage: "arrowshape.turn.up.right",
+            isEnabled: !isViewingCachedData,
+            perform: { onForward(context) }
+        ))
+        items.append(ChatMessageActionItem(
+            kind: .save,
+            title: String(localized: "Save"),
+            systemImage: "bookmark",
+            isEnabled: !isViewingCachedData,
+            perform: { onSave(context) }
+        ))
+        if let onPin {
+            items.append(ChatMessageActionItem(
+                kind: .pin,
+                title: isPinned ? String(localized: "Unpin") : String(localized: "Pin"),
+                systemImage: isPinned ? "pin.slash" : "pin",
+                isEnabled: !isViewingCachedData,
+                perform: { onPin(context) }
             ))
         }
 
@@ -177,7 +176,18 @@ struct ChatMessageActionMenu: View {
 
     /// The same actions as a UIKit menu, for `ChatMessageContextMenuView`.
     func uiMenu() -> UIMenu {
-        items.uiMenu()
+        UIMenu(children: items.map { item in
+            let action = UIAction(
+                title: item.title,
+                image: UIImage(systemName: item.systemImage)
+            ) { _ in
+                item.perform()
+            }
+            if !item.isEnabled {
+                action.attributes = .disabled
+            }
+            return action
+        })
     }
 
     private var isListening: Bool {

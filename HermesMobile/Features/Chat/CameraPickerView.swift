@@ -555,3 +555,55 @@ struct HermexAttachmentCameraPanel: View {
         UIApplication.shared.open(url)
     }
 }
+
+extension HermexAttachmentCameraController: AVCapturePhotoCaptureDelegate {
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        let result: Result<Data, Error>
+        if let error {
+            result = .failure(error)
+        } else if let data = photo.fileDataRepresentation(), !data.isEmpty {
+            result = .success(data)
+        } else {
+            result = .failure(HermexAttachmentCameraError.missingPhotoData)
+        }
+        let settingsID = photo.resolvedSettings.uniqueID
+        sessionQueue.async { [weak self] in
+            guard let self,
+                  let generation = self.captureGenerationsBySettingsID.removeValue(forKey: settingsID)
+            else { return }
+            self.completeCapture(result, generation: generation)
+        }
+    }
+}
+
+private struct HermexAttachmentCameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
+    let device: AVCaptureDevice
+    let onCaptureAngleChanged: (CGFloat) -> Void
+    let detachPreviewLayer: (AVCaptureVideoPreviewLayer) -> Void
+
+    func makeUIView(context: Context) -> HermexAttachmentCameraPreviewView {
+        let view = HermexAttachmentCameraPreviewView()
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
+        return view
+    }
+
+    func updateUIView(_ view: HermexAttachmentCameraPreviewView, context: Context) {
+        view.detachPreviewLayer = detachPreviewLayer
+        view.update(device: device, onCaptureAngleChanged: onCaptureAngleChanged)
+    }
+
+    static func dismantleUIView(_ view: HermexAttachmentCameraPreviewView, coordinator: Void) {
+        view.teardown()
+        if let detach = view.detachPreviewLayer {
+            detach(view.previewLayer)
+        } else {
+            view.previewLayer.session = nil
+        }
+    }
+}
