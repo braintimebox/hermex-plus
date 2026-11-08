@@ -1109,10 +1109,10 @@
 		FCCE8384B2284FFB07873708 /* PushEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushEnvironment.swift"; sourceTree = "<group>"; };
 		60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushNotificationRouter.swift"; sourceTree = "<group>"; };
 		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPairing.swift"; sourceTree = "<group>"; };
-		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
+		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QuickLookFilePreview.swift"; sourceTree = "<group>"; };
 		D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
-		2A8FF676A6AEF890D1E5EF82 /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Auth/AppLock.swift"; sourceTree = "<group>"; };
-		D45418428CCB90AA15784A84 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Auth/AppLockWindow.swift"; sourceTree = "<group>"; };
+		2A8FF676A6AEF890D1E5EF82 /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppLock.swift"; sourceTree = "<group>"; };
+		D45418428CCB90AA15784A84 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppLockWindow.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
