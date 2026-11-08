@@ -1,11 +1,12 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42497514055
-Commit: 556de0304422607615c8642c42ebbf67c68ccf08
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/42498575213
+Commit: 5ff872648eb77d2639d0693f044b869a36ac503f
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/CameraPickerView.swift:583:16: error: type 'HermexAttachmentCameraPreview' does not conform to protocol 'UIViewRepresentable'
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/CameraPickerView.swift:589:42: error: cannot find type 'HermexAttachmentCameraPreviewView' in scope
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/CameraPickerView.swift:596:31: error: cannot find type 'HermexAttachmentCameraPreviewView' in scope
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/CameraPickerView.swift:601:41: error: cannot find type 'HermexAttachmentCameraPreviewView' in scope
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotMessageActions.swift:132:13: error: argument 'turnTps' must precede argument 'displayKind'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotMessageActions.swift:46:28: error: type 'ChatMessageActionItem.Kind' has no member 'react'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotMessageActions.swift:51:50: error: extra argument 'isSelected' in call
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotMessageActions.swift:69:24: error: type 'ChatMessageActionItem.Kind' has no member 'removeReaction'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:69:36: error: the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions
 ```
