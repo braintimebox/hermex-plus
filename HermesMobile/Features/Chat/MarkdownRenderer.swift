@@ -1513,3 +1513,19 @@ private struct SelectableMarkdownHeading: View {
             }
     }
 }
+
+// MARK: - Streamed text animation
+
+/// Whether streamed text may animate as it arrives. Bots render snapshots that
+/// must appear whole, so they switch this off; everything else keeps the
+/// animation. Defined here because the renderer is the only reader.
+struct AllowsStreamedTextAnimationKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var allowsStreamedTextAnimation: Bool {
+        get { self[AllowsStreamedTextAnimationKey.self] }
+        set { self[AllowsStreamedTextAnimationKey.self] = newValue }
+    }
+}

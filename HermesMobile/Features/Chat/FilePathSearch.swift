@@ -24,6 +24,15 @@ final class ComposerFilePathSearch {
         let parentPath: String
         let isDirectory: Bool
 
+        /// A match the host spelled out itself (`@file:` / `@folder:` replies),
+        /// rather than one derived from a tree node.
+        init(path: String, name: String, parentPath: String, isDirectory: Bool) {
+            self.path = path
+            self.name = name
+            self.parentPath = parentPath
+            self.isDirectory = isDirectory
+        }
+
         init(node: FileTreeNode) {
             path = node.path
             name = node.name

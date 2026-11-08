@@ -43,11 +43,26 @@ enum TranscriptMessageMetaPolicy {
 /// User rows read `[time][copy]` against the trailing edge, assistant rows
 /// `[copy][actions][time]` against the leading edge, so Copy always sits at the
 /// outer edge and RTL mirrors both through the semantic alignments.
-struct ChatMessageMetaRow: View {
+struct ChatMessageMetaRow<Accessory: View>: View {
     let isUserMessage: Bool
     let timeText: String?
     let onCopy: (() -> Void)?
     var actionMenu: ChatMessageActionMenu? = nil
+    let accessory: Accessory
+
+    init(
+        isUserMessage: Bool,
+        timeText: String?,
+        onCopy: (() -> Void)?,
+        actionMenu: ChatMessageActionMenu? = nil,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.isUserMessage = isUserMessage
+        self.timeText = timeText
+        self.onCopy = onCopy
+        self.actionMenu = actionMenu
+        self.accessory = accessory()
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -66,6 +81,7 @@ struct ChatMessageMetaRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("More")
                 }
+                accessory
                 time
             }
         }
@@ -88,6 +104,24 @@ struct ChatMessageMetaRow: View {
             ChatCopyButton(action: onCopy)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+extension ChatMessageMetaRow where Accessory == EmptyView {
+    /// The transcript's own row: no accessory, so the generic slot is empty.
+    init(
+        isUserMessage: Bool,
+        timeText: String?,
+        onCopy: (() -> Void)?,
+        actionMenu: ChatMessageActionMenu? = nil
+    ) {
+        self.init(
+            isUserMessage: isUserMessage,
+            timeText: timeText,
+            onCopy: onCopy,
+            actionMenu: actionMenu,
+            accessory: { EmptyView() }
+        )
     }
 }
 

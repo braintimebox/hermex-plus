@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ComposerWorkspacePickerSheet: View {
+    /// Bots work inside the workspace the host chose, so the sheet hides the
+    /// "type a path" affordance there.
+    var allowsCustomPath: Bool = true
     let workspaceRoots: [WorkspaceRoot]
     let selectedWorkspacePath: String?
     let suggestions: [String]

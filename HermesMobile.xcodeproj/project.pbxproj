@@ -545,6 +545,7 @@
 		7AE14AD60B9E541E328927A9 /* ChatDraftStore+ForkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A94E2343F2B613202674D /* ChatDraftStore+ForkDiagnostics.swift */; };
 		AF0BCC433DE9B4A7A7A680BB /* UserBubbleFoldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */; };
 		1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */; };
+		EDCC36EF9A18A386E481D7B2 /* TranscriptLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309359316C851605012FD5FC /* TranscriptLinks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1121,6 +1122,7 @@
 		772A94E2343F2B613202674D /* ChatDraftStore+ForkDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatDraftStore+ForkDiagnostics.swift"; sourceTree = "<group>"; };
 		1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/UserBubbleFoldPolicy.swift"; sourceTree = "<group>"; };
 		FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptImageCache.swift"; sourceTree = "<group>"; };
+		309359316C851605012FD5FC /* TranscriptLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptLinks.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1542,7 +1544,8 @@
 				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,
 				2781118BA1F9142242CC9629 /* CameraPickerView.swift */,
 				1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */,
-				FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */,);
+				FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */,
+				309359316C851605012FD5FC /* TranscriptLinks.swift */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -2518,7 +2521,8 @@
 				084FD30643FD8FE08A9B0EF3 /* CameraPickerView.swift in Sources */,
 				7AE14AD60B9E541E328927A9 /* ChatDraftStore+ForkDiagnostics.swift in Sources */,
 				AF0BCC433DE9B4A7A7A680BB /* UserBubbleFoldPolicy.swift in Sources */,
-				1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */,);
+				1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */,
+				EDCC36EF9A18A386E481D7B2 /* TranscriptLinks.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A2B3C4D5E6F700000000052 /* Sources */ = {
