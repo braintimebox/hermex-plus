@@ -1,8 +1,10 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42515835852
-Commit: 79f29246457217f37e89fa364baa3569c5d474f6
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/42517069543
+Commit: 58f234c4f4d9ff3144e58a4079b043ac727c2d36
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:164:42: error: the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/ChatStreamCoordinatorTests.swift:2413:21: error: type 'CoordinatorSpyLiveActivityManager' does not conform to protocol 'AgentLiveActivityManaging'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/ChatViewModelSendTests.swift:10026:21: error: type 'SpyChatLiveActivityManager' does not conform to protocol 'AgentLiveActivityManaging'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/LiveActivityTests.swift:1218:21: error: type 'SpyAgentLiveActivityManager' does not conform to protocol 'AgentLiveActivityManaging'
 ```
