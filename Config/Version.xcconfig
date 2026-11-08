@@ -10,8 +10,8 @@
 // entries and 8 CURRENT_PROJECT_VERSION entries. A release that bumped one of
 // them produced builds whose About screen, file name and CI artifact disagreed.
 
-APP_VERSION = 4.0.0
+APP_VERSION = 4.0.1
 
 // Monotonic build number. Keep it a sortable timestamp (YYYYMMDDHHMM) so two
 // builds of the same APP_VERSION are still distinguishable in the About screen.
-APP_BUILD = 202611072053
+APP_BUILD = 202611081220

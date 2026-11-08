@@ -1,3 +1,40 @@
+## 4.0.1 — bots, brought over from the 1.9 line
+
+Bots existed in this fork as a skeleton: 14 of upstream's 61 files, and none of
+the transport they talk through. Every screen was there, nothing behind it could
+connect. This release brings the feature over whole.
+
+- **The Bots stack from v1.9.0**: 61 files, 18,016 lines, replacing the
+  skeleton. Inbox, chat, rooms, creations, mentions, artifacts, history cache.
+- **The transport it needs**: `Networking/Hermes` — `HermesConnection`,
+  `HermesCall`, `HermesGateway`, `HermesREST`. Bots sign in to the host
+  dashboard directly; WebUI stays the separate connection it always was, so the
+  hybrid shape is upstream's, not a compromise of ours.
+- **Push plumbing**: pairing, registrar, relay, preview, notification router.
+- **Face ID app lock**: `AppLock`, `AppLockWindow` and
+  `NSFaceIDUsageDescription`, off by default, app-wide.
+- **Attachments in bots**: the full attachment picker and the camera controller
+  behind it.
+
+### Fork adaptations, not copies
+
+- `ChatMessage.displayMetadata` added: the Bots screens read reactions and
+  delegation state from it, and the model never carried the field. Both host
+  spellings (`display_metadata`, `displayMetadata`) decode.
+- `BotHistoryCache.cost` rewritten with explicit loops. The chained `reduce`
+  made the compiler give up on type checking and fail the target over one
+  arithmetic line.
+- `ChatMessageTimestampFormatter.separator(forUnixTimestamp:)` implemented
+  locally; the fork's formatter only had `shortTime`.
+- The attachment camera was appended to the fork's own `CameraPickerView.swift`
+  rather than replacing it: the chat composer still opens that view.
+
+### Guard against a repeat
+
+`scripts/check-pbxproj-paths.py` resolves every registered `.swift` through its
+group chain and fails when the file is not on disk. Three CI rounds were lost to
+`Auth/Auth/…` and `Shared/Shared/…` paths that Xcode only reports at build time.
+
 ## 4.0.0 — cumulative line opens with measurement
 
 4.0 is a cumulative release line: features land here one block at a time and
