@@ -1222,10 +1222,16 @@ final class ChatStreamCoordinator {
     /// timer starts from the same instant as the in-app "Working for" label
     /// rather than from the moment this process attached to the stream (#406).
     private func startLiveActivity(streamID: String) {
-        guard let sessionID = delegate?.streamCoordinatorSessionID else { return }
+        // The activity carries the server so a tap can route back to the right
+        // host; the coordinator itself only knows the session, so the active
+        // server comes from the registry.
+        guard let sessionID = delegate?.streamCoordinatorSessionID,
+              let server = ServerRegistry.shared.activeServer.flatMap({ URL(string: $0.id) })
+        else { return }
 
         liveActivityManager.start(
             sessionID: sessionID,
+            server: server,
             sessionTitle: delegate?.streamCoordinatorDisplayTitle ?? String(localized: "Untitled Session"),
             streamID: streamID,
             startedAt: activeRunStartedAt ?? Date()
