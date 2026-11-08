@@ -1,212 +1,143 @@
 import Foundation
 
-/// One cookie jar and socket per connection owner. The receive loop multiplexes
-/// RPC replies and events, so a quiet tool never blocks a Stop request.
+/// One Bot screen's use of its connection's shared gateway socket (`HermesGateway`). The
+/// inbox, each chat, a room, the creator and the editor hold their own; a chat's controls
+/// and delegated work share the chat's. `connect()` attaches to the socket, opening it when
+/// no other screen has; `close()` ends only this screen's calls, uploads and downloads,
+/// never the socket another screen is using.
 @MainActor final class BotClient: BotTransport {
-    private let connection: BotConnection
-    private let session: URLSession
-    private var socket: (any BotSocket)?
-    private let socketFactory: ((URL, [String]) -> any BotSocket)?
-    private var reader: Task<Void, Never>?
-    private var generation = 0
-    private var nextID = 0
-    private var pending: [Int: CheckedContinuation<BotJSON, Error>] = [:]
-    private var deadlines: [Int: Task<Void, Never>] = [:]
-    private(set) var replayEpoch: String?
-    /// `version` from `/api/status`, captured before the auth gate; nil when omitted.
-    private(set) var serverVersion: String?
+    private let gateway: HermesGateway
+    let consumerID: Int
+    private var http: HermesConnection { gateway.http }
+    /// Bumped by `close()`, `connect()` and a lost socket, so this screen's late HTTP
+    /// results are dropped.
+    private var attempt = 0
+    private var imageUploads: [UUID: Task<String, Error>] = [:]
+    private var artifactTasks: [UUID: Task<Data, Error>] = [:]
+    var replayEpoch: String? { gateway.replayEpoch }
+    /// `version` from the connection's last `/api/status` read, before the auth gate; nil when omitted.
+    var serverVersion: String? { http.serverVersion }
+    /// `install_id` from the same read; nil when omitted.
+    var serverInstallID: String? { http.serverInstallID }
+    var unavailableMethods: Set<String> { http.unavailableMethods }
     var onEvent: ((BotJSON) -> Void)?
     var onDisconnect: ((Error) -> Void)?
 
-    init(connection: BotConnection, configuration: URLSessionConfiguration = .ephemeral,
-         socketFactory: ((URL, [String]) -> any BotSocket)? = nil) {
-        self.socketFactory = socketFactory
-        self.connection = connection
-        configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 30
-        session = URLSession(configuration: configuration)
+    /// A screen's client on the sign-in and socket `server`'s saved connection shares with
+    /// its other Bot screens.
+    convenience init(saved connection: BotConnection, server: URL) {
+        self.init(http: HermesConnections.shared.connection(for: connection, server: server))
     }
 
-    private func http(_ endpoint: BotEndpoint, body: BotJSON? = nil) async throws -> BotJSON {
-        var request = URLRequest(url: endpoint.url(base: connection.address))
-        if let body {
-            request.httpMethod = "POST"
-            request.httpBody = try JSONEncoder().encode(body)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        let (data, response) = try await session.data(for: request)
-        guard let response = response as? HTTPURLResponse else { throw BotFailure.transport }
-        guard response.statusCode == 200 else { throw BotFailure.rejected(response.statusCode) }
-        return try JSONDecoder().decode(BotJSON.self, from: data)
+    /// A client with its own cookie jar, sign-in and socket, for credentials that are not
+    /// saved yet (connection setup, dev auto-login) and for tests. `heartbeatInterval` is the
+    /// `gateway.ping` cadence; `socketFactory` gets the finished gateway upgrade, and nil
+    /// opens a native socket.
+    convenience init(connection: BotConnection, configuration: URLSessionConfiguration = .ephemeral,
+                     rpcDeadline: Duration = .seconds(30), heartbeatInterval: Duration = .seconds(15),
+                     socketFactory: ((URLRequest) -> any BotSocket)? = nil) {
+        self.init(http: HermesConnection(connection: connection, configuration: configuration, gateway: .init(
+            rpcDeadline: rpcDeadline, heartbeatInterval: heartbeatInterval, socketFactory: socketFactory)))
     }
 
+    /// A client on `http`'s shared gateway.
+    init(http: HermesConnection) {
+        gateway = http.gateway
+        consumerID = gateway.makeConsumerID()
+    }
+
+    /// Attaches to the gateway socket once its handshake is done, so no RPC can precede it.
+    /// A socket another screen has open is joined as it is; otherwise this signs in unless
+    /// the connection already is and opens one, or waits for the one already opening.
     func connect() async throws {
         close()
-        let owner = generation
-        func check() throws {
-            guard owner == generation, !Task.isCancelled else { throw BotFailure.stale }
-        }
-        do {
-            let status = try await http(.status)
-            try check()
-            serverVersion = status["version"].text
-            guard status["auth_required"].flag == true,
-                  status["auth_providers"].list?.contains(.string("basic")) == true else { throw BotFailure.unsupported }
-            _ = try await http(.login, body: .object([
-                "provider": .string("basic"), "username": .string(connection.username),
-                "password": .string(connection.password)
-            ]))
-            try check()
-            let identity = try await http(.identity)
-            try check()
-            guard identity["provider"].text == "basic" else { throw BotFailure.wrongIdentity }
-            let ticket = try await http(.ticket, body: .object([:]))
-            try check()
-            guard let token = ticket["ticket"].text, !token.isEmpty,
-                  var parts = URLComponents(url: BotEndpoint.socket.url(base: connection.address), resolvingAgainstBaseURL: false)
-            else { throw BotFailure.unsupported }
-            parts.scheme = connection.address.scheme == "https" ? "wss" : "ws"
-            guard let url = parts.url else { throw BotFailure.invalidAddress }
-            let protocols = ["hermes-gateway-v1", "hermes-gateway-ticket." + token]
-            let socket: any BotSocket
-            if let socketFactory { socket = socketFactory(url, protocols) }
-            else {
-                let task = session.webSocketTask(with: url, protocols: protocols)
-                task.maximumMessageSize = 16 * 1024 * 1024
-                task.resume()
-                socket = NativeBotSocket(task: task)
-            }
-            self.socket = socket
-            let ready = try await Self.receive(socket)
-            try check()
-            guard ready["method"].text == "event", ready["params"]["type"].text == "gateway.ready",
-                  let epoch = ready["params"]["payload"]["replay_epoch"].text, !epoch.isEmpty
-            else { throw BotFailure.unsupported }
-            replayEpoch = epoch
-            reader = Task { [weak self] in
-                do {
-                    while !Task.isCancelled {
-                        let frame = try await Self.receive(socket)
-                        guard let self, self.generation == owner else { return }
-                        self.consume(frame)
-                    }
-                } catch {
-                    guard let self, self.generation == owner else { return }
-                    self.close()
-                    self.onDisconnect?(error)
-                }
-            }
-        } catch {
-            if owner == generation { close() }
-            throw error
-        }
+        let attempt = self.attempt
+        do { try await gateway.join(self) }
+        catch { throw attempt == self.attempt ? error : BotFailure.stale }
+        guard attempt == self.attempt else { throw BotFailure.stale }
+        guard !Task.isCancelled else { close(); throw BotFailure.stale }
     }
 
-    private static func receive(_ socket: any BotSocket) async throws -> BotJSON {
-        // Heartbeats keep a healthy quiet socket alive. Silence eventually becomes
-        // disconnected/unknown instead of leaving a permanent Working label.
-        try await withThrowingTaskGroup(of: BotJSON.self) { group in
-            group.addTask {
-                let frame = try await socket.receive()
-                let data: Data
-                switch frame {
-                case .string(let text): data = Data(text.utf8)
-                case .data(let bytes): data = bytes
-                @unknown default: throw BotFailure.unsupported
-                }
-                return try JSONDecoder().decode(BotJSON.self, from: data)
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(45))
-                socket.cancel()
-                throw BotFailure.transport
-            }
-            defer { group.cancelAll() }
-            guard let result = try await group.next() else { throw BotFailure.transport }
-            return result
-        }
+    /// Admits and sends one typed request. `HermesCall.params()` refuses a value the
+    /// host must never receive; `validateDispatch` runs at the actual socket write.
+    func call(_ call: HermesCall, validateDispatch: (() throws -> Void)? = nil) async throws -> BotJSON {
+        try await gateway.send(call, for: consumerID, validateDispatch: validateDispatch)
     }
 
-    func call(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)? = nil) async throws -> BotJSON {
-        guard ["profiles.list", "profiles.get_asset", "session.list", "session.resume", "session.events.since",
-               "prompt.submit", "session.steer", "session.redirect", "session.interrupt", "approval.respond", "clarify.respond",
-               "sudo.respond", "secret.respond", "mcp.setup.respond"].contains(method)
-        else { throw BotFailure.unsupported }
-        guard let socket, !Task.isCancelled else { throw BotFailure.stale }
-        nextID += 1
-        let id = nextID
-        let owner = generation
-        let frame = BotJSON.object([
-            "jsonrpc": .string("2.0"), "id": .number(Double(id)),
-            "method": .string(method), "params": .object(params)
-        ])
-        let text = String(decoding: try JSONEncoder().encode(frame), as: UTF8.self)
+    func artifactData(path: String, context: BotArtifactContext) async throws -> Data {
+        guard context.connectionID == http.connection.id, gateway.isAttached(consumerID) else { throw BotFailure.stale }
+        let attempt = self.attempt
+        let request = try HermesREST.downloadArtifact(path: path, profile: context.profile, sessionID: context.sessionID)
+            .request(base: http.connection.address)
+        let id = UUID()
+        let http = self.http
+        let task = Task {
+            try await http.authorized(request, validateDispatch: { try self.checkOwner(attempt) }) { request, session in
+                try await BotArtifactDownload.data(session: session, request: request)
+            }
+        }
+        artifactTasks[id] = task
+        defer { artifactTasks[id] = nil }
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                pending[id] = continuation
-                deadlines[id] = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(30)) } catch { return }
-                    guard let self, self.generation == owner else { return }
-                    self.close()
-                    self.onDisconnect?(BotFailure.transport)
-                }
-                Task { [weak self] in
-                    guard let self, self.generation == owner, self.pending[id] != nil else { return }
-                    do {
-                        // Validate at the actual socket dispatch, after any executor delay.
-                        try validateDispatch?()
-                    } catch {
-                        self.deadlines.removeValue(forKey: id)?.cancel()
-                        self.pending.removeValue(forKey: id)?.resume(throwing: error)
-                        return
-                    }
-                    do { try await socket.send(.string(text)) }
-                    catch {
-                        guard self.generation == owner else { return }
-                        self.close()
-                        self.onDisconnect?(error)
-                    }
-                }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                guard let self, self.generation == owner else { return }
-                self.close()
-            }
+            let data = try await task.value
+            try checkOwner(attempt)
+            return data
+        } onCancel: { task.cancel() }
+    }
+
+    func deleteProfile(_ name: String) async throws {
+        guard gateway.isAttached(consumerID), BotProfileName.isValid(name) else { throw BotFailure.stale }
+        let attempt = self.attempt
+        let data = try await http.data(.deleteProfile(name: name), validateDispatch: { try self.checkOwner(attempt) })
+        try checkOwner(attempt)
+        guard (try? JSONDecoder().decode(BotJSON.self, from: data))?["ok"].flag == true else { throw BotFailure.unsupported }
+    }
+
+    func uploadImage(data: Data, filename: String, context: BotArtifactContext) async throws -> String {
+        guard context.connectionID == http.connection.id, gateway.isAttached(consumerID) else { throw BotFailure.stale }
+        let attempt = self.attempt
+        let id = UUID()
+        let http = self.http
+        let task = Task {
+            try await BotAttachmentUpload.image(data: data, filename: filename, profile: context.profile, via: http,
+                                                validateDispatch: { try self.checkOwner(attempt) })
         }
+        imageUploads[id] = task
+        defer { imageUploads[id] = nil }
+        return try await withTaskCancellationHandler {
+            let path = try await task.value
+            try checkOwner(attempt)
+            return path
+        } onCancel: { task.cancel() }
     }
 
-    private func consume(_ frame: BotJSON) {
-        if frame["method"].text == "event" { onEvent?(frame["params"]); return }
-        guard let id = frame["id"].integer, let continuation = pending.removeValue(forKey: id) else { return }
-        deadlines.removeValue(forKey: id)?.cancel()
-        if let code = frame["error"]["code"].integer { continuation.resume(throwing: BotFailure.rejected(code)) }
-        else if frame["result"] != .null { continuation.resume(returning: frame["result"]) }
-        else { continuation.resume(throwing: BotFailure.unsupported) }
+    /// Throws `.stale` once `close()`, a reconnect or a lost socket has ended `attempt`.
+    /// The HTTP calls check it on their result and, through `validateDispatch`, before
+    /// each send: `close()` can land while they wait on the shared sign-in.
+    private func checkOwner(_ attempt: Int) throws {
+        guard attempt == self.attempt, !Task.isCancelled else { throw BotFailure.stale }
     }
 
+    /// Ends this screen's part: its calls fail with `.transport`, its uploads and downloads
+    /// stop, and nothing more reaches `onEvent`. Not a disconnect: `onDisconnect` stays quiet.
     func close() {
-        generation += 1
-        reader?.cancel(); reader = nil
-        socket?.cancel(); socket = nil
-        for deadline in deadlines.values { deadline.cancel() }
-        deadlines.removeAll()
-        let interrupted = pending.values
-        pending.removeAll()
-        for continuation in interrupted { continuation.resume(throwing: BotFailure.transport) }
+        endLocalWork()
+        gateway.leave(self)
     }
-}
 
-/// The socket boundary permits scripted frames without a backend or Profile storage.
-protocol BotSocket: Sendable {
-    func receive() async throws -> URLSessionWebSocketTask.Message
-    func send(_ message: URLSessionWebSocketTask.Message) async throws
-    func cancel()
-}
+    /// The gateway's report that this client's connection is gone: its socket was lost or
+    /// retired with its connection, or one of its required calls went unanswered past its
+    /// deadline. The gateway has already failed its calls.
+    func socketEnded(_ error: Error) {
+        endLocalWork()
+        onDisconnect?(error)
+    }
 
-private struct NativeBotSocket: BotSocket {
-    let task: URLSessionWebSocketTask
-    func receive() async throws -> URLSessionWebSocketTask.Message { try await task.receive() }
-    func send(_ message: URLSessionWebSocketTask.Message) async throws { try await task.send(message) }
-    func cancel() { task.cancel(with: .normalClosure, reason: nil) }
+    private func endLocalWork() {
+        attempt += 1
+        for task in imageUploads.values { task.cancel() }
+        imageUploads.removeAll()
+        for task in artifactTasks.values { task.cancel() }
+        artifactTasks.removeAll()
+    }
 }

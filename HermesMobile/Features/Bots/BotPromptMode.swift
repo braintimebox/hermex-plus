@@ -1,8 +1,10 @@
 import Foundation
 
-/// Bot-only actions. Queue explicitly bypasses the host's configurable busy
-/// input behavior, which could otherwise interrupt work started by Desktop.
-enum BotPromptMode: CaseIterable, Hashable {
+/// Bot-only actions. Send is the only choice while the bot is idle; the other
+/// three are offered when a send lands on a working bot. Queue explicitly
+/// bypasses the host's configurable busy input behavior, which could otherwise
+/// interrupt work started by Desktop.
+enum BotPromptMode: CaseIterable, Hashable, SendChoice {
     case send, steer, queue, redirect
 
     var title: String {
@@ -10,33 +12,37 @@ enum BotPromptMode: CaseIterable, Hashable {
         case .send: return String(localized: "Send")
         case .steer: return String(localized: "Steer")
         case .queue: return String(localized: "Queue")
-        case .redirect: return String(localized: "Redirect")
+        case .redirect: return String(localized: "Interrupt")
         }
     }
 
-    var explanation: String {
+    var systemImage: String {
         switch self {
-        case .send: return String(localized: "Start a new turn. If the bot becomes busy, wait for that work to finish.")
-        case .steer: return String(localized: "Add guidance to the current work without interrupting it.")
-        case .queue: return String(localized: "Run after current work, or immediately if it has finished.")
-        case .redirect: return String(localized: "Interrupt current work and change direction. During startup, this may queue a follow-up.")
+        case .send: return "arrow.up"
+        case .steer: return "arrow.turn.up.right"
+        case .queue: return "text.append"
+        case .redirect: return "stop.circle"
         }
     }
 
-    var method: String {
+    /// What a send can mean while the bot is working, in the order the card
+    /// lists them. Steer drops out when the draft carries attachments, which
+    /// the host only accepts on a fresh turn.
+    static func busyChoices(hasAttachments: Bool) -> [BotPromptMode] {
+        hasAttachments ? [.queue, .redirect] : [.steer, .queue, .redirect]
+    }
+
+    /// Whether this mode starts a fresh turn. Only there will the host expand a
+    /// skill invocation, so it is also the only place the `/` panel opens.
+    var startsTurn: Bool { self == .send || self == .queue }
+
+    /// Send and Queue both submit a queued prompt; see `HermesCall.promptSubmit`.
+    func call(runtime: String, text: String) -> HermesCall {
         switch self {
-        case .send, .queue: return "prompt.submit"
-        case .steer: return "session.steer"
-        case .redirect: return "session.redirect"
+        case .send, .queue: return .promptSubmit(sessionID: runtime, text: text)
+        case .steer: return .sessionSteer(sessionID: runtime, text: text)
+        case .redirect: return .sessionRedirect(sessionID: runtime, text: text)
         }
-    }
-
-    func params(runtime: String, text: String) -> [String: BotJSON] {
-        var params: [String: BotJSON] = ["session_id": .string(runtime), "text": .string(text)]
-        // Even an idle Send can race Desktop. Never inherit a host setting that
-        // silently converts a fresh send into a redirect or steer.
-        if self == .send || self == .queue { params["queued"] = .bool(true) }
-        return params
     }
 
     func outcome(_ reply: BotJSON) -> BotPromptOutcome {
@@ -62,18 +68,9 @@ enum BotPromptMode: CaseIterable, Hashable {
     }
 }
 
+/// What the host said about a prompt. Only `rejected` and `unknown` change what
+/// the app does; the rest confirm admission and clear the draft. Nothing here is
+/// shown: the transcript's own activity is the receipt.
 enum BotPromptOutcome: Equatable {
     case guidanceQueued, redirected, redirectQueued, followUpQueued, started, voiceStopped, rejected, unknown
-
-    var receipt: String? {
-        switch self {
-        case .guidanceQueued: return String(localized: "Guidance queued. The bot may not have read it yet.")
-        case .redirected: return String(localized: "Redirect accepted.")
-        case .redirectQueued: return String(localized: "Redirect queued for the next turn during startup.")
-        case .followUpQueued: return String(localized: "Follow-up queued. Stop can cancel queued work.")
-        case .started: return String(localized: "Message accepted. Starting work.")
-        case .voiceStopped: return String(localized: "Speech stopped. No new message was started.")
-        case .rejected, .unknown: return nil
-        }
-    }
 }
