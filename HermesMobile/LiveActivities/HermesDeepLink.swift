@@ -97,7 +97,7 @@ enum HermesDeepLink {
     /// The main app's WebuiPushDestination parses it and owns sign-in/server routing.
     static func webuiSessionURL(server: URL, sessionID: String) -> URL? {
         var components = URLComponents()
-        components.scheme = scheme
+        components.scheme = HermesDeepLink.scheme
         components.host = "webui-push"
         components.queryItems = [
             URLQueryItem(name: "server", value: server.absoluteString),
@@ -184,7 +184,7 @@ enum AgentRunTapTarget {
     /// rest of the file is taken from upstream.
     static func webuiSessionURL(server: URL, sessionID: String) -> URL? {
         var components = URLComponents()
-        components.scheme = scheme
+        components.scheme = HermesDeepLink.scheme
         components.host = "webui-push"
         components.queryItems = [
             URLQueryItem(name: "server", value: server.absoluteString),
