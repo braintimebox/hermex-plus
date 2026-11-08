@@ -583,6 +583,38 @@ struct ResponseCompletionNotificationRequest: Equatable {
     }
 }
 
+/// How a run ended, in the two shapes the app reports: a finalized Live
+/// Activity's status, or a transcript turn's recorded ending. Cancelled runs
+/// have no outcome — they do not get an alert.
+enum ResponseCompletionOutcome: Equatable {
+    case completed
+    case failed
+
+    init?(_ status: AgentRunActivityStatus) {
+        switch status {
+        case .complete: self = .completed
+        case .failed: self = .failed
+        default: return nil
+        }
+    }
+
+    init?(ending: TranscriptTurnRunOutcome.Ending) {
+        switch ending {
+        case .completed: self = .completed
+        case .failed: self = .failed
+        case .cancelled: return nil
+        }
+    }
+
+    /// The Live Activity's own end line, so the alert matches the Lock Screen.
+    var body: String {
+        switch self {
+        case .completed: String(localized: "Response complete")
+        case .failed: String(localized: "Response failed")
+        }
+    }
+}
+
 struct ResponseCompletionNotificationCompletionContext: Equatable {
     let sceneIsActive: Bool
 }
