@@ -543,6 +543,8 @@
 		092F3B7B6420A2BB1DBC9CC1 /* AppLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45418428CCB90AA15784A84 /* AppLockWindow.swift */; };
 		084FD30643FD8FE08A9B0EF3 /* CameraPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2781118BA1F9142242CC9629 /* CameraPickerView.swift */; };
 		7AE14AD60B9E541E328927A9 /* ChatDraftStore+ForkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772A94E2343F2B613202674D /* ChatDraftStore+ForkDiagnostics.swift */; };
+		AF0BCC433DE9B4A7A7A680BB /* UserBubbleFoldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */; };
+		1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1117,6 +1119,8 @@
 		D45418428CCB90AA15784A84 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppLockWindow.swift"; sourceTree = "<group>"; };
 		2781118BA1F9142242CC9629 /* CameraPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CameraPickerView.swift"; sourceTree = "<group>"; };
 		772A94E2343F2B613202674D /* ChatDraftStore+ForkDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatDraftStore+ForkDiagnostics.swift"; sourceTree = "<group>"; };
+		1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/UserBubbleFoldPolicy.swift"; sourceTree = "<group>"; };
+		FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptImageCache.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1536,7 +1540,9 @@
 				95CECF058BC39F0455AEB57C /* HermexPushSectionView.swift */,
 
 				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,
-				2781118BA1F9142242CC9629 /* CameraPickerView.swift */,);
+				2781118BA1F9142242CC9629 /* CameraPickerView.swift */,
+				1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */,
+				FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -2510,7 +2516,9 @@
 				38478B41F497E9116C128F7F /* AppLock.swift in Sources */,
 				092F3B7B6420A2BB1DBC9CC1 /* AppLockWindow.swift in Sources */,
 				084FD30643FD8FE08A9B0EF3 /* CameraPickerView.swift in Sources */,
-				7AE14AD60B9E541E328927A9 /* ChatDraftStore+ForkDiagnostics.swift in Sources */,);
+				7AE14AD60B9E541E328927A9 /* ChatDraftStore+ForkDiagnostics.swift in Sources */,
+				AF0BCC433DE9B4A7A7A680BB /* UserBubbleFoldPolicy.swift in Sources */,
+				1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A2B3C4D5E6F700000000052 /* Sources */ = {
