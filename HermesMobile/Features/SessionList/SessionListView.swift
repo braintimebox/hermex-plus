@@ -493,7 +493,10 @@ struct SessionListView: View {
     private var navigationContainer: some View {
         if showsBotsInbox {
             NavigationStack {
-                BotsInboxView(server: server) { showsBots = false }
+                // The ported inbox owns its own navigation; the old fork entry
+                // took a close closure to get back to Sessions, which the
+                // NavigationStack now does.
+                BotsInboxView(server: server)
             }
         } else if horizontalSizeClass == .regular {
             NavigationSplitView {
