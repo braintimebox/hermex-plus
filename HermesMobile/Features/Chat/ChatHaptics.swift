@@ -79,6 +79,13 @@ enum ChatHaptics {
         emit(.selection, isEnabled: isEnabled, performer: performer)
     }
 
+    /// A composer autocomplete row was accepted (a mention, a command, a name).
+    /// Its own case because it is the one haptic the Bots composer shares with
+    /// the session one.
+    static func autocompleteAccepted(isEnabled: Bool, performer: Performer? = nil) {
+        emit(.selection, isEnabled: isEnabled, performer: performer)
+    }
+
     /// The scroll-to-latest button, a deliberate jump rather than a follow scroll.
     static func scrolledToLatest(isEnabled: Bool, performer: Performer? = nil) {
         emit(.selection, isEnabled: isEnabled, performer: performer)

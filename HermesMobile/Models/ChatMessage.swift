@@ -32,6 +32,9 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     /// The Bots screens read reactions from it; the field is optional and absent
     /// on older hosts, so every reader treats nil as "no metadata".
     let displayMetadata: [String: JSONValue]?
+    /// The row kind the host asks the transcript to draw ("tool", "system",
+    /// "reaction"). The Bots screens branch on it, and the fork never carried it.
+    let displayKind: String?
 
     init(
         role: String?,
@@ -48,7 +51,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         turnTps: Double? = nil,
         serverID: Int? = nil,
         turnDuration: Double? = nil,
-        displayMetadata: [String: JSONValue]? = nil
+        displayMetadata: [String: JSONValue]? = nil,
+        displayKind: String? = nil
     ) {
         self.role = role
         self.content = content
@@ -65,6 +69,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         self.turnTps = turnTps
         self.turnDuration = turnDuration
         self.displayMetadata = displayMetadata
+        self.displayKind = displayKind
     }
 
     enum CodingKeys: String, CodingKey {
@@ -84,6 +89,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         case underscoredTimestamp = "_ts"
         case displayMetadata = "display_metadata"
         case displayMetadataCamel = "displayMetadata"
+        case displayKind
+        case displayKindSnake = "display_kind"
     }
 
     init(from decoder: Decoder) throws {
@@ -109,6 +116,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         // silently dropped reactions whenever the other spelling arrived.
         displayMetadata = (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadata))
             ?? (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadataCamel))
+        displayKind = (try? container.decodeIfPresent(String.self, forKey: .displayKind))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .displayKindSnake))
     }
 
     private static func attachments(
