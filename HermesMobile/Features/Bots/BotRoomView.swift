@@ -188,7 +188,6 @@ ScrollView {
 .onChange(of: showRequestID) { proxy.scrollTo("room-actions", anchor: .top) }
 .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
-    }
 
     /// The room's title pill and menu; `body` only attaches it.
     @ToolbarContentBuilder
