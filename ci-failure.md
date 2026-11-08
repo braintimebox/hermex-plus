@@ -1,8 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42499858077
-Commit: dc774375c914a6c27fafc1c50838c9a7df722193
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/42500474601
+Commit: c23aa2cd46c28f4ef6aa802b965fd24241049ebf
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:55:28: error: the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/ChatMessageContextMenuView.swift:150:26: error: value of type '[ChatMessageActionItem]' has no member 'uiMenu'
 ```
