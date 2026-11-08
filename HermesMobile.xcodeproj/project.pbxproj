@@ -1106,7 +1106,7 @@
 		D264E313AAC69FCE97E1C842 /* PushPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPreview.swift"; sourceTree = "<group>"; };
 		FCCE8384B2284FFB07873708 /* PushEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushEnvironment.swift"; sourceTree = "<group>"; };
 		60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushNotificationRouter.swift"; sourceTree = "<group>"; };
-		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Push/PushPairing.swift"; sourceTree = "<group>"; };
+		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPairing.swift"; sourceTree = "<group>"; };
 		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
 		D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
