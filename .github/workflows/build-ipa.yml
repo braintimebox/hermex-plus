@@ -660,7 +660,11 @@ jobs:
     timeout-minutes: 10
     # Only on a real push. A manual workflow_dispatch run (used to verify the
     # suite without releasing) must not publish a release.
-    if: github.event_name == 'push'
+    #
+    # The ref matters as much as the event: adding a work branch to the push
+    # triggers (to start a build while the Actions API is throttled) would
+    # otherwise satisfy `event_name == 'push'` and publish a release from it.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Scoped to this job, not the workflow: only the Release needs to write.
     # Without it the GITHUB_TOKEN has read-only contents and the step fails with
     # 403 "Resource not accessible by integration" — after everything else has
