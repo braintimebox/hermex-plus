@@ -38,4 +38,18 @@ extension ChatDraftStore {
                 extras: extras
             )
         }
+
+    /// A short, log-safe label for a draft key: host plus an 8-character id, so a
+    /// probe line identifies the draft it followed without reconstructing the id.
+    static func probeLabel(_ key: ChatDraftKey) -> String {
+        let server = URL(string: key.serverID)?.host ?? "?"
+        switch key.context {
+        case .session(let sessionID):
+            return "session/\(server)/\(sessionID.prefix(8))"
+        case .bot(let connectionID, let profile):
+            return "bot/\(server)/\(connectionID.uuidString.prefix(8))/\(profile)"
+        case .newChat:
+            return "newChat/\(server)"
+        }
+    }
 }
