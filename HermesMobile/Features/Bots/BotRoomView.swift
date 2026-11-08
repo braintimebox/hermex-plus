@@ -223,6 +223,7 @@ ToolbarItem(placement: .topBarLeading) {
         }
         .onChange(of: errorTexts) { _, current in dismissedErrors.formIntersection(current) }
         .onChange(of: reader.busy) { _, busy in if busy { dismissedErrors = [] } }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         .toolbar { roomToolbar }
