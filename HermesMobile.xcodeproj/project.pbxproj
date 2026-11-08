@@ -1525,7 +1525,6 @@
 				C7F6800957BF8B1334DD918F /* HermexPushProvisioner.swift */,
 				95CECF058BC39F0455AEB57C /* HermexPushSectionView.swift */,
 
-				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,
 				E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */,
 				826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */,);
 			path = Features;
@@ -1571,7 +1570,6 @@
 				C0366000000000000000004 /* ModelPickerConfiguration.swift */,
 				C0DE512E0000000000000203 /* SectionCard.swift */,
 			
-				F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */,);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -2654,7 +2652,6 @@
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
 			
-				B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */,
 				5F503DA8EA448215E7F2D6B6 /* CustomAttachmentPicker.swift in Sources */,
 				FE2F18C77C5BF3D93D345F05 /* QuickLookFilePreview.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
