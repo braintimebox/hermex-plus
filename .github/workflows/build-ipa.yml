@@ -94,6 +94,10 @@ jobs:
     needs: guard
     runs-on: macos-26
     timeout-minutes: 60
+    # The failure step commits the compiler errors back to the branch: the
+    # Actions log API rejects /jobs and /logs for this repository.
+    permissions:
+      contents: write
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
@@ -207,6 +211,7 @@ jobs:
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
+          # Tee'd so the failure step can report the actual compiler errors.
           xcodebuild build-for-testing \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
@@ -215,8 +220,36 @@ jobs:
             COMPILATION_CACHE_ENABLE_CACHING=YES \
             SWIFT_ENABLE_COMPILE_CACHE=YES \
             CLANG_ENABLE_COMPILE_CACHE=YES \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "${RUNNER_TEMP}/xcodebuild.log"
           echo "Build-for-testing: $((SECONDS - start_seconds))s"
+
+      # The Actions log API rejected /jobs and /logs for this repository, so a
+      # failure could be seen but not read. This writes the compiler errors into
+      # the branch itself, where `git pull` reaches them without any API.
+      - name: Record compile failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          LOG="${RUNNER_TEMP}/xcodebuild.log"
+          {
+            echo "# Compile failure"
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+            echo '```'
+            if [ -f "$LOG" ]; then
+              grep -E "error:" "$LOG" | sort -u | head -n 80 || tail -n 60 "$LOG"
+            else
+              echo "(no build log captured)"
+            fi
+            echo '```'
+          } > ci-failure.md
+          git config user.name "hermes-ci"
+          git config user.email "hermes-ci@users.noreply.github.com"
+          git add ci-failure.md
+          git commit -m "ci: record compile failure [skip ci]" || exit 0
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
 
       # Products + the .xctestrun file. The .xctestrun path is reproducible
       # because every job checks out to the same workspace path, so the absolute
