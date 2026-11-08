@@ -537,8 +537,10 @@
 		28CDAF759C30550B41ACE004 /* PushEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCE8384B2284FFB07873708 /* PushEnvironment.swift */; };
 		A333A413569FF4741F165D81 /* PushNotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */; };
 		6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8078D913316506A806558A9B /* PushPairing.swift */; };
-		5F503DA8EA448215E7F2D6B6 /* CustomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */; };
-		FE2F18C77C5BF3D93D345F05 /* QuickLookFilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */; };
+		A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */; };
+		B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */; };
+		38478B41F497E9116C128F7F /* AppLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8FF676A6AEF890D1E5EF82 /* AppLock.swift */; };
+		092F3B7B6420A2BB1DBC9CC1 /* AppLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45418428CCB90AA15784A84 /* AppLockWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1107,8 +1109,10 @@
 		FCCE8384B2284FFB07873708 /* PushEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushEnvironment.swift"; sourceTree = "<group>"; };
 		60184181ADF20E32B9F63DBA /* PushNotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushNotificationRouter.swift"; sourceTree = "<group>"; };
 		8078D913316506A806558A9B /* PushPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PushPairing.swift"; sourceTree = "<group>"; };
-		E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
-		826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
+		F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/QuickLookFilePreview.swift"; sourceTree = "<group>"; };
+		D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/CustomAttachmentPicker.swift"; sourceTree = "<group>"; };
+		2A8FF676A6AEF890D1E5EF82 /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Auth/AppLock.swift"; sourceTree = "<group>"; };
+		D45418428CCB90AA15784A84 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Auth/AppLockWindow.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1374,7 +1378,9 @@
 			children = (
 				1A2B3C4D5E6F7000000000B1 /* AuthManager.swift */,
 				1A2B3C4D5E6F7000000000B0 /* KeychainStore.swift */,
-			);
+			
+				2A8FF676A6AEF890D1E5EF82 /* AppLock.swift */,
+				D45418428CCB90AA15784A84 /* AppLockWindow.swift */,);
 			path = Auth;
 			sourceTree = "<group>";
 		};
@@ -1525,8 +1531,7 @@
 				C7F6800957BF8B1334DD918F /* HermexPushProvisioner.swift */,
 				95CECF058BC39F0455AEB57C /* HermexPushSectionView.swift */,
 
-				E9FF9EBDFBC49888BD56953B /* CustomAttachmentPicker.swift */,
-				826033A9ACB3115440D6DFC5 /* QuickLookFilePreview.swift */,);
+				D1E2F3A4B5C6071829304051 /* CustomAttachmentPicker.swift */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -1570,6 +1575,7 @@
 				C0366000000000000000004 /* ModelPickerConfiguration.swift */,
 				C0DE512E0000000000000203 /* SectionCard.swift */,
 			
+				F0E1D2C3B4A5968776543210 /* QuickLookFilePreview.swift */,);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -2492,7 +2498,11 @@
 				28CDAF759C30550B41ACE004 /* PushEnvironment.swift in Sources */,
 				A333A413569FF4741F165D81 /* PushNotificationRouter.swift in Sources */,
 
-				6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */,);
+				6AC4DD7F3E5EB93C0075D20A /* PushPairing.swift in Sources */,				A1B2C3D4E5F6071829304050 /* QuickLookFilePreview.swift in Sources */,
+				B2C3D4E5F6A7182930405061 /* CustomAttachmentPicker.swift in Sources */,
+
+				38478B41F497E9116C128F7F /* AppLock.swift in Sources */,
+				092F3B7B6420A2BB1DBC9CC1 /* AppLockWindow.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A2B3C4D5E6F700000000052 /* Sources */ = {
@@ -2652,8 +2662,7 @@
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
 			
-				5F503DA8EA448215E7F2D6B6 /* CustomAttachmentPicker.swift in Sources */,
-				FE2F18C77C5BF3D93D345F05 /* QuickLookFilePreview.swift in Sources */,);
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B5A100000000000000000021 /* Sources */ = {

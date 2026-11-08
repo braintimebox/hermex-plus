@@ -166,6 +166,11 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- Face ID / Touch ID for the optional app lock (#885). iOS refuses the
+	     prompt without this string, and App Review requires a plain-language
+	     reason, so it names exactly what the lock does. -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock Hermex with Face ID instead of typing your passcode.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

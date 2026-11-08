@@ -356,18 +356,38 @@ final class BotRecentTranscripts: @unchecked Sendable {
         var cost: Int {
             switch self {
             case .bot(let bot):
-                let messages = bot.messages.reduce(0) { total, row in
-                    total + 256 + (row.content?.utf8.count ?? 0) + (row.reasoning?.utf8.count ?? 0)
-                        + JSONValue.object(row.displayMetadata ?? [:]).recentCost
+                // Spelled out instead of nested `reduce` closures: the chained
+                // expression made the compiler give up after a minute of type
+                // checking, which fails the whole target for one arithmetic line.
+                var messageBytes: Int = 0
+                for row in bot.messages {
+                    let content: Int = row.content?.utf8.count ?? 0
+                    let reasoning: Int = row.reasoning?.utf8.count ?? 0
+                    let metadata: Int = JSONValue.object(row.displayMetadata ?? [:]).recentCost
+                    messageBytes += 256 + content + reasoning + metadata
                 }
-                let activity = bot.activity.reduce(0) { total, row in
-                    total + 128 + (row.reasoning?.utf8.count ?? 0) + row.toolCalls.reduce(0) { total, tool in
-                        total + 256 + (tool.preview?.utf8.count ?? 0) + JSONValue.object(tool.args ?? [:]).recentCost
+
+                var activityBytes: Int = 0
+                for row in bot.activity {
+                    let reasoning: Int = row.reasoning?.utf8.count ?? 0
+                    var toolBytes: Int = 0
+                    for tool in row.toolCalls {
+                        let preview: Int = tool.preview?.utf8.count ?? 0
+                        let args: Int = JSONValue.object(tool.args ?? [:]).recentCost
+                        toolBytes += 256 + preview + args
                     }
+                    activityBytes += 128 + reasoning + toolBytes
                 }
-                return 2 * (messages + activity)
+                return 2 * (messageBytes + activityBytes)
+
             case .room(let log):
-                return 2 * log.events.reduce(0) { $0 + 256 + $1.payload.jsonValue.recentCost + $1.actor.jsonValue.recentCost }
+                var roomBytes: Int = 0
+                for event in log.events {
+                    let payload: Int = event.payload.jsonValue.recentCost
+                    let actor: Int = event.actor.jsonValue.recentCost
+                    roomBytes += 256 + payload + actor
+                }
+                return 2 * roomBytes
             }
         }
     }

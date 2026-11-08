@@ -463,3 +463,20 @@ struct AgentRunActivityBot: Codable, Hashable {
     /// by plugin hooks and the relay. Never the gateway runtime ID or chat root.
     var pushSessionID: String? = nil
 }
+
+/// Where the app leaves a bot's rendered avatar for the widget: one small PNG in the
+/// shared app group, since a Live Activity cannot carry image data in its state.
+enum AgentRunActivityAvatarFile {
+    static var directory: URL? {
+        guard let group = Bundle.main.object(forInfoDictionaryKey: "HermesAppGroupIdentifier") as? String,
+              !group.isEmpty else { return nil }
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)?
+            .appendingPathComponent("LiveActivityAvatars", isDirectory: true)
+    }
+
+    static func url(named name: String?) -> URL? {
+        // A bare file name only: the attribute is never allowed to walk out of the directory.
+        guard let name, !name.isEmpty, !name.contains("/") else { return nil }
+        return directory?.appendingPathComponent(name)
+    }
+}
