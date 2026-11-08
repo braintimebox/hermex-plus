@@ -33,6 +33,13 @@ final class ComposerFilePathSearch {
             self.isDirectory = isDirectory
         }
 
+        /// The folder a workspace-relative path sits in, empty at the root.
+        /// The tree spells the root as its own sentinel, so this maps that to "".
+        static func parentPath(of path: String) -> String {
+            let parent = FileTree.parentPath(of: path)
+            return parent == FileTree.rootPath ? "" : parent
+        }
+
         init(node: FileTreeNode) {
             path = node.path
             name = node.name
