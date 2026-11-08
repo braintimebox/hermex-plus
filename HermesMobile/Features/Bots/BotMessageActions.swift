@@ -127,9 +127,9 @@ extension ChatMessage {
         return ChatMessage(
             role: role, content: content, timestamp: timestamp, messageId: messageId, name: name,
             toolCallId: toolCallId, toolUseId: toolUseId, toolCalls: toolCalls, contentParts: contentParts,
-            reasoning: reasoning, attachments: attachments, displayKind: displayKind,
-            displayMetadata: metadata.isEmpty ? nil : metadata,
-            turnTps: turnTps, turnDuration: turnDuration, rowID: rowID
+            reasoning: reasoning, attachments: attachments, turnTps: turnTps,
+            rowID: rowID, turnDuration: turnDuration,
+            displayMetadata: metadata.isEmpty ? nil : metadata, displayKind: displayKind
         )
     }
 }

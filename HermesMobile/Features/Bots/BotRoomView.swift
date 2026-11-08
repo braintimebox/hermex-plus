@@ -57,9 +57,13 @@ import SwiftUI
                         }
                         let gapStarts = showsThreadOverview ? Set<Int>() : BotRoomEvent.gapStarts(in: transcriptEvents[start...])
                         let rows = Array(transcriptEvents[start...])
-                        ForEach((showsThreadOverview ? Array(rows.reversed()) : rows).map {
+                        let ordered = showsThreadOverview ? Array(rows.reversed()) : rows
+                        let displayedRows = ordered.map {
                             BotRoomTranscriptRow(event: $0, isOverview: threadID == nil)
-                        }) { row in
+                        }
+                        // The order and the row mapping are hoisted out: the one
+                        // expression was enough to exhaust the type checker.
+                        ForEach(displayedRows) { row in
                             let event = row.event
                             // Thread identity survives new replies and activity reordering.
                             VStack(spacing: 16) {

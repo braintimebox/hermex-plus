@@ -18,7 +18,9 @@ struct SelectableTextPresentation: Identifiable, Equatable {
 /// One entry of the message action menu. The SwiftUI menu and the UIKit
 /// context-menu interaction both build from this list so they never drift.
 struct ChatMessageActionItem: Identifiable {
-    enum Kind: String {
+    /// No raw value: a Tapback carries its emoji, so the kind is Hashable rather
+    /// than a String case list. Both menus switch on it by pattern.
+    enum Kind: Hashable {
         case listen
         case regenerate
         case edit
@@ -29,6 +31,9 @@ struct ChatMessageActionItem: Identifiable {
         case forward
         case save
         case pin
+        /// One Tapback; consecutive ones form the menu's inline emoji row.
+        case react(String)
+        case removeReaction
     }
 
     let kind: Kind
@@ -36,6 +41,9 @@ struct ChatMessageActionItem: Identifiable {
     let systemImage: String
     let isEnabled: Bool
     let perform: () -> Void
+    /// True for the reaction this message already carries, so the menu can mark
+    /// it instead of offering it again.
+    var isSelected: Bool = false
 
     var id: Kind { kind }
 }
