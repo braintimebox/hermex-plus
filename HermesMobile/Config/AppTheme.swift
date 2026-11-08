@@ -860,3 +860,39 @@ enum ComposerSTTProviderPolicy {
         }
     }
 }
+
+extension ResponseCompletionNotificationService {
+    /// Schedules the local "response ended" alert for a run this process was no
+    /// longer driving (an orphaned Live Activity it just finalized).
+    ///
+    /// The 1.9.0 signature also takes a current-ness check and a push-pairing
+    /// probe, and hands the scheduler a request carrying the server, the chat
+    /// title and the outcome. This fork's request carries the session alone and
+    /// its policy takes `completedNormally` instead of an outcome, so the alert is
+    /// scheduled from what exists here: a completed run alerts, a failed one does
+    /// not, and the policy still decides from the preference, the permission and
+    /// the scene state.
+    static func scheduleRunEndedIfAllowed(
+        _ outcome: ResponseCompletionOutcome,
+        sessionID: String?,
+        title: String,
+        server: URL,
+        preferenceEnabled: Bool,
+        sceneIsActive: Bool
+    ) async -> Bool {
+        let status = await authorizationStatus()
+        guard ResponseCompletionNotificationPolicy.shouldSchedule(
+            preferenceEnabled: preferenceEnabled,
+            authorizationStatus: status,
+            completedNormally: outcome == .completed,
+            sceneIsActive: sceneIsActive
+        ) else {
+            return false
+        }
+
+        await UserNotificationResponseCompletionScheduler().schedule(
+            ResponseCompletionNotificationRequest(sessionID: sessionID)
+        )
+        return true
+    }
+}
