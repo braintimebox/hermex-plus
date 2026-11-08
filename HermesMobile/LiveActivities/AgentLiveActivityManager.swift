@@ -49,6 +49,16 @@ struct OrphanedLiveActivity: Equatable {
     let server: URL?
 }
 
+extension OrphanedLiveActivity {
+    /// An activity known only by its identity: the reconciliation paths that
+    /// build one from a persisted record older than 1.7.0 have no title or
+    /// server to supply, and neither changes which orphan it is.
+    init(streamID: String, sessionID: String, updatedAt: Date) {
+        self.init(streamID: streamID, sessionID: sessionID, sessionTitle: "",
+                  updatedAt: updatedAt, server: nil)
+    }
+}
+
 /// Where the relay delivers an activity's pushes: the paired server, and the agent
 /// session ID the plugin reports progress under.
 struct AgentRunActivityPushTarget: Equatable {

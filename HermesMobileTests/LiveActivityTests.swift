@@ -922,7 +922,7 @@ final class LiveActivityTests: XCTestCase {
                 }
             },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(ended, ["done"])
@@ -938,7 +938,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in endCount += 1; return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(endCount, 0)
@@ -959,7 +959,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(notified, ["s-recent"])
@@ -984,7 +984,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended, ["stale"])
@@ -1006,7 +1006,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in false },   // already final — nothing transitioned here
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertTrue(notified.isEmpty)
@@ -1028,7 +1028,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: false,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended, ["recent"])
@@ -1049,7 +1049,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertTrue(notified.isEmpty)
@@ -1112,7 +1112,7 @@ final class LiveActivityTests: XCTestCase {
                 }
             },
             endOrphan: { orphan, outcome in endedWith[orphan.streamID] = outcome.status; return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(endedWith["ok"], .complete)
@@ -1142,7 +1142,7 @@ final class LiveActivityTests: XCTestCase {
                     : self.statusResponse(active: false, terminalState: "completed")
             },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended.sorted(), ["done", "failed"])  // both finalized
