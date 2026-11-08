@@ -7,7 +7,10 @@ enum HermesDeepLink {
     }
 
     static let sessionHost = "session"
-    /// Host for a bot route: the tap a bot Live Activity or a relay push opens.
+
+    /// Host for the one bot route (#554): `hermes-agent://bot?server=…&connection=…&profile=…`.
+    /// The builder, parser and typed `BotDestination` live in `Features/Bots/BotDeepLink.swift`,
+    /// which is main-app only; this file is shared with the Live Activity widget.
     static let botHost = "bot"
 
     /// Host for the parameter-less "open the New Chat composer" deep link used by the
@@ -90,6 +93,19 @@ enum HermesDeepLink {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Server-owned webui destination, shared by notification and Live Activity taps.
+    /// The main app's WebuiPushDestination parses it and owns sign-in/server routing.
+    static func webuiSessionURL(server: URL, sessionID: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "webui-push"
+        components.queryItems = [
+            URLQueryItem(name: "server", value: server.absoluteString),
+            URLQueryItem(name: "id", value: sessionID)
+        ]
+        return components.url
+    }
+
     static func sessionURL(sessionID: String) -> URL? {
         guard !sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
@@ -128,10 +144,44 @@ enum HermesDeepLink {
         let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
+}
+
+/// Shared by the Lock Screen and Dynamic Island, and exercised by main-app tests.
+enum AgentRunTapTarget {
+    static func url(attributes: AgentRunActivityAttributes, sessionID: String, activityID: String) -> URL? {
+        let destination: URL?
+        if let bot = attributes.bot {
+            destination = bot.destinationURL
+        } else if let server = attributes.server {
+            destination = HermesDeepLink.webuiSessionURL(server: server, sessionID: sessionID)
+        } else {
+            // Activities persisted before server ownership was recorded keep their old route.
+            destination = HermesDeepLink.sessionURL(sessionID: sessionID)
+        }
+        guard let destination,
+              var components = URLComponents(url: destination, resolvingAgainstBaseURL: false) else { return nil }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "activity" }
+        items.append(URLQueryItem(name: "activity", value: activityID))
+        components.queryItems = items
+        return components.url
+    }
+
+    static func activityID(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == HermesDeepLink.scheme,
+              [HermesDeepLink.sessionHost, HermesDeepLink.botHost, "webui-push"].contains(url.host?.lowercased() ?? "")
+        else { return nil }
+        let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .first(where: { $0.name == "activity" })?.value
+        return id?.isEmpty == false ? id : nil
+    }
 
     /// The deep link a webui completion push opens: the host marks the route and
     /// both the server and the session travel as query items, so a signed-out app
     /// can switch servers instead of silently dropping the tap.
+    ///
+    /// Not in 1.9.0 — this fork's push layer links here, so it is kept when the
+    /// rest of the file is taken from upstream.
     static func webuiSessionURL(server: URL, sessionID: String) -> URL? {
         var components = URLComponents()
         components.scheme = scheme
