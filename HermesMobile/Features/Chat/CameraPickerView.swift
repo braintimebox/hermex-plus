@@ -607,3 +607,61 @@ private struct HermexAttachmentCameraPreview: UIViewRepresentable {
         }
     }
 }
+
+private final class HermexAttachmentCameraPreviewView: UIView, @unchecked Sendable {
+    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        guard let layer = layer as? AVCaptureVideoPreviewLayer else {
+            preconditionFailure("Camera preview must use AVCaptureVideoPreviewLayer")
+        }
+        return layer
+    }
+
+    private var configuredDeviceID: String?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var previewObservation: NSKeyValueObservation?
+    private var captureObservation: NSKeyValueObservation?
+    private var captureAngleChanged: ((CGFloat) -> Void)?
+    var detachPreviewLayer: ((AVCaptureVideoPreviewLayer) -> Void)?
+
+    func update(device: AVCaptureDevice, onCaptureAngleChanged: @escaping (CGFloat) -> Void) {
+        captureAngleChanged = onCaptureAngleChanged
+        guard configuredDeviceID != device.uniqueID else { return }
+        teardown()
+        configuredDeviceID = device.uniqueID
+
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        rotationCoordinator = coordinator
+        previewObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelPreview,
+            options: [.initial, .new]
+        ) { [weak self] coordinator, _ in
+            guard let view = self else { return }
+            let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+            DispatchQueue.main.async { [weak view] in
+                guard let view, let connection = view.previewLayer.connection else { return }
+                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+            }
+        }
+        captureObservation = coordinator.observe(
+            \.videoRotationAngleForHorizonLevelCapture,
+            options: [.initial, .new]
+        ) { [weak self] coordinator, _ in
+            guard let view = self else { return }
+            let angle = coordinator.videoRotationAngleForHorizonLevelCapture
+            DispatchQueue.main.async { [weak view] in view?.captureAngleChanged?(angle) }
+        }
+    }
+
+    func teardown() {
+        previewObservation?.invalidate()
+        captureObservation?.invalidate()
+        previewObservation = nil
+        captureObservation = nil
+        rotationCoordinator = nil
+        configuredDeviceID = nil
+    }
+}
