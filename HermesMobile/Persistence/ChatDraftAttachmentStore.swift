@@ -9,6 +9,9 @@ protocol ChatDraftAttachmentStoring: Sendable {
     /// Writes a copy of the attachment bytes, returning the generated file name
     /// the caller stores in the draft record.
     func save(data: Data, suggestedFilename: String) async throws -> String
+    /// Every retained copy's size in bytes, keyed by file name. The draft store
+    /// budgets against this before admitting another copy.
+    func retainedFileBytes() async throws -> [String: Int]
     func data(named fileName: String) async throws -> Data
     func delete(named fileName: String) async
     /// Deletes files not referenced by any draft and older than `maxAge`. The
@@ -85,6 +88,22 @@ actor ChatDraftAttachmentStore: ChatDraftAttachmentStoring {
 
     func data(named fileName: String) async throws -> Data {
         try Data(contentsOf: fileURL(for: fileName))
+    }
+
+    /// Walks the attachments directory rather than tracking sizes in memory: the
+    /// copies outlive the process, and a budget computed from a cache would drift
+    /// after a crash.
+    func retainedFileBytes() async throws -> [String: Int] {
+        let names = (try? fileManager.contentsOfDirectory(atPath: directoryURL.path)) ?? []
+        var sizes: [String: Int] = [:]
+        for name in names {
+            let url = directoryURL.appendingPathComponent(name, isDirectory: false)
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+                  let size = values.fileSize
+            else { continue }
+            sizes[name] = size
+        }
+        return sizes
     }
 
     func delete(named fileName: String) async {
