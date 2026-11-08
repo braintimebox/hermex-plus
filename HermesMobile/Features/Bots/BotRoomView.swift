@@ -137,57 +137,84 @@ if !showsThreadOverview && !isNearBottom && !transcriptEvents.isEmpty {
 }
     }
 
+    /// The scrolling transcript and everything bound to its scroll position.
+    /// Kept out of `body`: as one expression the body timed out the type checker
+    /// at five different lines across five runs.
+    @ViewBuilder
+    private func scrollArea(proxy: ScrollViewProxy, hasHiddenEvents: Bool, showsWelcome: Bool) -> some View {
+ScrollView {
+    // At least as tall as the visible transcript while a new room shows
+    // its welcome, which centres it; taller, and scrolling, only when
+    // the welcome is (at accessibility text sizes).
+    ZStack {
+        if showsWelcome { Color.clear.containerRelativeFrame(.vertical) }
+        // Eager over a bounded window, like Bot Chat: member replies are
+        // hosted selection documents, and a lazy stack places unbuilt rows
+        // from an estimate, so the jump to a search hit missed on a cold
+        // open (issue #553). The window keeps the build to the newest page.
+    transcriptStack(proxy: proxy, hasHiddenEvents: hasHiddenEvents, showsWelcome: showsWelcome)
+    }
+}
+.scrollDismissesKeyboard(.interactively)
+.contentShape(Rectangle())
+.simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+.defaultScrollAnchor(showsThreadOverview ? .top : .bottom, for: .initialOffset)
+.defaultScrollAnchor(showsThreadOverview ? nil : ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: followsLatest), for: .sizeChanges)
+.onChange(of: availableSearchSequence, initial: true) { _, sequence in
+    guard threadID == nil, let sequence else { return }
+    if let target = reader.events.first(where: { $0.seq == sequence })?.threadID {
+        threadSequence = sequence; selectedThread = target; pendingSequence = nil
+        return
+    }
+    handleFollowEvent(.userScrollBegin)
+    window.reveal(sequence, in: transcriptEvents, overview: showsThreadOverview)
+    proxy.scrollTo(BotRoomTranscriptRow.ID.event(sequence), anchor: .center); pendingSequence = nil
+}
+.task(id: threadID == nil ? nil : availableSearchSequence) {
+    guard threadID != nil, let sequence = availableSearchSequence else { return }
+    window.reveal(sequence, in: transcriptEvents, overview: showsThreadOverview)
+    // A pushed destination lays out after the overview's synchronous
+    // search callback. Wait for those materialized rows before jumping.
+    await Task.yield()
+    guard !Task.isCancelled else { return }
+    handleFollowEvent(.userScrollBegin)
+    proxy.scrollTo(BotRoomTranscriptRow.ID.event(sequence), anchor: .center); pendingSequence = nil
+}
+.onChange(of: transcriptEvents.last?.seq, initial: true) { seedWindow() }
+.onChange(of: reader.link) { seedWindow() }
+.onChange(of: transcriptEvents.last?.seq) {
+    if !showsThreadOverview && pendingSequence == nil && followsLatest { proxy.scrollTo("room-bottom", anchor: .bottom) }
+}
+.onChange(of: showRequestID) { proxy.scrollTo("room-actions", anchor: .top) }
+.overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
+        }
+    }
+
+    /// The room's title pill and menu; `body` only attaches it.
+    @ToolbarContentBuilder
+    private var roomToolbar: some ToolbarContent {
+ToolbarItem(placement: .topBarLeading) {
+    Button { showingProfile = true } label: {
+        HStack(spacing: 8) {
+            BotRoomAvatars(room: reader.room, roster: roster, avatars: avatars, size: 30)
+            VStack(alignment: .leading, spacing: 0) {
+                if threadID != nil { Text("Thread").font(.headline) }
+                Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
+            }
+        }
+        .modifier(BotChatTitlePillFallback())
+    }
+    .accessibilityLabel(reader.room.name)
+    .accessibilityHint("Opens this room’s profile.")
+}
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             let start = window.start(in: transcriptEvents, keeping: pendingSequence, overview: showsThreadOverview)
             let hasHiddenEvents = start > 0
             let showsWelcome = threadID == nil && reader.showsWelcome
-            ScrollView {
-                // At least as tall as the visible transcript while a new room shows
-                // its welcome, which centres it; taller, and scrolling, only when
-                // the welcome is (at accessibility text sizes).
-                ZStack {
-                    if showsWelcome { Color.clear.containerRelativeFrame(.vertical) }
-                    // Eager over a bounded window, like Bot Chat: member replies are
-                    // hosted selection documents, and a lazy stack places unbuilt rows
-                    // from an estimate, so the jump to a search hit missed on a cold
-                    // open (issue #553). The window keeps the build to the newest page.
-                transcriptStack(proxy: proxy, hasHiddenEvents: hasHiddenEvents, showsWelcome: showsWelcome)
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
-            .defaultScrollAnchor(showsThreadOverview ? .top : .bottom, for: .initialOffset)
-            .defaultScrollAnchor(showsThreadOverview ? nil : ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: followsLatest), for: .sizeChanges)
-            .onChange(of: availableSearchSequence, initial: true) { _, sequence in
-                guard threadID == nil, let sequence else { return }
-                if let target = reader.events.first(where: { $0.seq == sequence })?.threadID {
-                    threadSequence = sequence; selectedThread = target; pendingSequence = nil
-                    return
-                }
-                handleFollowEvent(.userScrollBegin)
-                window.reveal(sequence, in: transcriptEvents, overview: showsThreadOverview)
-                proxy.scrollTo(BotRoomTranscriptRow.ID.event(sequence), anchor: .center); pendingSequence = nil
-            }
-            .task(id: threadID == nil ? nil : availableSearchSequence) {
-                guard threadID != nil, let sequence = availableSearchSequence else { return }
-                window.reveal(sequence, in: transcriptEvents, overview: showsThreadOverview)
-                // A pushed destination lays out after the overview's synchronous
-                // search callback. Wait for those materialized rows before jumping.
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                handleFollowEvent(.userScrollBegin)
-                proxy.scrollTo(BotRoomTranscriptRow.ID.event(sequence), anchor: .center); pendingSequence = nil
-            }
-            .onChange(of: transcriptEvents.last?.seq, initial: true) { seedWindow() }
-            .onChange(of: reader.link) { seedWindow() }
-            .onChange(of: transcriptEvents.last?.seq) {
-                if !showsThreadOverview && pendingSequence == nil && followsLatest { proxy.scrollTo("room-bottom", anchor: .bottom) }
-            }
-            .onChange(of: showRequestID) { proxy.scrollTo("room-actions", anchor: .top) }
-            .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
-        }
+            scrollArea(proxy: proxy, hasHiddenEvents: hasHiddenEvents, showsWelcome: showsWelcome)
             .safeAreaInset(edge: .bottom) { composerInset }
         .task(id: pill?.errorText) {
             guard let text = pill?.errorText else { return }
@@ -198,22 +225,7 @@ if !showsThreadOverview && !isNearBottom && !transcriptEvents.isEmpty {
         .onChange(of: reader.busy) { _, busy in if busy { dismissedErrors = [] } }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button { showingProfile = true } label: {
-                    HStack(spacing: 8) {
-                        BotRoomAvatars(room: reader.room, roster: roster, avatars: avatars, size: 30)
-                        VStack(alignment: .leading, spacing: 0) {
-                            if threadID != nil { Text("Thread").font(.headline) }
-                            Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
-                        }
-                    }
-                    .modifier(BotChatTitlePillFallback())
-                }
-                .accessibilityLabel(reader.room.name)
-                .accessibilityHint("Opens this room’s profile.")
-            }
-        }
+        .toolbar { roomToolbar }
         .navigationDestination(isPresented: $showingProfile) {
             BotRoomProfileView(reader: reader, roster: roster, avatars: avatars, onUpdateSignIn: onUpdateSignIn)
         }
