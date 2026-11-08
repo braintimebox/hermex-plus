@@ -1,6 +1,5 @@
 import Foundation
 import os
-import QuartzCore
 
 /// One staged composer attachment as referenced by a persisted draft. `file`
 /// names the durable app-owned copy in `ChatDraftAttachmentStore`. It remains
@@ -77,6 +76,7 @@ struct ChatDraft: Equatable, Sendable {
     var settings: ChatDraftSettings?
     // Written durably before Bot submission; acknowledgement loss must survive relaunch.
     var botSubmissionUncertain = false
+    var lastUsedAt: Date?
 
     var isEmpty: Bool {
         text.isEmpty && quotes.isEmpty && attachments.isEmpty && (settings?.isEmpty ?? true) && !botSubmissionUncertain
@@ -133,6 +133,29 @@ enum ChatDraftSendReconciliation {
             }
         }
         return outcome
+    }
+}
+
+/// Folds messages that were queued behind a run into their chat's draft when
+/// the user leaves mid-run, so they come back for review instead of sending
+/// on their own (#857).
+enum ChatDraftQueueParking {
+    /// Queued texts first, in queue order, then the draft's own text, joined
+    /// by blank lines: the order they were typed in. The draft's quotes stay
+    /// quotes; a queued text already carries its quotes as Markdown. Queued
+    /// attachments go after the draft's own, without duplicate ids.
+    static func merged(
+        _ draft: ChatDraft,
+        queuedTexts: [String],
+        queuedAttachments: [ChatDraftAttachment]
+    ) -> ChatDraft {
+        var merged = draft
+        merged.text = (queuedTexts + [draft.text])
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        var attachmentIDs = Set(draft.attachments.map(\.id))
+        merged.attachments += queuedAttachments.filter { attachmentIDs.insert($0.id).inserted }
+        return merged
     }
 }
 
@@ -367,6 +390,8 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
         var profile: String?
         var botSubmissionUncertain: Bool?
 
+        let lastUsedAt: Date?
+
         private enum CodingKeys: String, CodingKey {
             case serverID
             case context
@@ -374,7 +399,7 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
             case text
             case quotes
             case attachments
-            case settings, connectionID, profile, botSubmissionUncertain
+            case settings, connectionID, profile, botSubmissionUncertain, lastUsedAt
         }
 
         init(key: ChatDraftKey, draft: ChatDraft) {
@@ -392,6 +417,7 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
                 context = "newChat"
                 sessionID = nil
             }
+            lastUsedAt = draft.lastUsedAt
             botSubmissionUncertain = draft.botSubmissionUncertain
             text = draft.text
             quotes = draft.quotes.map { FailableQuote(value: QuoteRecord($0)) }
@@ -401,6 +427,7 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            lastUsedAt = try? container.decodeIfPresent(Date.self, forKey: .lastUsedAt)
             // Field-level tolerance: an unexpected shape in one field must not
             // discard the whole draft.
             serverID = (try? container.decodeIfPresent(String.self, forKey: .serverID)) ?? nil
@@ -449,7 +476,8 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
                 quotes: (quotes ?? []).compactMap(\.value?.quote),
                 attachments: (attachments ?? []).compactMap(\.value?.attachment),
                 settings: settings?.settings,
-                botSubmissionUncertain: context == "bot" && (botSubmissionUncertain ?? false)
+                botSubmissionUncertain: context == "bot" && (botSubmissionUncertain ?? false),
+                lastUsedAt: lastUsedAt
             )
             guard !draft.isEmpty else { return nil }
             return (key, draft)
@@ -534,6 +562,7 @@ actor ChatDraftFilePersistence: ChatDraftPersisting {
 @MainActor
 final class ChatDraftStore {
     static let shared = ChatDraftStore(attachmentStore: ChatDraftAttachmentStore.shared)
+    static let maximumAttachmentCount = 10
 
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "HermesMobile",
@@ -546,16 +575,28 @@ final class ChatDraftStore {
     private let attachmentSweepMaxAge: TimeInterval
     private var drafts: [ChatDraftKey: ChatDraft] = [:]
     private var keysChangedBeforeLoad: Set<ChatDraftKey> = []
+    /// Sessions deleted in this launch. On iPad a chat stays on screen while
+    /// its session is deleted from the sidebar, so it parks its queue after
+    /// the discard; that must not bring back a draft nobody can open.
+    private var deletedSessionKeys: Set<ChatDraftKey> = []
     private var loadTask: Task<[ChatDraftKey: ChatDraft], Never>?
     private var persistTask: Task<Void, Never>?
     private var isLoaded = false
+    private let retainedByteLimit: Int
+    private var retentionLeases: [WeakDraftAttachmentLease] = []
+    private var retiringAttachmentFiles: Set<String> = []
+    private var storageBusy = false
+    private var storageWaiters: [CheckedContinuation<Void, Never>] = []
+
 
     init(
         persistence: any ChatDraftPersisting = ChatDraftFilePersistence(),
         attachmentStore: (any ChatDraftAttachmentStoring)? = nil,
         debounceDuration: Duration = .milliseconds(200),
-        attachmentSweepMaxAge: TimeInterval = 24 * 60 * 60
+        attachmentSweepMaxAge: TimeInterval = 24 * 60 * 60,
+        retainedByteLimit: Int = 200 * 1024 * 1024
     ) {
+        self.retainedByteLimit = retainedByteLimit
         self.persistence = persistence
         self.attachmentStore = attachmentStore
         self.debounceDuration = debounceDuration
@@ -564,14 +605,15 @@ final class ChatDraftStore {
 
     func draft(for key: ChatDraftKey) async -> ChatDraft? {
         await loadIfNeeded()
+        // Hydration must not capture a reference from a tentative cleanup write.
+        await lockStorage()
+        defer { unlockStorage() }
         return drafts[key]
     }
 
     /// Updates the draft's typed text without disturbing its attachments or
     /// settings.
     func setDraft(_ text: String, for key: ChatDraftKey) {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("setDraft", key: key, textLength: text.count)
         markChangedBeforeLoad(key)
         updateDraft(for: key) { $0.text = text }
     }
@@ -582,12 +624,13 @@ final class ChatDraftStore {
         updateDraft(for: key) { $0.botSubmissionUncertain = uncertain }
     }
 
-    func discardBotDrafts(server: URL, connectionID: UUID? = nil) async {
+    /// Drops Bot drafts for a server, one connection, or one deleted bot on it.
+    func discardBotDrafts(server: URL, connectionID: UUID? = nil, profile: String? = nil) async {
         await loadIfNeeded()
         await discardDrafts { key in
             guard key.serverID == server.absoluteString,
-                  case .bot(let id, _) = key.context else { return false }
-            return connectionID == nil || id == connectionID
+                  case .bot(let id, let name) = key.context else { return false }
+            return (connectionID == nil || id == connectionID) && (profile == nil || name == profile)
         }
     }
 
@@ -598,66 +641,12 @@ final class ChatDraftStore {
         updateDraft(for: key) { $0.quotes = quotes }
     }
 
-    /// HERMEX-FORK: (diagnostic, temporary — remove once the draft lifecycle is proven):
-    /// follows one draft text across the lifecycle. Logs the key shape and the text
-    /// length so a single string can be tracked from share → composer → send → clear,
-    /// and so the suspected resurrection chain (session key → `.newChat(server:)`) is
-    /// visible in hermex-logs.jsonl rather than inferred from static reading.
-    /// Session identifiers are truncated to 8 characters: enough to correlate events,
-    /// not enough to reconstruct the id.
-    func logDraftProbe(
-        _ point: String,
-        key: ChatDraftKey,
-        textLength: Int,
-        detail: String = "",
-        durationMs: Double? = nil
-    ) {
-        var extras: [String: Any] = [
-            "point": point,
-            "key": ChatDraftStore.probeLabel(key),
-            "len": textLength,
-        ]
-        if !detail.isEmpty { extras["detail"] = detail }
-        // HERMEX-FORK: 3.9.65 — the probe recorded the fact of a write but never
-        // its cost: 3 437 `draft setContent` events in 3.9.64 all carried
-        // durationMs = 0, so a slow composer write was invisible. The duration is
-        // now measured around the write itself and emitted in the same field the
-        // rest of the telemetry uses.
-        HermexLogger.shared.log(
-            type: "draft",
-            durationMs: durationMs,
-            screen: "ChatDraftStore",
-            message: "draft \(point)",
-            extras: extras
-        )
-    }
-
-    static func probeLabel(_ key: ChatDraftKey) -> String {
-        let server = URL(string: key.serverID)?.host ?? "?"
-        switch key.context {
-        case .session(let sessionID):
-            return "session/\(server)/\(sessionID.prefix(8))"
-        case .bot(let connectionID, let profile):
-            return "bot/\(server)/\(connectionID.uuidString.prefix(8))/\(profile)"
-        case .newChat:
-            return "newChat/\(server)"
-        }
-    }
-
     func setContent(_ content: ComposerDraftContent, for key: ChatDraftKey) {
-        // HERMEX-FORK: 3.9.65 — the measured segment is exactly the write this
-        // method performs (change marking + draft mutation + persistence touch
-        // inside updateDraft), not the caller's surrounding SwiftUI work.
-        // Behaviour is unchanged; only the duration is now reported.
-        let startedAt = CACurrentMediaTime()
         markChangedBeforeLoad(key)
         updateDraft(for: key) { draft in
             draft.text = content.text
             draft.quotes = content.quotes
         }
-        let durationMs = (CACurrentMediaTime() - startedAt) * 1000
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("setContent", key: key, textLength: content.text.count, durationMs: durationMs)
     }
 
     /// Replaces the draft's staged-attachment records without disturbing its
@@ -665,6 +654,27 @@ final class ChatDraftStore {
     func setAttachments(_ attachments: [ChatDraftAttachment], for key: ChatDraftKey) {
         markChangedBeforeLoad(key)
         updateDraft(for: key) { $0.attachments = attachments }
+    }
+
+    /// Parks the messages queued behind a run in the chat's draft, in one
+    /// write (merge rule: `ChatDraftQueueParking`). ChatView calls it when the
+    /// chat is left mid-run (#857). Only files with a durable copy are
+    /// recorded, as in `ChatView.syncDraftAttachments`: nothing else can be
+    /// restored on reopen. Synchronous, so it lands even while the chat's view
+    /// is going away. Returns the merged draft, or nil when the chat's session
+    /// was deleted.
+    func parkQueuedMessages(_ queued: [QueuedSlashMessage], for key: ChatDraftKey) -> ChatDraft? {
+        guard !deletedSessionKeys.contains(key) else { return nil }
+        markChangedBeforeLoad(key)
+        let merged = ChatDraftQueueParking.merged(
+            drafts[key] ?? ChatDraft(),
+            queuedTexts: queued.map(\.text),
+            queuedAttachments: queued.flatMap(\.attachments)
+                .map(ChatDraftAttachment.init(pending:))
+                .filter { $0.file != nil }
+        )
+        updateDraft(for: key) { $0 = merged }
+        return drafts[key]
     }
 
     /// Replaces the draft's settings snapshot without disturbing its text or
@@ -678,8 +688,10 @@ final class ChatDraftStore {
     }
 
     /// Removes one composer draft and deletes attachment copies that no other
-    /// draft still references. Used after the server accepts session deletion.
+    /// draft still references. Used after the server accepts session deletion;
+    /// a later queue park for the key is skipped.
     func discardDraft(for key: ChatDraftKey) async {
+        deletedSessionKeys.insert(key)
         await loadIfNeeded()
         await discardDrafts(matching: { $0 == key })
     }
@@ -695,8 +707,6 @@ final class ChatDraftStore {
     /// Clears the draft's user-authored content. Attachments and settings are
     /// managed separately (attachments sync from the composer observationally).
     func clearDraft(for key: ChatDraftKey) {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("clearDraft", key: key, textLength: 0)
         setContent(.empty, for: key)
     }
 
@@ -707,24 +717,13 @@ final class ChatDraftStore {
         draftWasEdited: Bool,
         for key: ChatDraftKey
     ) -> ComposerDraftContent {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe(
-            "resolveSubmission.in",
-            key: key,
-            textLength: submitted.text.count,
-            detail: "current=\(current.text.count) didStart=\(didStart) edited=\(draftWasEdited)"
-        )
         if didStart {
             // A started send consumed any staged attachments, even when the
             // user kept editing the composer during the request.
             updateDraft(for: key) { $0.attachments = [] }
         }
 
-        guard !draftWasEdited else {
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("resolveSubmission.keptEdited", key: key, textLength: current.text.count)
-            return current
-        }
+        guard !draftWasEdited else { return current }
 
         if didStart {
             if current.isEmpty {
@@ -736,19 +735,13 @@ final class ChatDraftStore {
                     draft.attachments = []
                 }
             }
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("resolveSubmission.consumed", key: key, textLength: current.text.count)
             return current
         }
 
         if current.isEmpty {
             setContent(submitted, for: key)
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("resolveSubmission.restored", key: key, textLength: submitted.text.count)
             return submitted
         }
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("resolveSubmission.keptEditing", key: key, textLength: current.text.count)
         return current
     }
 
@@ -797,13 +790,14 @@ final class ChatDraftStore {
     /// between contexts, e.g. a new-chat draft into its created session.
     @discardableResult
     func moveDraft(from sourceKey: ChatDraftKey, to targetKey: ChatDraftKey) -> ChatDraft {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe("moveDraft", key: sourceKey, textLength: drafts[sourceKey]?.text.count ?? 0,
-                      detail: "to=\(ChatDraftStore.probeLabel(targetKey))")
         markChangedBeforeLoad(sourceKey)
         markChangedBeforeLoad(targetKey)
 
-        let movedDraft = drafts[sourceKey] ?? drafts[targetKey] ?? ChatDraft()
+        var movedDraft = drafts[sourceKey] ?? drafts[targetKey] ?? ChatDraft()
+        movedDraft.lastUsedAt = Date()
+        for lease in retentionLeases.compactMap(\.value) where lease.key == sourceKey {
+            lease.key = targetKey
+        }
         drafts.removeValue(forKey: sourceKey)
         if movedDraft.isEmpty {
             drafts.removeValue(forKey: targetKey)
@@ -820,19 +814,164 @@ final class ChatDraftStore {
         to newChatKey: ChatDraftKey,
         didStartConversation: Bool
     ) -> ChatDraft? {
-        // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-        logDraftProbe(
-            "restoreAbandonedNewChatDraft",
-            key: sessionKey,
-            textLength: drafts[sessionKey]?.text.count ?? drafts[newChatKey]?.text.count ?? 0,
-            detail: "didStartConversation=\(didStartConversation) to=\(ChatDraftStore.probeLabel(newChatKey))"
-        )
-        guard !didStartConversation else {
-            // HERMEX-FORK: (diagnostic, temporary) — probe for the draft lifecycle.
-            logDraftProbe("restoreAbandonedNewChatDraft.skipped", key: sessionKey, textLength: 0)
-            return nil
-        }
+        guard !didStartConversation else { return nil }
         return moveDraft(from: sessionKey, to: newChatKey)
+    }
+
+    /// A lease lives with its composer/coordinator, not with a view redraw. Weak
+    /// registration releases abandoned owners without a delayed deinit task.
+    func makeAttachmentLease(key: ChatDraftKey? = nil) -> ChatDraftAttachmentLease {
+        retentionLeases.removeAll { $0.value == nil }
+        let lease = ChatDraftAttachmentLease(key: key)
+        retentionLeases.append(WeakDraftAttachmentLease(value: lease))
+        return lease
+    }
+
+    func markUsed(_ key: ChatDraftKey) async {
+        await loadIfNeeded()
+        guard drafts[key] != nil else { return }
+        drafts[key]?.lastUsedAt = Date()
+        schedulePersist()
+    }
+
+    private var protectedAttachmentFiles: Set<String> {
+        retentionLeases.removeAll { $0.value == nil }
+        return retentionLeases.compactMap(\.value).reduce(into: Set<String>()) { files, lease in
+            files.formUnion(lease.files)
+            files.formUnion(lease.filesByAttachmentID.values)
+            if let key = lease.key {
+                files.formUnion(drafts[key]?.attachments.compactMap(\.file) ?? [])
+            }
+        }
+    }
+
+    /// Serializes admission, record commits and deletion. New copies are counted
+    /// on disk before the next admission can begin, including uploads in flight.
+    func stageAttachment(
+        data: Data, filename: String, lease: ChatDraftAttachmentLease,
+        attachmentID: UUID = UUID(), maximumFileBytes: Int = PendingAttachment.maximumUploadBytes,
+        in fileStore: (any ChatDraftAttachmentStoring)? = nil
+    ) async throws -> String {
+        guard data.count <= maximumFileBytes,
+              data.count <= retainedByteLimit,
+              let attachmentStore = fileStore ?? attachmentStore else { throw ChatDraftStorageError.unavailable }
+        lease.slotIDs.insert(attachmentID)
+        var didStage = false
+        defer { if !didStage { lease.slotIDs.remove(attachmentID) } }
+        await loadIfNeeded()
+        await lockStorage()
+        defer { unlockStorage() }
+        try Task.checkCancellation()
+        if let key = lease.key {
+            var ids = Set(drafts[key]?.attachments.map(\.id) ?? [])
+            for owner in retentionLeases.compactMap(\.value) where owner.key == key {
+                ids.formUnion(owner.slotIDs)
+            }
+            ids.remove(attachmentID)
+            guard ids.count < Self.maximumAttachmentCount else { throw ChatDraftStorageError.attachmentLimit }
+        }
+        let inventory = try await attachmentStore.retainedFileBytes()
+        let required = inventory.values.reduce(0, +) + data.count - retainedByteLimit
+        if required > 0 {
+            let original = drafts
+            let protected = protectedAttachmentFiles
+            // A shared copy is as recent as its most recently used reference.
+            var recency: [String: Date] = [:]
+            var position: [String: Int] = [:]
+            for draft in drafts.values {
+                for (index, attachment) in draft.attachments.enumerated() {
+                    guard let file = attachment.file, !protected.contains(file) else { continue }
+                    recency[file] = max(recency[file] ?? .distantPast, draft.lastUsedAt ?? .distantPast)
+                    position[file] = min(position[file] ?? index, index)
+                }
+            }
+            // Interrupted saves/deletions can leave unreferenced copies behind.
+            // Reclaim those before draft content, but keep every live reservation.
+            let referenced = Set(drafts.values.flatMap { $0.attachments.compactMap(\.file) })
+            for file in inventory.keys where !referenced.contains(file) && !protected.contains(file) {
+                recency[file] = .distantPast
+                position[file] = -1
+            }
+            let ordered = recency.keys.sorted {
+                if recency[$0] != recency[$1] { return recency[$0]! < recency[$1]! }
+                // The strip's persisted order breaks ties within a draft; file
+                // name makes equally old records across drafts deterministic.
+                if position[$0] != position[$1] { return position[$0]! < position[$1]! }
+                return $0 < $1
+            }
+            var selected: Set<String> = []
+            var reclaimed = 0
+            for file in ordered where reclaimed < required {
+                guard let bytes = inventory[file], bytes > 0 else { continue }
+                selected.insert(file)
+                reclaimed += bytes
+            }
+            guard reclaimed >= required else { throw ChatDraftStorageError.unavailable }
+            var updated = drafts
+            for key in updated.keys {
+                updated[key]?.attachments.removeAll { $0.file.map(selected.contains) == true }
+            }
+            // Do not expose the tentative removal. If a composer opens, edits or
+            // moves a draft while the write suspends, repair the disk and refuse
+            // this admission; none of its selected files have been deleted.
+            do {
+                try await persistence.write(updated)
+            } catch {
+                // An atomic write may have succeeded before a protection-attribute
+                // failure. Restore the authoritative records before propagating.
+                try? await persistence.write(drafts)
+                throw error
+            }
+            guard !Task.isCancelled, drafts == original,
+                  protectedAttachmentFiles.isDisjoint(with: selected) else {
+                try await persistence.write(drafts)
+                try Task.checkCancellation()
+                throw ChatDraftStorageError.unavailable
+            }
+            drafts = updated.filter { !$0.value.isEmpty }
+            retiringAttachmentFiles = selected
+            defer { retiringAttachmentFiles = [] }
+            // From this point readers see only the committed records. No new
+            // owner can restore one of the removed references during deletion.
+            for file in selected.sorted() {
+                await attachmentStore.delete(named: file)
+            }
+            // Deletion can fail (e.g. data protection); never assume it freed bytes.
+            let remaining = try await attachmentStore.retainedFileBytes().values.reduce(0, +)
+            guard remaining + data.count <= retainedByteLimit else { throw ChatDraftStorageError.unavailable }
+        }
+        try Task.checkCancellation()
+        let file = try await attachmentStore.save(data: data, suggestedFilename: filename)
+        lease.files.insert(file)
+        didStage = true
+        return file
+    }
+
+    func removeAttachmentReference(id: UUID, for key: ChatDraftKey) {
+        updateDraft(for: key) { $0.attachments.removeAll { $0.id == id } }
+    }
+
+    /// Used after explicit removal or a successful send. Persist the record
+    /// removal first and retain copies still owned by another draft or window.
+    func deleteAttachmentIfUnreferenced(_ file: String, from fileStore: (any ChatDraftAttachmentStoring)? = nil) async {
+        await loadIfNeeded()
+        await lockStorage()
+        defer { unlockStorage() }
+        guard let attachmentStore = fileStore ?? attachmentStore else { return }
+        do { try await persistence.write(drafts) } catch { return }
+        guard !drafts.values.contains(where: { $0.attachments.contains { $0.file == file } }),
+              !protectedAttachmentFiles.contains(file) else { return }
+        await attachmentStore.delete(named: file)
+    }
+
+    private func lockStorage() async {
+        if !storageBusy { storageBusy = true; return }
+        await withCheckedContinuation { storageWaiters.append($0) }
+    }
+
+    private func unlockStorage() {
+        if storageWaiters.isEmpty { storageBusy = false }
+        else { storageWaiters.removeFirst().resume() }
     }
 
     func flush() async throws {
@@ -843,18 +982,22 @@ final class ChatDraftStore {
 
     private func persistNow() async throws {
         await loadIfNeeded()
+        await lockStorage()
+        defer { unlockStorage() }
         try await persistence.write(drafts)
     }
 
     private func updateDraft(for key: ChatDraftKey, mutate: (inout ChatDraft) -> Void) {
         var draft = drafts[key] ?? ChatDraft()
         mutate(&draft)
+        draft.attachments.removeAll { $0.file.map(retiringAttachmentFiles.contains) == true }
 
         if draft.isEmpty {
             guard drafts[key] != nil else { return }
             drafts.removeValue(forKey: key)
         } else {
             guard drafts[key] != draft else { return }
+            draft.lastUsedAt = Date()
             drafts[key] = draft
         }
         schedulePersist()
@@ -870,9 +1013,8 @@ final class ChatDraftStore {
             .subtracting(stillReferencedFiles)
         schedulePersist()
 
-        guard let attachmentStore else { return }
         for fileName in filesToDelete.sorted() {
-            await attachmentStore.delete(named: fileName)
+            await deleteAttachmentIfUnreferenced(fileName)
         }
     }
 
@@ -904,12 +1046,6 @@ final class ChatDraftStore {
         sweepOrphanedAttachmentFiles()
     }
 
-    /// HERMEX-FORK: файлы вложений, на которые ссылается что-то помимо
-    /// черновиков — сейчас это отложенные сообщения (`PendingScheduledMessage`).
-    /// Хранится здесь, потому что уборку делает этот стор, а знание о
-    /// запланированных сообщениях живёт во вьюхе.
-    var additionalReferencedAttachmentFiles: Set<String> = []
-
     /// Backstop cleanup for orphaned attachment copies — e.g. an ingest that
     /// crashed between writing the durable copy and persisting its record.
     /// Explicit deletes cover successful sends and discards; this reclaims the
@@ -917,17 +1053,12 @@ final class ChatDraftStore {
     private func sweepOrphanedAttachmentFiles() {
         guard let attachmentStore else { return }
 
-        var referencedFiles = Set(drafts.values.flatMap { draft in
-            draft.attachments.compactMap(\.file)
-        })
-        // HERMEX-FORK: плюс всё, на что ссылается не черновик, а отложенное
-        // сообщение. Без этого sweep удалил бы вложение запланированного
-        // сообщения как осиротевшее — фича «вложение отложенного тихо
-        // пропадает через какое-то время» (уборка идёт по возрасту).
-        referencedFiles.formUnion(additionalReferencedAttachmentFiles)
-        let maxAge = attachmentSweepMaxAge
         Task {
-            await attachmentStore.sweep(keepingReferenced: referencedFiles, olderThan: maxAge)
+            await lockStorage()
+            defer { unlockStorage() }
+            let referencedFiles = Set(drafts.values.flatMap { $0.attachments.compactMap(\.file) })
+                .union(protectedAttachmentFiles)
+            await attachmentStore.sweep(keepingReferenced: referencedFiles, olderThan: attachmentSweepMaxAge)
         }
     }
 
@@ -952,7 +1083,7 @@ final class ChatDraftStore {
 /// even when they temporarily leave the pending strip.
 @MainActor
 final class ChatDraftAttachmentLease {
-    var key: ChatDraftKey? = nil
+    var key: ChatDraftKey?
     var files: Set<String> = []
     var slotIDs: Set<UUID> = []
     var filesByAttachmentID: [UUID: String] = [:]

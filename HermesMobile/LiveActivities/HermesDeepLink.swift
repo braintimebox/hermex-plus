@@ -7,6 +7,8 @@ enum HermesDeepLink {
     }
 
     static let sessionHost = "session"
+    /// Host for a bot route: the tap a bot Live Activity or a relay push opens.
+    static let botHost = "bot"
 
     /// Host for the parameter-less "open the New Chat composer" deep link used by the
     /// New Chat App Intent (issue #337). Mirrors the share extension's host-based routing
