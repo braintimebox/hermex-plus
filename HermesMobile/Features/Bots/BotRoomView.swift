@@ -60,6 +60,58 @@ import SwiftUI
         return ordered.map { BotRoomTranscriptRow(event: $0, isOverview: threadID == nil) }
     }
 
+    @ViewBuilder
+    private func transcriptStack(proxy: ScrollViewProxy, hasHiddenEvents: Bool, showsWelcome: Bool) -> some View {
+VStack(spacing: 16) {
+    if !showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
+        Button("Load earlier") { loadEarlier(proxy: proxy) }
+            .disabled(!hasHiddenEvents && (reader.loadingEarlier || reader.link != .live))
+    }
+    if reader.foreignAuthority {
+        Text("Managed by another Hermes").font(.caption).foregroundStyle(.secondary)
+    }
+    if threadID != nil, reader.threads.first(where: { $0.id == threadID })?.root == nil {
+        Text("Earlier messages not loaded").font(.caption).foregroundStyle(.secondary)
+    }
+    let gapStarts = roomGapStarts
+    // The order and the row mapping are hoisted out: the one
+    // expression was enough to exhaust the type checker.
+    ForEach(roomDisplayedRows) { row in
+        BotRoomRowView(
+            event: row.event,
+            showsSeparator: gapStarts.contains(row.event.seq),
+            thread: threadPreview(for: row.event),
+            room: reader.room,
+            roster: roster,
+            avatars: avatars,
+            cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
+            onOpenThread: { selectedThread = $0 }
+        )
+    }
+    if showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
+        Button("Load earlier") { loadEarlier(proxy: proxy) }
+            .disabled(!hasHiddenEvents && (reader.loadingEarlier || reader.link != .live))
+    }
+    if showsWelcome {
+        BotRoomWelcomeView(room: reader.room, roster: roster, avatars: avatars,
+                           showsPrompt: reader.showsComposer)
+    }
+    Color.clear.frame(height: 0).id("room-actions")
+    ForEach(Array(reader.status.actions.enumerated()), id: \.offset) { _, action in
+        BotRoomActionCard(reader: reader, action: action)
+    }
+    Color.clear.frame(height: 1).id("room-bottom")
+}
+.padding(16)
+// Centred in the reading column; the scroll view stays full width.
+.frame(maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: 16))
+.frame(maxWidth: .infinity)
+.background {
+    ChatScrollObserver(isStreaming: false, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
+        .accessibilityHidden(true)
+}
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             let start = window.start(in: transcriptEvents, keeping: pendingSequence, overview: showsThreadOverview)
@@ -75,54 +127,7 @@ import SwiftUI
                     // hosted selection documents, and a lazy stack places unbuilt rows
                     // from an estimate, so the jump to a search hit missed on a cold
                     // open (issue #553). The window keeps the build to the newest page.
-                    VStack(spacing: 16) {
-                        if !showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
-                            Button("Load earlier") { loadEarlier(proxy: proxy) }
-                                .disabled(!hasHiddenEvents && (reader.loadingEarlier || reader.link != .live))
-                        }
-                        if reader.foreignAuthority {
-                            Text("Managed by another Hermes").font(.caption).foregroundStyle(.secondary)
-                        }
-                        if threadID != nil, reader.threads.first(where: { $0.id == threadID })?.root == nil {
-                            Text("Earlier messages not loaded").font(.caption).foregroundStyle(.secondary)
-                        }
-                        let gapStarts = roomGapStarts
-                        // The order and the row mapping are hoisted out: the one
-                        // expression was enough to exhaust the type checker.
-                        ForEach(roomDisplayedRows) { row in
-                            BotRoomRowView(
-                                event: row.event,
-                                showsSeparator: gapStarts.contains(row.event.seq),
-                                thread: threadPreview(for: row.event),
-                                room: reader.room,
-                                roster: roster,
-                                avatars: avatars,
-                                cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
-                                onOpenThread: { selectedThread = $0 }
-                            )
-                        }
-                        if showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
-                            Button("Load earlier") { loadEarlier(proxy: proxy) }
-                                .disabled(!hasHiddenEvents && (reader.loadingEarlier || reader.link != .live))
-                        }
-                        if showsWelcome {
-                            BotRoomWelcomeView(room: reader.room, roster: roster, avatars: avatars,
-                                               showsPrompt: reader.showsComposer)
-                        }
-                        Color.clear.frame(height: 0).id("room-actions")
-                        ForEach(Array(reader.status.actions.enumerated()), id: \.offset) { _, action in
-                            BotRoomActionCard(reader: reader, action: action)
-                        }
-                        Color.clear.frame(height: 1).id("room-bottom")
-                    }
-                    .padding(16)
-                    // Centred in the reading column; the scroll view stays full width.
-                    .frame(maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: 16))
-                    .frame(maxWidth: .infinity)
-                    .background {
-                        ChatScrollObserver(isStreaming: false, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
-                            .accessibilityHidden(true)
-                    }
+                transcriptStack(proxy: proxy, hasHiddenEvents: hasHiddenEvents, showsWelcome: showsWelcome)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
