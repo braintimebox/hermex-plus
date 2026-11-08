@@ -290,3 +290,23 @@ struct EditMessageSheet: View {
         .adaptiveFormPresentation()
     }
 }
+
+// MARK: - UIKit menu (ported from 1.9.0)
+
+
+extension ChatMessageActionItem {
+    /// Rendered once per emoji: the menu rebuilds its icons on every long press.
+    @MainActor private static var emojiImages: [String: UIImage] = [:]
+
+    @MainActor
+    static func emojiImage(_ emoji: String) -> UIImage {
+        if let image = emojiImages[emoji] { return image }
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 22)]
+        let text = emoji as NSString
+        let image = UIGraphicsImageRenderer(size: text.size(withAttributes: attributes)).image { _ in
+            text.draw(at: .zero, withAttributes: attributes)
+        }.withRenderingMode(.alwaysOriginal)
+        emojiImages[emoji] = image
+        return image
+    }
+}
