@@ -38,6 +38,11 @@ on:
   push:
     branches:
       - main
+      # Work branches build on push too. The publish job is gated on
+      # `refs/heads/main`, so a branch run only ever produces the build — and it
+      # is the only way to start one when the Actions REST API is throttled into
+      # answering 404 for the whole repository.
+      - 'bots/**'
     paths-ignore:
       - 'README.md'
   workflow_dispatch:
