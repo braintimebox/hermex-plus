@@ -1529,3 +1529,17 @@ extension EnvironmentValues {
         set { self[AllowsStreamedTextAnimationKey.self] = newValue }
     }
 }
+
+/// The colour a markdown table fades its cut-off edge into. Defined beside the
+/// renderer that reads it; the default matches the transcript background so a
+/// table never fades into a different colour than the surface behind it.
+struct MarkdownTableEdgeFadeColorKey: EnvironmentKey {
+    static let defaultValue: SwiftUI.Color? = SwiftUI.Color(.systemBackground)
+}
+
+extension EnvironmentValues {
+    var markdownTableEdgeFadeColor: SwiftUI.Color? {
+        get { self[MarkdownTableEdgeFadeColorKey.self] }
+        set { self[MarkdownTableEdgeFadeColorKey.self] = newValue }
+    }
+}
