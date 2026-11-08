@@ -32,8 +32,14 @@ import SwiftUI
     /// The visible window, its gap separators and the row wrappers are computed
     /// outside `body`: the inline versions of these expressions were enough to
     /// exhaust the type checker.
+    /// The window's first visible index. `body` computed it inline through the
+    /// window model; the rows need it too, so it is named here.
+    private var roomStart: Int {
+        window.start(in: transcriptEvents, keeping: pendingSequence, overview: showsThreadOverview)
+    }
+
     private var roomVisibleEvents: ArraySlice<BotRoomEvent> {
-        transcriptEvents[start...]
+        transcriptEvents[roomStart...]
     }
 
     private var roomGapStarts: Set<Int> {
@@ -76,28 +82,18 @@ import SwiftUI
                         // The order and the row mapping are hoisted out: the one
                         // expression was enough to exhaust the type checker.
                         ForEach(roomDisplayedRows) { row in
-                            let event = row.event
-                            // Thread identity survives new replies and activity reordering.
-                            VStack(spacing: 16) {
-                                if gapStarts.contains(event.seq), let timestamp = event.timestamp {
-                                    TranscriptTimeSeparator(timestamp: timestamp)
-                                }
-                                if threadID == nil, let thread = reader.threads.first(where: { $0.latest.seq == event.seq }) {
-                                    Button { selectedThread = thread.id } label: {
-                                        BotRoomThreadPreview(thread: thread, room: reader.room)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("room-thread-\(thread.id)")
-                                } else {
-                                    BotRoomEventView(
-                                        event: event,
-                                        room: reader.room,
-                                        roster: roster,
-                                        avatars: avatars,
-                                        transcriptMediaCacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)"
-                                    )
-                                }
-                            }
+                            BotRoomRowView(
+                                event: row.event,
+                                showsSeparator: gapStarts.contains(row.event.seq),
+                                thread: threadID == nil
+                                    ? reader.threads.first(where: { $0.latest.seq == row.event.seq })
+                                    : nil,
+                                room: reader.room,
+                                roster: roster,
+                                avatars: avatars,
+                                cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
+                                onOpenThread: { selectedThread = $0 }
+                            )
                         }
                         if showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
                             Button("Load earlier") { loadEarlier(proxy: proxy) }
@@ -592,5 +588,44 @@ struct BotRoomInboxRow: View {
         }
         .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// One row of the room transcript.
+///
+/// Extracted from the screen's body: keeping the separator, the thread preview
+/// and the event view in one closure made the type checker give up on the whole
+/// body, and its timeout moved each time a neighbouring line changed.
+private struct BotRoomRowView: View {
+    let event: BotRoomEvent
+    let showsSeparator: Bool
+    let thread: BotRoomThread?
+    let room: BotGroupRoom
+    let roster: [BotProfile]
+    let avatars: [String: UIImage]
+    let cacheNamespace: String
+    let onOpenThread: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if showsSeparator, let timestamp = event.timestamp {
+                TranscriptTimeSeparator(timestamp: timestamp)
+            }
+            if let thread {
+                Button { onOpenThread(thread.id) } label: {
+                    BotRoomThreadPreview(thread: thread, room: room)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("room-thread-\(thread.id)")
+            } else {
+                BotRoomEventView(
+                    event: event,
+                    room: room,
+                    roster: roster,
+                    avatars: avatars,
+                    transcriptMediaCacheNamespace: cacheNamespace
+                )
+            }
+        }
     }
 }
