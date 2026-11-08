@@ -112,6 +112,31 @@ VStack(spacing: 16) {
 }
     }
 
+    /// The composer and its pill, kept out of `body`: together with the
+    /// transcript they were enough to exhaust the type checker.
+    @ViewBuilder
+    private var composerInset: some View {
+VStack(spacing: 10) {
+    if let pill {
+        BotComposerPillView(pill: pill, onReconnect: { revision = UUID() }, onUpdateSignIn: onUpdateSignIn,
+            onShowRequest: { showRequestID = UUID() }, onCancelUpload: {},
+            onDismissError: { if let text = pill.errorText { dismissedErrors.insert(text) } },
+            onRetrySend: { Task { await reader.send(retry: true, threadID: threadID) } })
+    }
+    if reader.showsComposer { BotRoomComposerView(reader: reader, threadID: threadID, roster: roster, avatars: avatars) }
+}
+.frame(maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: 16))
+    }
+
+    @ViewBuilder
+    private func scrollToBottomOverlay(proxy: ScrollViewProxy) -> some View {
+if !showsThreadOverview && !isNearBottom && !transcriptEvents.isEmpty {
+    ChatScrollToBottomButton(bottomPadding: 12) {
+        handleFollowEvent(.reset); proxy.scrollTo("room-bottom", anchor: .bottom)
+    }
+}
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             let start = window.start(in: transcriptEvents, keeping: pendingSequence, overview: showsThreadOverview)
@@ -161,26 +186,9 @@ VStack(spacing: 16) {
                 if !showsThreadOverview && pendingSequence == nil && followsLatest { proxy.scrollTo("room-bottom", anchor: .bottom) }
             }
             .onChange(of: showRequestID) { proxy.scrollTo("room-actions", anchor: .top) }
-            .overlay(alignment: .bottom) {
-                if !showsThreadOverview && !isNearBottom && !transcriptEvents.isEmpty {
-                    ChatScrollToBottomButton(bottomPadding: 12) {
-                        handleFollowEvent(.reset); proxy.scrollTo("room-bottom", anchor: .bottom)
-                    }
-                }
-            }
+            .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 10) {
-                if let pill {
-                    BotComposerPillView(pill: pill, onReconnect: { revision = UUID() }, onUpdateSignIn: onUpdateSignIn,
-                        onShowRequest: { showRequestID = UUID() }, onCancelUpload: {},
-                        onDismissError: { if let text = pill.errorText { dismissedErrors.insert(text) } },
-                        onRetrySend: { Task { await reader.send(retry: true, threadID: threadID) } })
-                }
-                if reader.showsComposer { BotRoomComposerView(reader: reader, threadID: threadID, roster: roster, avatars: avatars) }
-            }
-            .frame(maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: 16))
-        }
+            .safeAreaInset(edge: .bottom) { composerInset }
         .task(id: pill?.errorText) {
             guard let text = pill?.errorText else { return }
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
