@@ -29,6 +29,23 @@ import SwiftUI
         _pendingSequence = State(initialValue: sequence ?? (threadID == nil ? reader.initialSequence : nil))
     }
 
+    /// The visible window, its gap separators and the row wrappers are computed
+    /// outside `body`: the inline versions of these expressions were enough to
+    /// exhaust the type checker.
+    private var roomVisibleEvents: ArraySlice<BotRoomEvent> {
+        transcriptEvents[start...]
+    }
+
+    private var roomGapStarts: Set<Int> {
+        showsThreadOverview ? Set<Int>() : BotRoomEvent.gapStarts(in: roomVisibleEvents)
+    }
+
+    private var roomDisplayedRows: [BotRoomTranscriptRow] {
+        let visible = Array(roomVisibleEvents)
+        let ordered = showsThreadOverview ? Array(visible.reversed()) : visible
+        return ordered.map { BotRoomTranscriptRow(event: $0, isOverview: threadID == nil) }
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             let start = window.start(in: transcriptEvents, keeping: pendingSequence, overview: showsThreadOverview)
@@ -55,15 +72,10 @@ import SwiftUI
                         if threadID != nil, reader.threads.first(where: { $0.id == threadID })?.root == nil {
                             Text("Earlier messages not loaded").font(.caption).foregroundStyle(.secondary)
                         }
-                        let gapStarts = showsThreadOverview ? Set<Int>() : BotRoomEvent.gapStarts(in: transcriptEvents[start...])
-                        let rows = Array(transcriptEvents[start...])
-                        let ordered = showsThreadOverview ? Array(rows.reversed()) : rows
-                        let displayedRows = ordered.map {
-                            BotRoomTranscriptRow(event: $0, isOverview: threadID == nil)
-                        }
+                        let gapStarts = roomGapStarts
                         // The order and the row mapping are hoisted out: the one
                         // expression was enough to exhaust the type checker.
-                        ForEach(displayedRows) { row in
+                        ForEach(roomDisplayedRows) { row in
                             let event = row.event
                             // Thread identity survives new replies and activity reordering.
                             VStack(spacing: 16) {
