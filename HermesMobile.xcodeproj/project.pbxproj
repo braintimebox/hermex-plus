@@ -1049,7 +1049,7 @@
 		5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerPresentation.swift"; sourceTree = "<group>"; };
 		AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerGrowth.swift"; sourceTree = "<group>"; };
 		3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotPromptMode.swift"; sourceTree = "<group>"; };
-		515C15C9FAFF4CA2FA591669 /* BotPortedSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotPortedSupport.swift; sourceTree = "<group>"; };
+		515C15C9FAFF4CA2FA591669 /* BotPortedSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotPortedSupport.swift"; sourceTree = "<group>"; };
 		309A323E982E902F293FDD0B /* BotArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifact.swift"; sourceTree = "<group>"; };
 		72115E19D0200DF8FE236CEF /* BotArtifactMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifactMessageView.swift"; sourceTree = "<group>"; };
 		9DE7CF4F542B64898A24FE6D /* BotArtifactPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifactPreview.swift"; sourceTree = "<group>"; };
