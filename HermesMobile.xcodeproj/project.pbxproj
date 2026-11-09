@@ -468,7 +468,6 @@
 		9510188AE84E41D9BAE025FA /* BotPendingRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B077A87C9D846D7A9D27D7A /* BotPendingRequestTests.swift */; };
 		142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */; };
 		A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A496B07E0000000000000002 /* BotModeGateTests.swift */; };
-		A496B07E0000000000000003 /* BotConnectionVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A496B07E0000000000000004 /* BotConnectionVersionTests.swift */; };
 		A4730000000000000000A003 /* BotAvatarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4730000000000000000A004 /* BotAvatarTests.swift */; };
 		A4750000000000000000B005 /* BotActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4750000000000000000B006 /* BotActivityTests.swift */; };
 		785784DE20094BA78F432A9A /* BotChatComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */; };
@@ -1043,7 +1042,6 @@
 		0B077A87C9D846D7A9D27D7A /* BotPendingRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotPendingRequestTests.swift"; sourceTree = "<group>"; };
 		EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotDraftTests.swift"; sourceTree = "<group>"; };
 		A496B07E0000000000000002 /* BotModeGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotModeGateTests.swift; sourceTree = "<group>"; };
-		A496B07E0000000000000004 /* BotConnectionVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotConnectionVersionTests.swift; sourceTree = "<group>"; };
 		A4730000000000000000A004 /* BotAvatarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAvatarTests.swift; sourceTree = "<group>"; };
 		A4750000000000000000B006 /* BotActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotActivityTests.swift; sourceTree = "<group>"; };
 		5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotChatComposerView.swift"; sourceTree = "<group>"; };
@@ -1225,7 +1223,6 @@
 			children = (
 				EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */,
 				A496B07E0000000000000002 /* BotModeGateTests.swift */,
-				A496B07E0000000000000004 /* BotConnectionVersionTests.swift */,
 				A4730000000000000000A004 /* BotAvatarTests.swift */,
 				A4750000000000000000B006 /* BotActivityTests.swift */,
 				0B077A87C9D846D7A9D27D76 /* BotConversationTests.swift */,
@@ -2525,7 +2522,6 @@
 			files = (
 				142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */,
 				A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */,
-				A496B07E0000000000000003 /* BotConnectionVersionTests.swift in Sources */,
 				A4730000000000000000A003 /* BotAvatarTests.swift in Sources */,
 				A4750000000000000000B005 /* BotActivityTests.swift in Sources */,
 				9510188AE84E41D9BAE025F1 /* BotConversationTests.swift in Sources */,

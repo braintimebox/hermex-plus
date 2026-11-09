@@ -18,6 +18,12 @@ connect. This release brings the feature over whole.
 
 ### Removed with the skeleton
 
+- `BotConnectionVersionTests` described the skeleton's tested-version note
+  (`testedHermesVersion`, `untestedVersionNote`); the 1.9 line reports the
+  host's version on the connection instead, so the file went with the skeleton.
+- Three receipt assertions in `BotConversationTests` read `promptReceipt`,
+  which the 1.9 conversation does not publish; the draft-clearing and call-count
+  assertions they sat beside are kept.
 - `BotChatPresentationTests` and `BotClientTests` described the skeleton's API:
   `isFocused`/`onResolveHeldMessage` on its chat screen, `mayDecline` on its
   conversation, a two-argument socket factory. That API is gone with the
