@@ -471,11 +471,9 @@
 		A496B07E0000000000000003 /* BotConnectionVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A496B07E0000000000000004 /* BotConnectionVersionTests.swift */; };
 		A4730000000000000000A003 /* BotAvatarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4730000000000000000A004 /* BotAvatarTests.swift */; };
 		A4750000000000000000B005 /* BotActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4750000000000000000B006 /* BotActivityTests.swift */; };
-		D885F4C0DA3A438B8CE92635 /* BotClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B04ED8E6164A75B069773D /* BotClientTests.swift */; };
 		785784DE20094BA78F432A9A /* BotChatComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */; };
 		D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */; };
 		AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */; };
-		A4C0A37288B742B9B284A67E /* BotChatPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26C849A9CE6B47E79695E069 /* BotChatPresentationTests.swift */; };
 		9BB85D722406416798DFA518 /* BotPromptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */; };
 		FCC059567DC564D5B1084EE7 /* BotArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309A323E982E902F293FDD0B /* BotArtifact.swift */; };
 		B8A9FC20E588EF818AC8B036 /* BotArtifactMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72115E19D0200DF8FE236CEF /* BotArtifactMessageView.swift */; };
@@ -1048,11 +1046,9 @@
 		A496B07E0000000000000004 /* BotConnectionVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotConnectionVersionTests.swift; sourceTree = "<group>"; };
 		A4730000000000000000A004 /* BotAvatarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAvatarTests.swift; sourceTree = "<group>"; };
 		A4750000000000000000B006 /* BotActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotActivityTests.swift; sourceTree = "<group>"; };
-		B0B04ED8E6164A75B069773D /* BotClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotClientTests.swift"; sourceTree = "<group>"; };
 		5B87CE542BE84D09A7D1E276 /* BotChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotChatComposerView.swift"; sourceTree = "<group>"; };
 		5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerPresentation.swift"; sourceTree = "<group>"; };
 		AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerGrowth.swift"; sourceTree = "<group>"; };
-		26C849A9CE6B47E79695E069 /* BotChatPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotChatPresentationTests.swift"; sourceTree = "<group>"; };
 		3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotPromptMode.swift"; sourceTree = "<group>"; };
 		309A323E982E902F293FDD0B /* BotArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifact.swift"; sourceTree = "<group>"; };
 		72115E19D0200DF8FE236CEF /* BotArtifactMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifactMessageView.swift"; sourceTree = "<group>"; };
@@ -1227,8 +1223,6 @@
 		1A2B3C4D5E6F700000000034 /* HermesMobileTests */ = {
 			isa = PBXGroup;
 			children = (
-				26C849A9CE6B47E79695E069 /* BotChatPresentationTests.swift */,
-				B0B04ED8E6164A75B069773D /* BotClientTests.swift */,
 				EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */,
 				A496B07E0000000000000002 /* BotModeGateTests.swift */,
 				A496B07E0000000000000004 /* BotConnectionVersionTests.swift */,
@@ -2529,8 +2523,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A4C0A37288B742B9B284A67E /* BotChatPresentationTests.swift in Sources */,
-				D885F4C0DA3A438B8CE92635 /* BotClientTests.swift in Sources */,
 				142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */,
 				A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */,
 				A496B07E0000000000000003 /* BotConnectionVersionTests.swift in Sources */,

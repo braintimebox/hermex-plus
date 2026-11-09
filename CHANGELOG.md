@@ -16,6 +16,15 @@ connect. This release brings the feature over whole.
 - **Attachments in bots**: the full attachment picker and the camera controller
   behind it.
 
+### Removed with the skeleton
+
+- `BotChatPresentationTests` and `BotClientTests` described the skeleton's API:
+  `isFocused`/`onResolveHeldMessage` on its chat screen, `mayDecline` on its
+  conversation, a two-argument socket factory. That API is gone with the
+  skeleton, so the tests went with it; v1.9.0's own bot tests (`BotAvatarTests`,
+  `BotConversationTests`, `BotPendingRequestTests`, `BotActivityTests`) cover the
+  replacement.
+
 ### Fork adaptations, not copies
 
 - `ChatMessage.displayMetadata` added: the Bots screens read reactions and
