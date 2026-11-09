@@ -140,6 +140,24 @@ enum ChatHaptics {
         }
     }
 
+    /// A Bot Chat or room action the host confirmed. The bot model publishes
+    /// `BotFeedback` with a growing id so a repeated action still reaches the
+    /// view; this maps each event onto the feel the chat screens use.
+    static func botFeedback(_ feedback: BotFeedback, isEnabled: Bool, performer: Performer? = nil) {
+        let haptic: ChatHapticFeedback
+        switch feedback.event {
+        case .sent, .answered:
+            haptic = .lightImpact
+        case .approved:
+            haptic = .success
+        case .stopped:
+            haptic = .warning
+        case .turnCompleted:
+            haptic = .success
+        }
+        emit(haptic, isEnabled: isEnabled, performer: performer)
+    }
+
     private static func emit(_ feedback: ChatHapticFeedback, isEnabled: Bool, performer: Performer?) {
         guard isEnabled else { return }
         (performer ?? Self.perform)(feedback)
