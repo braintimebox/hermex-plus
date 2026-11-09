@@ -76,30 +76,8 @@ import SwiftUI
                             LoadOlderMessagesButton(isLoading: false) { loadEarlier(proxy: proxy) }
                         }
                         ForEach(model.messages[times.start...]) { message in
-                            let fold = folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys)
-                            // Only folded rows animate in and out, so settling stays instant.
-                            let transition = fold == nil ? AnyTransition.identity
-                                : ChatMotion.disclosureTransition(reduceMotion: reduceMotion)
-                            if let host = fold?.fold {
-                                TranscriptTurnFoldRowView(fold: host, isExpanded: fold?.isExpanded == true) {
-                                    toggleTurnFold(host.turnKey)
-                                }
-                            }
-                            // Folded-away work is never built, so a hidden reply holds
-                            // no selection document.
-                            if fold?.hidesActivity != true {
-                                settledActivity(anchoredTo: message.id).transition(transition)
-                            }
-                            // A pause stays dated even when the reply after it folds.
-                            if times.gapStarts.contains(message.id), let timestamp = message.timestamp {
-                                TranscriptTimeSeparator(timestamp: timestamp)
-                            }
-                            if fold?.hidesBubble != true {
-                                BotArtifactMessageView(message: message, model: model,
-                                                       footerTime: times.footerTimes[message.id])
-                                    .id(message.id)
-                                    .transition(transition)
-                            }
+                            messageRow(message, times: times,
+                                       fold: folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys))
                         }
                         settledActivity(anchoredTo: nil)
                         // The live turn reads like a settled one: prompt, work, then reply.
@@ -360,6 +338,35 @@ import SwiftUI
     private func answerConnection(_ answer: BotConnectionOperation.Answer) {
         guard let action = model.prepareAnswer() else { return }
         Task { await model.respondToConnection(action, answer) }
+    }
+
+    /// One transcript row: its fold header, the work it may hide, a pause
+    /// separator and the bubble itself. Extracted from the scroll body, whose
+    /// closure the type checker could not see past.
+    @ViewBuilder
+    private func messageRow(_ message: ChatMessage,
+                            times: BotTranscriptTimes,
+                            fold: TranscriptTurnFoldRowState?) -> some View {
+        let transition: AnyTransition = fold == nil
+            ? AnyTransition.identity
+            : ChatMotion.disclosureTransition(reduceMotion: reduceMotion)
+        if let host = fold?.fold {
+            TranscriptTurnFoldRowView(fold: host, isExpanded: fold?.isExpanded == true) {
+                toggleTurnFold(host.turnKey)
+            }
+        }
+        if fold?.hidesActivity != true {
+            settledActivity(anchoredTo: message.id).transition(transition)
+        }
+        if times.gapStarts.contains(message.id), let timestamp = message.timestamp {
+            TranscriptTimeSeparator(timestamp: timestamp)
+        }
+        if fold?.hidesBubble != true {
+            BotArtifactMessageView(message: message, model: model,
+                                   footerTime: times.footerTimes[message.id])
+                .id(message.id)
+                .transition(transition)
+        }
     }
 
     private func settledActivity(anchoredTo anchorID: String?) -> some View {

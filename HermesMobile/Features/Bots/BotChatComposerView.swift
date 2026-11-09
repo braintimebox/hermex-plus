@@ -138,34 +138,44 @@ struct BotChatComposerView: View {
         return String(localized: "Hermes Desktop is handling this")
     }
 
+    /// The attachment, settings and voice row under the editor.
+    @ViewBuilder
+    private var toolbarRow: some View {
+        if showsToolbar {
+            HStack(alignment: .center, spacing: 8) {
+                ComposerToolbarScroller {
+                    plusMenu
+                    BotComposerSettings(settings: model.chatControls, preparePresentation: {
+                        settingsPresented = true; isFocused = false
+                    }, dismissPresentation: { settingsPresented = false })
+                    voiceControlButton
+                }
+                promptButtons
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .background(
+                Color(.systemBackground)
+                    .padding(.top, -10).padding(.bottom, -12)
+                    .ignoresSafeArea(edges: .bottom)
+            )
+            .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
+        }
+    }
+
+    /// The composer's editor and the row that appears when it is focused.
+    @ViewBuilder
+    private var surfaceStack: some View {
+    VStack(spacing: 0) {
+        if isFocused, model.mayEditDraft { autocomplete }
+        composerSurface.padding(.horizontal, 16)
+        toolbarRow
+    }
+    }
+
     private var composerContainer: some View {
         AdaptiveGlassContainer(spacing: 6) {
-            VStack(spacing: 0) {
-                if isFocused, model.mayEditDraft { autocomplete }
-
-                composerSurface.padding(.horizontal, 16)
-
-                if showsToolbar {
-                    HStack(alignment: .center, spacing: 8) {
-                        ComposerToolbarScroller {
-                            plusMenu
-                            BotComposerSettings(settings: model.chatControls, preparePresentation: {
-                                settingsPresented = true; isFocused = false
-                            }, dismissPresentation: { settingsPresented = false })
-                            voiceControlButton
-                        }
-                        promptButtons
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
-                    .background(
-                        Color(.systemBackground)
-                            .padding(.top, -10).padding(.bottom, -12)
-                            .ignoresSafeArea(edges: .bottom)
-                    )
-                    .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
-                }
-            }
+                surfaceStack
             // Focus flips arrive from UIKit outside any withAnimation, so the
             // pill-to-card morph and the row's insertion animate from here,
             // exactly as the Sessions composer does.
@@ -320,7 +330,9 @@ struct BotChatComposerView: View {
                     isDisabled: !model.mayEditDraft, isCollapsed: !isExpanded,
                     isKeyboardSendEnabled: canSend, verticalPadding: 12,
                     chipSkills: model.slashSkills, chipFilePaths: model.fileChipPaths,
-                    chipBots: model.mentions.chipReferences(avatars: mentionAvatars), quotes: model.quotes,
+                    chipBots: model.mentions.chipReferences(avatars: mentionAvatars).values
+                        .sorted { $0.profile.id < $1.profile.id },
+                    quotes: model.quotes,
                     onKeyboardSend: send,
                     onPasteFileProviders: { BotAttachmentPaste.providers($0, model: model) },
                     onPasteFileURLs: { BotAttachmentPaste.files($0, model: model) },
