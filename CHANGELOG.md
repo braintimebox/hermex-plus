@@ -18,6 +18,11 @@ connect. This release brings the feature over whole.
 
 ### Removed with the skeleton
 
+- Thirteen tests in `BotPendingRequestTests` covered the skeleton's streamed
+  desktop requests (`BotStreamRequest`, `streamRequest`, `mayDecline`,
+  `declineDesktopTask`). The 1.9 line has no streamed-request surface, so those
+  assertions could not describe it; the file's approval, clarify and credential
+  coverage remains.
 - `BotConnectionVersionTests` described the skeleton's tested-version note
   (`testedHermesVersion`, `untestedVersionNote`); the 1.9 line reports the
   host's version on the connection instead, so the file went with the skeleton.
