@@ -7006,6 +7006,16 @@ struct TranscriptMessage: Identifiable, Equatable {
         self.init(loadedIndex: loadedIndex, renderID: renderID, anchorID: anchorID,
                   message: message, id: renderID)
     }
+
+    /// The transcript builds `id` from stable, position-independent sources and
+    /// passes it in; `renderID` stays the technical scroll target.
+    init(loadedIndex: Int, renderID: String, anchorID: String, message: ChatMessage, id: String) {
+        self.loadedIndex = loadedIndex
+        self.renderID = renderID
+        self.anchorID = anchorID
+        self.message = message
+        self.id = id
+    }
 }
 
 /// Display model for the synthesized "Context compaction · Reference only" card.
