@@ -176,8 +176,9 @@ struct BotChatComposerView: View {
     private var composerContainer: some View {
         composerChrome
         .onChange(of: AppLock.shared.isLocked) { _, locked in
-            if locked { voiceInput.suspend() }
-            else if scenePhase == .active { voiceInput.resume() }
+            // The fork's recorder has no pause/resume pair: a locked app stops
+            // listening and keeps the transcript, and the user starts again.
+            if locked { voiceInput.stopKeepingTranscript() }
         }
         // Ask Hermex lands the passage here, so the keyboard should already be
         // up for whatever the user wants to ask about it.
@@ -257,8 +258,7 @@ struct BotChatComposerView: View {
             voiceInput.stopBeforeSubmittingDraft()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active { voiceInput.suspend() }
-            else { voiceInput.resume() }
+            if newPhase != .active { voiceInput.stopKeepingTranscript() }
         }
     }
 
