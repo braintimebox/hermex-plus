@@ -393,7 +393,6 @@ struct BotChatComposerView: View {
             isDisabled: isVoiceInputDisabled,
             color: Color(.secondaryLabel),
             isRecordingVoiceNote: false,
-            supportsVoiceNotes: false,
             onTap: toggleVoiceInput,
             onRecordingStart: {},
             onRecordingDragChanged: { _ in },

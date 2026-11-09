@@ -474,6 +474,7 @@
 		D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */; };
 		AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */; };
 		9BB85D722406416798DFA518 /* BotPromptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */; };
+		DD42E8A4C48D3E74071B6C1F /* BotPortedSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515C15C9FAFF4CA2FA591669 /* BotPortedSupport.swift */; };
 		FCC059567DC564D5B1084EE7 /* BotArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309A323E982E902F293FDD0B /* BotArtifact.swift */; };
 		B8A9FC20E588EF818AC8B036 /* BotArtifactMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72115E19D0200DF8FE236CEF /* BotArtifactMessageView.swift */; };
 		0DF0C2C21BF74849331A329C /* BotArtifactPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DE7CF4F542B64898A24FE6D /* BotArtifactPreview.swift */; };
@@ -1048,6 +1049,7 @@
 		5B2FA0E3DFE844F8B3A710FD /* ChatComposerPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerPresentation.swift"; sourceTree = "<group>"; };
 		AA11CC00DEAD40008EED0002 /* ChatComposerGrowth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatComposerGrowth.swift"; sourceTree = "<group>"; };
 		3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotPromptMode.swift"; sourceTree = "<group>"; };
+		515C15C9FAFF4CA2FA591669 /* BotPortedSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotPortedSupport.swift; sourceTree = "<group>"; };
 		309A323E982E902F293FDD0B /* BotArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifact.swift"; sourceTree = "<group>"; };
 		72115E19D0200DF8FE236CEF /* BotArtifactMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifactMessageView.swift"; sourceTree = "<group>"; };
 		9DE7CF4F542B64898A24FE6D /* BotArtifactPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotArtifactPreview.swift"; sourceTree = "<group>"; };
@@ -1466,6 +1468,7 @@
 				9FE221A56F264309AF71E18B /* BotsInboxView.swift */,
 				9D93D8EC41FE4FBABD1746AD /* BotConversation.swift */,
 				3C75DCD3DB974E27A3CB405C /* BotPromptMode.swift */,
+				515C15C9FAFF4CA2FA591669 /* BotPortedSupport.swift */,
 				40877A8534C94AAF97EA1C7C /* BotConnectionView.swift */,
 				0A712D3AE91645C9B8C27745 /* BotConnection.swift */,
 				A4730000000000000000A002 /* BotAvatarStore.swift */,
@@ -2156,6 +2159,7 @@
 				7EF4120B486B4243AF54FCAF /* BotsInboxView.swift in Sources */,
 				013E4253ACC0484FA59DC45F /* BotConversation.swift in Sources */,
 				9BB85D722406416798DFA518 /* BotPromptMode.swift in Sources */,
+				DD42E8A4C48D3E74071B6C1F /* BotPortedSupport.swift in Sources */,
 				C2A87F2CDEB941BB825EABA5 /* BotConnectionView.swift in Sources */,
 				13FED0A00B8A4C06B7F30BF0 /* BotConnection.swift in Sources */,
 				A4730000000000000000A001 /* BotAvatarStore.swift in Sources */,

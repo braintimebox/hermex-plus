@@ -206,9 +206,9 @@ enum BotTranscriptProjection {
                     content: role == "user" && !isDelegationCompletion ? BotMentions.displayText(userText) : text,
                     timestamp: row["timestamp"].number,
                     messageId: id,
-                    displayKind: steerText != nil ? ChatMessage.steerDisplayKind : displayKind,
+                    rowID: row["row_id"].integer,
                     displayMetadata: row["display_metadata"].argumentDictionary,
-                    rowID: row["row_id"].integer
+                    displayKind: steerText != nil ? ChatMessage.steerDisplayKind : displayKind
                 ))
             default:
                 continue

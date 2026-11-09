@@ -6999,6 +6999,13 @@ struct TranscriptMessage: Identifiable, Equatable {
     /// NEVER positional: `renderID` ("transcript:<absoluteIndex>") stays a
     /// TECHNICAL scroll/compression target only.
     let id: String
+
+    /// Callers that have no separate identity use the render id: the Bots
+    /// transcript builds rows from a stable server id in both places.
+    init(loadedIndex: Int, renderID: String, anchorID: String, message: ChatMessage) {
+        self.init(loadedIndex: loadedIndex, renderID: renderID, anchorID: anchorID,
+                  message: message, id: renderID)
+    }
 }
 
 /// Display model for the synthesized "Context compaction · Reference only" card.

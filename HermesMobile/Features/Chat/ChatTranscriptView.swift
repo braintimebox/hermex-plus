@@ -1184,7 +1184,8 @@ struct ChatScrollToBottomButton: View {
     }
 }
 
-private struct LoadOlderMessagesButton: View {
+/// Shared with the Bots transcript, which pages the same way.
+struct LoadOlderMessagesButton: View {
     let isLoading: Bool
     let onTap: () -> Void
 

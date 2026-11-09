@@ -91,7 +91,7 @@ import OSLog
     private(set) var fileChipPaths: Set<String> = []
     /// The `@` panel's rows, owned here rather than by the composer so they
     /// outlive one open panel and die with the conversation.
-    @ObservationIgnored let filePathSearch = ComposerFilePathSearch()
+    @ObservationIgnored let filePathSearch = BotFilePathSearchController()
     /// Passages the user sent here with Ask Hermex. Separate from `draft` so a
     /// pasted paragraph never turns into a chip and each one is removable.
     private(set) var quotes: [ComposerQuote] = []

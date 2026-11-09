@@ -27,6 +27,10 @@ struct ComposerTextInputView: View {
     /// The workspace files picked in this chat, whose `@path` references the
     /// editor draws as chips.
     let chipFilePaths: Set<String>
+    /// Bots mentioned with `@` in a room. Kept for the composer's contract; the
+    /// editor draws bot chips through its skill/file chip cache, so this is not
+    /// rendered yet.
+    var chipBots: [ComposerBotReference] = []
     let quotes: [ComposerQuote]
     let onKeyboardSend: () -> Void
     let onPasteFileProviders: ([NSItemProvider]) -> Void
@@ -37,6 +41,9 @@ struct ComposerTextInputView: View {
     let onTapChip: (ComposerChipToken) -> Void
     let onTapQuote: (ComposerQuote) -> Void
     let onRemoveQuote: (UUID) -> Void
+    /// What the up-arrow puts back: the last prompt this chat sent, as typed.
+    /// Nil for a composer that offers no recall.
+    var recallLastSentText: (() -> String?)? = nil
 
     var placeholder = String(localized: "Ask anything... /commands")
     /// Text-only clients reject file/image paste and drop before invoking callbacks.
