@@ -36,6 +36,24 @@ connect. This release brings the feature over whole.
   `BotConversationTests`, `BotPendingRequestTests`, `BotActivityTests`) cover the
   replacement.
 
+### What this build does and does not wire up
+
+- **Wired:** the Bots inbox, creation, chat, rooms, mentions, artifacts and their
+  dashboard transport; the chat's local Live Activities through
+  `AgentLiveActivityManager`.
+- **Present but not wired:** the push stack (pairing, registrar, relay, router,
+  preview) compiles, but no application delegate adopts `PushAppDelegate` and no
+  settings screen presents `HermexPushSectionView`. Face ID app lock
+  (`AppLock`, `AppLockWindow`) compiles and `AppLock.shared.isLocked` is read by
+  the composer, but nothing presents the lock window. Both arrive with a signed
+  build: an unsigned IPA cannot carry `aps-environment` at all.
+- **Bundle gaps still open:** `HermesAPSEnvironment` and
+  `HermesKeychainAccessGroup` are read by the push code and are absent from
+  `Info.plist`; `UIBackgroundModes` lists `audio` only, with no
+  `remote-notification`; the ATS exception domain `100.64.0.0/10` is not a valid
+  ATS key (CIDR is unsupported), and `NSAllowsLocalNetworking` is unset, so
+  plain-HTTP access to a local bot host needs device verification.
+
 ### Fork adaptations, not copies
 
 - `ChatMessage.displayMetadata` added: the Bots screens read reactions and
