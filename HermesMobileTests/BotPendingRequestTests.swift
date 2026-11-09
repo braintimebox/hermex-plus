@@ -538,6 +538,8 @@ import XCTest
 
     /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
     /// so these non-throwing async tests stay readable.
+    private let server = URL(string: "https://webui.example")!
+
     private func connection(_ address: String = "http://hermes.local:9120") -> BotConnection {
         BotConnection(id: UUID(), name: "Mac", address: URL(string: address)!, username: "user", password: "fixture")
     }
