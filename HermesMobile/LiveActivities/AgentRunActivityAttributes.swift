@@ -687,3 +687,19 @@ enum AgentRunStaleBotPresentation {
         presentation(state: state, isBot: isBot)?.isPendingInput == true
     }
 }
+
+/// The elapsed label the Live Activity shows next to a running turn: minutes and
+/// seconds below an hour, an unpadded hour above it, and zero for a clock that
+/// has gone backwards.
+enum AgentRunElapsedTimeFormatter {
+    static func label(startedAt: Date, updatedAt: Date) -> String {
+        let elapsed = max(0, Int(updatedAt.timeIntervalSince(startedAt)))
+        let hours = elapsed / 3600
+        let minutes = (elapsed % 3600) / 60
+        let seconds = elapsed % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}

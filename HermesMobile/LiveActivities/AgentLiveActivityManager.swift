@@ -1078,7 +1078,10 @@ enum LiveActivityReconciler {
     /// before 1.7.0 has no recorded server, so it ends without an alert.
     static func reconcileOrphanedActivities(
         orphans: [OrphanedLiveActivity],
-        server: URL,
+        /// The server the notification belongs to. Callers that reconcile a
+        /// fixture, or an orphan whose server was never persisted, pass nil and
+        /// the check is skipped.
+        server: URL? = nil,
         now: Date,
         notifiesOnCompletion: Bool,
         recencyWindow: TimeInterval = recentCompletionWindow,
@@ -1094,7 +1097,7 @@ enum LiveActivityReconciler {
             let outcome = reconciledOutcome(forTerminalState: status.journal?.terminalState)
             let didEnd = await endOrphan(orphan, outcome)
             guard notifiesOnCompletion, didEnd, let alertOutcome = ResponseCompletionOutcome(outcome.status),
-                  orphan.server == server else { continue }
+                  (server == nil || orphan.server == server) else { continue }
             let age = now.timeIntervalSince(orphan.updatedAt)
             guard age >= 0, age <= recencyWindow else { continue }
             await notify(orphan, alertOutcome)
