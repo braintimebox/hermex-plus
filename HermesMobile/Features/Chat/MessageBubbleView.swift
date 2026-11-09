@@ -49,7 +49,7 @@ struct MessageBubbleView: View {
         loadAttachmentData: ((String) async -> Data?)? = nil,
         loadTranscriptMediaImage: ((TranscriptMediaReference) async -> Data?)? = nil,
         loadTranscriptMediaData: ((TranscriptMediaReference) async -> Data?)? = nil,
-        transcriptMediaCacheNamespace: String,
+        transcriptMediaCacheNamespace: String = "default",
         localAttachmentPreviews: [String: Data]? = nil,
         onPreviewAttachment: ((MessageAttachment, Data?) -> Void)? = nil,
         onPreviewTranscriptMedia: ((TranscriptMediaReference) -> Void)? = nil,
