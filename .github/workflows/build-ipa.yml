@@ -62,10 +62,9 @@ on:
 # plus time spent queued behind the previous run.
 concurrency:
   group: build-ipa-${{ github.ref }}
-  # A feature branch only ever wants its newest build: superseded pushes are pure
-  # queue. main keeps the strict setting, because a release build must not be
-  # cancelled by a follow-up commit.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # Serialised, never cancelled: a cancelled run says nothing about the code, and
+  # cancelling in-flight jobs was observed to kill the surviving run's jobs too.
+  cancel-in-progress: false
 
 jobs:
   # Fast fail: release invariants before spending a macOS runner.
