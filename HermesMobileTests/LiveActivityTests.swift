@@ -1161,7 +1161,7 @@ final class LiveActivityTests: XCTestCase {
         let manager = AgentLiveActivityManager()
 
         // A live SSE connection claims the stream so the reconciler leaves it alone.
-        manager.start(sessionID: "session-1", sessionTitle: "Title", streamID: "stream-abc")
+        manager.start(sessionID: "session-1", server: URL(string: "https://hermes.test")!, sessionTitle: "Title", streamID: "stream-abc")
         XCTAssertEqual(manager.activeConnectedStreamID, "stream-abc")
 
         // Suspension / transport trouble releases the claim — the suspended stream is
@@ -1170,7 +1170,7 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertNil(manager.activeConnectedStreamID)
 
         // Reconnecting the same stream re-claims it.
-        manager.start(sessionID: "session-1", sessionTitle: "Title", streamID: "stream-abc")
+        manager.start(sessionID: "session-1", server: URL(string: "https://hermes.test")!, sessionTitle: "Title", streamID: "stream-abc")
         XCTAssertEqual(manager.activeConnectedStreamID, "stream-abc")
 
         // Finalizing the run releases the claim.
@@ -1189,6 +1189,7 @@ final class LiveActivityTests: XCTestCase {
 
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: discoveredAt
@@ -1197,6 +1198,7 @@ final class LiveActivityTests: XCTestCase {
 
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: serverStart
@@ -1206,6 +1208,7 @@ final class LiveActivityTests: XCTestCase {
         // A later stamp for the same run never pushes the widget timer forward.
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: discoveredAt.addingTimeInterval(30)

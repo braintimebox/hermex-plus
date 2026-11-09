@@ -47,17 +47,19 @@ struct OrphanedLiveActivity: Equatable {
     let updatedAt: Date
     /// The server the run belongs to; nil for an activity a build before 1.7.0 persisted.
     let server: URL?
-}
 
-extension OrphanedLiveActivity {
-    /// An activity known only by its identity: the reconciliation paths that
-    /// build one from a persisted record older than 1.7.0 have no title or
-    /// server to supply, and neither changes which orphan it is.
-    init(streamID: String, sessionID: String, updatedAt: Date) {
-        self.init(streamID: streamID, sessionID: sessionID, sessionTitle: "",
-                  updatedAt: updatedAt, server: nil)
+    /// Identity and title arrive from callers that have them; the server is known
+    /// only when the record was written by 1.7.0 or later, so it defaults to nil
+    /// and an older orphan still reconciles.
+    init(streamID: String, sessionID: String, sessionTitle: String = "", updatedAt: Date, server: URL? = nil) {
+        self.streamID = streamID
+        self.sessionID = sessionID
+        self.sessionTitle = sessionTitle
+        self.updatedAt = updatedAt
+        self.server = server
     }
 }
+
 
 /// Where the relay delivers an activity's pushes: the paired server, and the agent
 /// session ID the plugin reports progress under.
@@ -146,6 +148,12 @@ protocol AgentLiveActivityManaging: AnyObject {
 }
 
 extension AgentLiveActivityManaging {
+    /// A caller with no server-seeded start: the widget timer starts now.
+    func start(sessionID: String, server: URL, sessionTitle: String, streamID: String?) {
+        start(sessionID: sessionID, server: server, sessionTitle: sessionTitle,
+              streamID: streamID, startedAt: Date())
+    }
+
     // Defaults so webui-only test spies don't have to care about bots.
     func startBot(_ bot: AgentRunActivityBot, title: String, turn: String, startedAt: Date) {}
     var drivenSessionID: String? { nil }
