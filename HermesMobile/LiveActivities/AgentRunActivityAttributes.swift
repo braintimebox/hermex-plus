@@ -476,6 +476,19 @@ enum AgentRunActivityStateReducer {
         )
     }
 
+    /// Appends one streamed token to the excerpt the widget is showing. Used by
+    /// callers that receive deltas rather than whole snapshots.
+    static func appendingToken(
+        _ token: String,
+        to state: AgentRunActivityAttributes.ContentState,
+        now: Date = Date()
+    ) -> AgentRunActivityAttributes.ContentState {
+        var next = state
+        next.responseExcerpt = state.responseExcerpt + token
+        next.updatedAt = now
+        return next
+    }
+
     static func settingInterimAssistant(
         _ text: String,
         on state: AgentRunActivityAttributes.ContentState,
