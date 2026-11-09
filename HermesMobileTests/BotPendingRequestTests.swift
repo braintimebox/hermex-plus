@@ -529,4 +529,22 @@ import XCTest
         XCTAssertEqual(model.turn, .needsAttention)
         model.suspend()
     }
+    private func blocked(on wire: BotFixtureWire) async -> BotConversation {
+        wire.running = true
+        let model = make(wire)
+        await model.recover()
+        return model
+    }
+
+    /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
+    /// so these non-throwing async tests stay readable.
+    private func action(_ model: BotConversation,
+                        file: StaticString = #filePath, line: UInt = #line) -> BotConversation.AnswerAction {
+        guard let action = model.prepareAnswer() else {
+            XCTFail("Expected an answerable request", file: file, line: line)
+            return BotConversation.AnswerAction(generation: -1, runtime: "", requestID: "")
+        }
+        return action
+    }
+
 }

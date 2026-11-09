@@ -773,3 +773,9 @@ actor BotFailingDraftClear: ChatDraftPersisting {
         values = drafts
     }
 }
+
+private extension BotPromptMode {
+    /// The wire method this mode dispatches, for filtering recorded calls.
+    /// Built from the real dispatcher so the name can never drift from it.
+    var method: String { call(runtime: "runtime", text: "").method }
+}
