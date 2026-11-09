@@ -538,6 +538,19 @@ import XCTest
 
     /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
     /// so these non-throwing async tests stay readable.
+    private func connection(_ address: String = "http://hermes.local:9120") -> BotConnection {
+        BotConnection(id: UUID(), name: "Mac", address: URL(string: address)!, username: "user", password: "fixture")
+    }
+    private var profile: BotProfile { BotProfile(.object(["name": .string("inbox-triage")]))! }
+
+    private func make(_ wire: BotFixtureWire, connection override: BotConnection? = nil) -> BotConversation {
+        BotConversation(server: server, connection: override ?? connection(), profile: profile, wire: wire,
+                        drafts: ChatDraftStore(persistence: BotMemoryDrafts(), debounceDuration: .seconds(60)))
+    }
+
+    /// A connected conversation whose bot is mid-turn, so a request can block it.
+    /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
+    /// so these non-throwing async tests stay readable.
     private func action(_ model: BotConversation,
                         file: StaticString = #filePath, line: UInt = #line) -> BotConversation.AnswerAction {
         guard let action = model.prepareAnswer() else {
