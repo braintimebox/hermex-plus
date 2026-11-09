@@ -300,7 +300,7 @@ import SwiftUI
         .onChange(of: model.turn) { workingBeat.observe(model.turn, at: Date()) }
         .onDisappear { stopAction = nil; model.suspend() }
         .onChange(of: model.feedback) { _, feedback in
-            if let feedback { ChatHaptics.botFeedback(feedback.event, isEnabled: isHapticsEnabled) }
+            if let feedback { ChatHaptics.botFeedback(feedback, isEnabled: isHapticsEnabled) }
         }
         .pushPresence(model.pushPresence)
         .onChange(of: model.linkedRootIsStale) {

@@ -253,7 +253,7 @@ ToolbarItem(placement: .topBarLeading) {
         .onDisappear { visible = false; reader.leave(owner: owner, preservingLoadedHistory: true) }
         .onChange(of: reader.feedback) {
             if let feedback = reader.feedback {
-                ChatHaptics.botFeedback(feedback.event, isEnabled: isHapticsEnabled)
+                ChatHaptics.botFeedback(feedback, isEnabled: isHapticsEnabled)
             }
         }
         .transcriptLinks()
