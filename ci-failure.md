@@ -1,8 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42528096954
-Commit: b57f9103999253bf65075b07ead580da6532dd7b
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/42566117256
+Commit: 9098f922a8b623881bb254a334042efa0397c212
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:256:29: error: type 'ChatHaptics' has no member 'botFeedback'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomView.swift:256:50: error: cannot convert value of type 'BotFeedback.Event' to expected argument type 'BotFeedback'
 ```
