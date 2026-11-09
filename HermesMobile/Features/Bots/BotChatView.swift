@@ -57,249 +57,269 @@ import SwiftUI
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    // Eager over a bounded window, like the Sessions transcript: a
-                    // settled reply is a hosted selection document, and a lazy stack
-                    // places rows it has not built from an estimate, which strands
-                    // the scroll under load (issue #553).
-                    let livePrompt = model.liveMessages.first(where: { $0.role == "user" })
-                    let times = BotTranscriptTimes(
-                        messages: model.messages, start: window.start(count: model.messages.count),
-                        livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
-                    )
-                    let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
-                    VStack(alignment: .leading, spacing: 8) {
-                        if window.hasEarlier(count: model.messages.count) {
-                            // The window widens in place, so there is no loading state.
-                            LoadOlderMessagesButton(isLoading: false) { loadEarlier(proxy: proxy) }
-                        }
-                        ForEach(model.messages[times.start...]) { message in
-                            messageRow(message, times: times,
-                                       fold: folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys))
-                        }
-                        settledActivity(anchoredTo: nil)
-                        // The live turn reads like a settled one: prompt, work, then reply.
-                        if let prompt = livePrompt {
-                            if let startedAt = times.livePromptSeparator {
-                                TranscriptTimeSeparator(timestamp: startedAt)
-                            }
-                            BotArtifactMessageView(message: prompt, model: model)
-                        }
-                        if model.liveActivity.hasTurnWork {
-                            BotActivityBlocksView(
-                                id: "bot-live", reasoning: model.liveActivity.reasoning,
-                                toolCalls: model.liveActivity.toolCalls, isLive: true
-                            )
-                        }
-                        if let reply = model.liveMessages.first(where: { $0.role == "assistant" }) {
-                            BotArtifactMessageView(message: reply, model: model, isLive: true)
-                        }
-                        // How the last turn ended sits under it, before any plan or request.
-                        if model.turnFailure != nil || model.turnNotice?.warning != nil {
-                            BotTurnOutcomeRow(
-                                failure: model.turnFailure, notice: model.turnNotice,
-                                offersRetry: model.offersRetry, mayRetry: model.mayRetry,
-                                onRetry: { Task { await model.retryFailedTurn() } }
-                            )
-                        }
-                        if let plan = model.plan {
-                            BotPlanRowView(plan: plan).id("bot-plan")
-                        }
-                        // The blocking request sits where the work stopped, so the
-                        // command reads under the tool row that asked for it.
-                        if let request = model.pendingRequest {
-                            BotPendingRequestCard(
-                                request: request, identity: identity,
-                                isEnabled: model.mayAnswer, canStop: model.mayStop,
-                                isAnswering: model.answeringRequestID != nil,
-                                resolution: resolution(for: request),
-                                onApprove: approve, onAnswer: answer, onSkip: skip,
-                                onCredential: sendCredential,
-                                onStop: { stopAction = model.prepareStop() },
-                                onConnection: answerConnection
-                            )
-                            .id(BotChatView.requestAnchor)
-                        } else if let withdrawal = model.withdrawnRequest {
-                            // A withdrawn card leaves the reason in its slot until the next send or request.
-                            BotRequestWithdrawalNote(withdrawal: withdrawal)
-                        }
-                        if let startedAt = model.workingRowStartedAt {
-                            ChatWorkingRowView(startedAt: startedAt)
-                        }
-                        Color.clear.frame(height: 1).id("bot-transcript-bottom")
-                    }
-                    .padding(.horizontal, transcriptHorizontalPadding)
-                    // Centred in the reading column; the scroll view stays full width.
-                    .frame(
-                        maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
-                        alignment: .leading
-                    )
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 16)
-                    .padding(.bottom, 44)
-                    // A tapped row must stay under the finger: stop following so
-                    // neither the size-change anchor nor the next activity update
-                    // moves the reader. Latest brings them back.
-                    .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
-                    // One link router for the whole transcript.
-                    .transcriptLinks()
-                    .background {
-                        ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .defaultScrollAnchor(ChatScrollPolicy.initialTranscriptAnchor, for: .initialOffset)
-                .onChange(of: model.messages.count, initial: true) { _, count in window.seed(count: count) }
-                .defaultScrollAnchor(ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: followsLatest), for: .sizeChanges)
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: model.messages.count) { followLatest(proxy) }
-                .onChange(of: model.liveMessages.last?.content) { followLatest(proxy) }
-                .onChange(of: model.liveActivity.toolCalls.count) { followLatest(proxy) }
-                .onChange(of: model.liveActivity.reasoning.utf8.count) { followLatest(proxy) }
-                .onChange(of: model.connectionState) { followLatest(proxy) }
-                // A request that needs the user wins over where they had scrolled.
-                .onChange(of: model.pendingRequest?.requestID) { _, id in
-                    guard id != nil else { return }
-                    handleFollowEvent(.reset)
-                    proxy.scrollTo(BotChatView.requestAnchor, anchor: .bottom)
-                }
-                .onChange(of: showRequestID) { proxy.scrollTo(BotChatView.requestAnchor, anchor: .bottom) }
-                .overlay(alignment: .bottom) {
-                    if showsScrollToBottomButton {
-                        // The safe-area inset already keeps this above the composer.
-                        ChatScrollToBottomButton(bottomPadding: 12) {
-                            ChatHaptics.scrolledToLatest(isEnabled: isHapticsEnabled)
-                            handleFollowEvent(.reset)
-                            withAnimation(isStreaming ? nil : ChatMotion.scrollToLatest(reduceMotion: reduceMotion)) {
-                                followLatest(proxy)
-                            }
-                        }
-                        .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
-                    }
-                }
-                .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsScrollToBottomButton)
-                .overlay {
-                    if model.messages.isEmpty && model.liveMessages.isEmpty && model.pendingRequest == nil {
-                        // Recovery with nothing on screen yet is the first load: the
-                        // same skeleton as a Sessions chat, not a status line.
-                        if model.connectionState == .recovering && !model.hasRecentTranscript {
-                            ChatTranscriptLoadingSkeletonView()
-                        } else if model.connectionState == .connected {
-                            ContentUnavailableView {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                            } description: {
-                                Text("Send a message to start the conversation.")
-                            }
-                            .allowsHitTesting(false)
-                        }
-                    }
-                }
-                // Simultaneous so links, rows, selection and Latest keep their taps.
-                // Below the overlays so Latest and the empty state count; above the
-                // inset so the composer doesn't. Only the composer loses focus: the
-                // request card has fields of its own.
-                .contentShape(Rectangle())
-                .simultaneousGesture(TapGesture().onEnded { if composerFocused { composerFocused = false } })
-                .adaptiveSoftScrollEdges(.top)
-                .safeAreaInset(edge: .bottom, spacing: 0) { composer }
-            }
-        }
-        .navigationTitle(model.profile.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            // The bot's face and name sit in one pill beside Back, and that pill is the
-            // way into its profile. iOS 26 draws the toolbar glass; older systems get a material.
-            ToolbarItem(placement: .topBarLeading) {
-                Button { showingProfileEditor = true } label: {
-                    HStack(spacing: 8) {
-                        BotAvatarView(profile: model.profile,
-                                      avatar: BotAvatarStore.shared.images(connectionID: model.connection.id)[model.profile.id],
-                                      size: 30, motion: titleFaceMotion, expression: model.titleFace.expression)
-                        Text(model.profile.name).font(.headline).foregroundStyle(.primary).lineLimit(1)
-                    }
-                    .modifier(BotChatTitlePillFallback())
-                }
-                .accessibilityLabel(model.profile.name)
-                .accessibilityValue(model.titleFace.accessibilityValue ?? "")
-                .accessibilityHint(Text("Opens this bot’s profile."))
-            }
-            if model.delegatedWork.hasWorkers {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingDelegatedWork = true
-                        Task { await model.delegatedWork.refresh() }
-                    } label: {
-                        Image(systemName: "person.2")
-                            .overlay(alignment: .topTrailing) {
-                                Text("\(min(model.delegatedWork.activeCount, 99))")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.black)
-                                    .frame(minWidth: 15, minHeight: 15)
-                                    .background(.green, in: Capsule())
-                                    .offset(x: 7, y: -7)
-                            }
-                    }
-                    .accessibilityLabel("Delegated work, \(model.delegatedWork.activeCount) active workers")
-                    .accessibilityHint(Text("Shows worker status, recent output, and interrupt controls."))
-                }
-            }
-            if !model.chatControls.controls.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) { BotSessionControlMenu(settings: model.chatControls) }
-            }
-        }
-        .toolbar(removing: .title)
-        .navigationDestination(isPresented: $showingProfileEditor) {
-            BotProfileEditorView(server: model.server, connection: model.connection, profile: model.profile,
-                                 avatar: BotAvatarStore.shared.images(connectionID: model.connection.id)[model.profile.id]) {
-                Task { await model.refreshProfile() }
-            }
-            .id(model.connection.id.uuidString + model.profile.id)
-        }
-        .sheet(isPresented: $showingDelegatedWork) {
-            BotDelegatedWorkView(work: model.delegatedWork)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .task(id: recoveryID) {
-            // A rejected password is never sent again on its own (#884).
-            if scenePhase == .active && !model.needsSignIn { await model.recover() }
-        }
-        .onChange(of: scenePhase) {
-            // Control Center and banners (`.inactive`) keep the connection (#902); only a
-            // chat the background suspended, or one opened while inactive, recovers.
-            switch scenePhase {
-            case .background: stopAction = nil; model.suspend()
-            case .active where !model.isActive: recoveryID = UUID(); workingBeat.rearm()
-            default: break
-            }
-        }
-        .onChange(of: model.turn) { workingBeat.observe(model.turn, at: Date()) }
-        .onDisappear { stopAction = nil; model.suspend() }
-        .onChange(of: model.feedback) { _, feedback in
-            if let feedback { ChatHaptics.botFeedback(feedback, isEnabled: isHapticsEnabled) }
-        }
-        .pushPresence(model.pushPresence)
-        .onChange(of: model.linkedRootIsStale) {
-            // The link named a conversation this bot has replaced: hand it back to
-            // the inbox, which reports it (#554).
-            if model.linkedRootIsStale { onConversationUnavailable?() }
-        }
-        .confirmationDialog("Stop this bot’s current work?", isPresented: Binding(
-            get: { stopAction != nil }, set: { if !$0 { stopAction = nil } }
-        ), titleVisibility: .visible) {
-            if let action = stopAction {
-                Button("Stop current work", role: .destructive) {
-                    stopAction = nil
-                    Task { await model.stop(action) }
-                }
-            }
-        } message: {
-            Text("This stops current work in this conversation, including work started in Desktop, clears queued prompts and denies pending approvals. It also stops host speech playback. A command already sent may reach later Desktop work.")
-        }
-
+        chatChunk1(chatChunk2(chatChunk3(chatChunk4(chatBodyBase))))
     }
+
+    private var chatBodyBase: some View {
+VStack(spacing: 0) {
+    ScrollViewReader { proxy in
+        ScrollView {
+            // Eager over a bounded window, like the Sessions transcript: a
+            // settled reply is a hosted selection document, and a lazy stack
+            // places rows it has not built from an estimate, which strands
+            // the scroll under load (issue #553).
+            let livePrompt = model.liveMessages.first(where: { $0.role == "user" })
+            let times = BotTranscriptTimes(
+                messages: model.messages, start: window.start(count: model.messages.count),
+                livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
+            )
+            let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
+            VStack(alignment: .leading, spacing: 8) {
+                if window.hasEarlier(count: model.messages.count) {
+                    // The window widens in place, so there is no loading state.
+                    LoadOlderMessagesButton(isLoading: false) { loadEarlier(proxy: proxy) }
+                }
+                ForEach(model.messages[times.start...]) { message in
+                    messageRow(message, times: times,
+                               fold: folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys))
+                }
+                settledActivity(anchoredTo: nil)
+                // The live turn reads like a settled one: prompt, work, then reply.
+                if let prompt = livePrompt {
+                    if let startedAt = times.livePromptSeparator {
+                        TranscriptTimeSeparator(timestamp: startedAt)
+                    }
+                    BotArtifactMessageView(message: prompt, model: model)
+                }
+                if model.liveActivity.hasTurnWork {
+                    BotActivityBlocksView(
+                        id: "bot-live", reasoning: model.liveActivity.reasoning,
+                        toolCalls: model.liveActivity.toolCalls, isLive: true
+                    )
+                }
+                if let reply = model.liveMessages.first(where: { $0.role == "assistant" }) {
+                    BotArtifactMessageView(message: reply, model: model, isLive: true)
+                }
+                // How the last turn ended sits under it, before any plan or request.
+                if model.turnFailure != nil || model.turnNotice?.warning != nil {
+                    BotTurnOutcomeRow(
+                        failure: model.turnFailure, notice: model.turnNotice,
+                        offersRetry: model.offersRetry, mayRetry: model.mayRetry,
+                        onRetry: { Task { await model.retryFailedTurn() } }
+                    )
+                }
+                if let plan = model.plan {
+                    BotPlanRowView(plan: plan).id("bot-plan")
+                }
+                // The blocking request sits where the work stopped, so the
+                // command reads under the tool row that asked for it.
+                if let request = model.pendingRequest {
+                    BotPendingRequestCard(
+                        request: request, identity: identity,
+                        isEnabled: model.mayAnswer, canStop: model.mayStop,
+                        isAnswering: model.answeringRequestID != nil,
+                        resolution: resolution(for: request),
+                        onApprove: approve, onAnswer: answer, onSkip: skip,
+                        onCredential: sendCredential,
+                        onStop: { stopAction = model.prepareStop() },
+                        onConnection: answerConnection
+                    )
+                    .id(BotChatView.requestAnchor)
+                } else if let withdrawal = model.withdrawnRequest {
+                    // A withdrawn card leaves the reason in its slot until the next send or request.
+                    BotRequestWithdrawalNote(withdrawal: withdrawal)
+                }
+                if let startedAt = model.workingRowStartedAt {
+                    ChatWorkingRowView(startedAt: startedAt)
+                }
+                Color.clear.frame(height: 1).id("bot-transcript-bottom")
+            }
+            .padding(.horizontal, transcriptHorizontalPadding)
+            // Centred in the reading column; the scroll view stays full width.
+            .frame(
+                maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
+                alignment: .leading
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.top, 16)
+            .padding(.bottom, 44)
+            // A tapped row must stay under the finger: stop following so
+            // neither the size-change anchor nor the next activity update
+            // moves the reader. Latest brings them back.
+            .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
+            // One link router for the whole transcript.
+            .transcriptLinks()
+            .background {
+                ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
+                    .accessibilityHidden(true)
+            }
+        }
+        .defaultScrollAnchor(ChatScrollPolicy.initialTranscriptAnchor, for: .initialOffset)
+        .onChange(of: model.messages.count, initial: true) { _, count in window.seed(count: count) }
+        .defaultScrollAnchor(ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: followsLatest), for: .sizeChanges)
+        .scrollDismissesKeyboard(.interactively)
+        .onChange(of: model.messages.count) { followLatest(proxy) }
+        .onChange(of: model.liveMessages.last?.content) { followLatest(proxy) }
+        .onChange(of: model.liveActivity.toolCalls.count) { followLatest(proxy) }
+        .onChange(of: model.liveActivity.reasoning.utf8.count) { followLatest(proxy) }
+        .onChange(of: model.connectionState) { followLatest(proxy) }
+        // A request that needs the user wins over where they had scrolled.
+        .onChange(of: model.pendingRequest?.requestID) { _, id in
+            guard id != nil else { return }
+            handleFollowEvent(.reset)
+            proxy.scrollTo(BotChatView.requestAnchor, anchor: .bottom)
+        }
+        .onChange(of: showRequestID) { proxy.scrollTo(BotChatView.requestAnchor, anchor: .bottom) }
+        .overlay(alignment: .bottom) {
+            if showsScrollToBottomButton {
+                // The safe-area inset already keeps this above the composer.
+                ChatScrollToBottomButton(bottomPadding: 12) {
+                    ChatHaptics.scrolledToLatest(isEnabled: isHapticsEnabled)
+                    handleFollowEvent(.reset)
+                    withAnimation(isStreaming ? nil : ChatMotion.scrollToLatest(reduceMotion: reduceMotion)) {
+                        followLatest(proxy)
+                    }
+                }
+                .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
+            }
+        }
+        .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsScrollToBottomButton)
+        .overlay {
+            if model.messages.isEmpty && model.liveMessages.isEmpty && model.pendingRequest == nil {
+                // Recovery with nothing on screen yet is the first load: the
+                // same skeleton as a Sessions chat, not a status line.
+                if model.connectionState == .recovering && !model.hasRecentTranscript {
+                    ChatTranscriptLoadingSkeletonView()
+                } else if model.connectionState == .connected {
+                    ContentUnavailableView {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                    } description: {
+                        Text("Send a message to start the conversation.")
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+        // Simultaneous so links, rows, selection and Latest keep their taps.
+        // Below the overlays so Latest and the empty state count; above the
+        // inset so the composer doesn't. Only the composer loses focus: the
+        // request card has fields of its own.
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { if composerFocused { composerFocused = false } })
+        .adaptiveSoftScrollEdges(.top)
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+    }
+}
+    }
+
+    private func chatChunk1<V: View>(_ content: V) -> some View {
+        content
+.navigationTitle(model.profile.name)
+.navigationBarTitleDisplayMode(.inline)
+.toolbar {
+    // The bot's face and name sit in one pill beside Back, and that pill is the
+    // way into its profile. iOS 26 draws the toolbar glass; older systems get a material.
+    ToolbarItem(placement: .topBarLeading) {
+        Button { showingProfileEditor = true } label: {
+            HStack(spacing: 8) {
+                BotAvatarView(profile: model.profile,
+                              avatar: BotAvatarStore.shared.images(connectionID: model.connection.id)[model.profile.id],
+                              size: 30, motion: titleFaceMotion, expression: model.titleFace.expression)
+                Text(model.profile.name).font(.headline).foregroundStyle(.primary).lineLimit(1)
+            }
+            .modifier(BotChatTitlePillFallback())
+        }
+        .accessibilityLabel(model.profile.name)
+        .accessibilityValue(model.titleFace.accessibilityValue ?? "")
+        .accessibilityHint(Text("Opens this bot’s profile."))
+    }
+    if model.delegatedWork.hasWorkers {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingDelegatedWork = true
+                Task { await model.delegatedWork.refresh() }
+            } label: {
+                Image(systemName: "person.2")
+                    .overlay(alignment: .topTrailing) {
+                        Text("\(min(model.delegatedWork.activeCount, 99))")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(minWidth: 15, minHeight: 15)
+                            .background(.green, in: Capsule())
+                            .offset(x: 7, y: -7)
+                    }
+            }
+            .accessibilityLabel("Delegated work, \(model.delegatedWork.activeCount) active workers")
+            .accessibilityHint(Text("Shows worker status, recent output, and interrupt controls."))
+        }
+    }
+    if !model.chatControls.controls.isEmpty {
+        ToolbarItem(placement: .topBarTrailing) { BotSessionControlMenu(settings: model.chatControls) }
+    }
+}
+.toolbar(removing: .title)
+.navigationDestination(isPresented: $showingProfileEditor) {
+    BotProfileEditorView(server: model.server, connection: model.connection, profile: model.profile,
+                         avatar: BotAvatarStore.shared.images(connectionID: model.connection.id)[model.profile.id]) {
+        Task { await model.refreshProfile() }
+    }
+    .id(model.connection.id.uuidString + model.profile.id)
+}
+.sheet(isPresented: $showingDelegatedWork) {
+    }
+
+    private func chatChunk2<V: View>(_ content: V) -> some View {
+        content
+    BotDelegatedWorkView(work: model.delegatedWork)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+}
+.task(id: recoveryID) {
+    // A rejected password is never sent again on its own (#884).
+    if scenePhase == .active && !model.needsSignIn { await model.recover() }
+}
+.onChange(of: scenePhase) {
+    // Control Center and banners (`.inactive`) keep the connection (#902); only a
+    // chat the background suspended, or one opened while inactive, recovers.
+    switch scenePhase {
+    case .background: stopAction = nil; model.suspend()
+    case .active where !model.isActive: recoveryID = UUID(); workingBeat.rearm()
+    default: break
+    }
+}
+    }
+
+    private func chatChunk3<V: View>(_ content: V) -> some View {
+        content
+.onChange(of: model.turn) { workingBeat.observe(model.turn, at: Date()) }
+.onDisappear { stopAction = nil; model.suspend() }
+.onChange(of: model.feedback) { _, feedback in
+    if let feedback { ChatHaptics.botFeedback(feedback, isEnabled: isHapticsEnabled) }
+}
+.pushPresence(model.pushPresence)
+.onChange(of: model.linkedRootIsStale) {
+    // The link named a conversation this bot has replaced: hand it back to
+    // the inbox, which reports it (#554).
+    if model.linkedRootIsStale { onConversationUnavailable?() }
+}
+.confirmationDialog("Stop this bot’s current work?", isPresented: Binding(
+    }
+
+    private func chatChunk4<V: View>(_ content: V) -> some View {
+        content
+    get: { stopAction != nil }, set: { if !$0 { stopAction = nil } }
+), titleVisibility: .visible) {
+    if let action = stopAction {
+        Button("Stop current work", role: .destructive) {
+            stopAction = nil
+            Task { await model.stop(action) }
+        }
+    }
+} message: {
+    Text("This stops current work in this conversation, including work started in Desktop, clears queued prompts and denies pending approvals. It also stops host speech playback. A command already sent may reach later Desktop work.")
+}
+    }
+
 
     /// Which bot on which connection, so two hosts with equal Profile names
     /// never produce an anonymous card.

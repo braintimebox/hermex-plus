@@ -174,87 +174,112 @@ struct BotChatComposerView: View {
     }
 
     private var composerContainer: some View {
-        AdaptiveGlassContainer(spacing: 6) {
-                surfaceStack
-            // Focus flips arrive from UIKit outside any withAnimation, so the
-            // pill-to-card morph and the row's insertion animate from here,
-            // exactly as the Sessions composer does.
-            .animation(ChatMotion.composerChrome(reduceMotion: reduceMotion), value: isExpanded)
-        }
-        .modifier(BotAttachmentPickerPresentation(model: model, picker: $picker))
-        .confirmationDialog("Change chat model?", isPresented: Binding(
-            get: { model.chatControls.confirmation != nil },
-            set: { if !$0 { model.chatControls.cancelConfirmation() } }
-        ), titleVisibility: .visible) {
-            if let confirmation = model.chatControls.confirmation {
-                Button("Change model") {
-                    model.chatControls.cancelConfirmation()
-                    Task { await model.chatControls.apply(confirmation.action, confirmed: true) }
-                }
-                .disabled(!model.chatControls.mayChangeModel)
-            }
-            Button("Cancel", role: .cancel) { model.chatControls.cancelConfirmation() }
-        } message: {
-            if let confirmation = model.chatControls.confirmation { Text(confirmation.message) }
-        }
-        .sheet(item: $preview) { item in
-            BotArtifactPreview(reference: TranscriptMediaReference(rawReference: item.name)) {
-                try await model.attachments.data(for: item)
-            }
-        }
-        .task(id: model.connectionState) { await model.loadSlashCatalog() }
-        .onChange(of: model.chatControls.workspace) { _, _ in model.resetFileReferences() }
-        .task(id: picker) {
-            guard picker == nil, shouldRestoreFocusAfterPicker else { return }
-            // Match Sessions' short delay while the native picker dismisses.
-            do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
-            guard picker == nil, shouldRestoreFocusAfterPicker else { return }
-            shouldRestoreFocusAfterPicker = false
-            if model.mayEditDraft { isFocused = true }
-        }
-        .onDisappear {
-            shouldRestoreFocusAfterPicker = false
-            voiceInput.stopBeforeSubmittingDraft()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active { voiceInput.suspend() }
-            else { voiceInput.resume() }
-        }
-        .onChange(of: AppLock.shared.isLocked) { _, locked in
-            if locked { voiceInput.suspend() }
-            else if scenePhase == .active { voiceInput.resume() }
-        }
-        // Ask Hermex lands the passage here, so the keyboard should already be
-        // up for whatever the user wants to ask about it.
-        .onChange(of: model.quotes.count) { previous, current in
-            guard current > previous, model.mayEditDraft else { return }
-            isFocused = true
-        }
-        .padding(.bottom, keyboardIsVisible ? 10 : 0)
-        // The card rides the same keyboard-retaining overlay as the "+" picker, so
-        // the keyboard stays up and the two cards look and move alike.
-        .background {
-            HermexKeyboardRetainingOverlay(isPresented: choosingSendMode) {
-                SendChoiceCard(choices: busyChoices, onPick: { mode in
-                    choosingSendMode = false
-                    guard let action = model.preparePrompt(mode) else { return }
-                    Task { await model.submit(action) }
-                }, onDismiss: { choosingSendMode = false })
-            }
-            .frame(width: 0, height: 0)
-        }
-        // The bot finishing, or the choices changing under the card, closes it:
-        // the next send re-asks with the current truth.
-        .onChange(of: busyChoices) { _, choices in
-            if choices.isEmpty { choosingSendMode = false }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            keyboardIsVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardIsVisible = false
-        }
+        composerContainerChunk1(composerContainerChunk2(composerContainerChunk3(composerContainerChunk4(composerContainerChunk5(composerContainerBase)))))
     }
+
+    private var composerContainerBase: some View {
+AdaptiveGlassContainer(spacing: 6) {
+        surfaceStack
+    // Focus flips arrive from UIKit outside any withAnimation, so the
+    // pill-to-card morph and the row's insertion animate from here,
+    // exactly as the Sessions composer does.
+    .animation(ChatMotion.composerChrome(reduceMotion: reduceMotion), value: isExpanded)
+}
+    }
+
+    private func composerContainerChunk1<V: View>(_ content: V) -> some View {
+        content
+.modifier(BotAttachmentPickerPresentation(model: model, picker: $picker))
+.confirmationDialog("Change chat model?", isPresented: Binding(
+    get: { model.chatControls.confirmation != nil },
+    set: { if !$0 { model.chatControls.cancelConfirmation() } }
+), titleVisibility: .visible) {
+    if let confirmation = model.chatControls.confirmation {
+        Button("Change model") {
+            model.chatControls.cancelConfirmation()
+            Task { await model.chatControls.apply(confirmation.action, confirmed: true) }
+        }
+        .disabled(!model.chatControls.mayChangeModel)
+    }
+    Button("Cancel", role: .cancel) { model.chatControls.cancelConfirmation() }
+} message: {
+    if let confirmation = model.chatControls.confirmation { Text(confirmation.message) }
+}
+.sheet(item: $preview) { item in
+    BotArtifactPreview(reference: TranscriptMediaReference(rawReference: item.name)) {
+        try await model.attachments.data(for: item)
+    }
+}
+.task(id: model.connectionState) { await model.loadSlashCatalog() }
+.onChange(of: model.chatControls.workspace) { _, _ in model.resetFileReferences() }
+.task(id: picker) {
+    }
+
+    private func composerContainerChunk2<V: View>(_ content: V) -> some View {
+        content
+    guard picker == nil, shouldRestoreFocusAfterPicker else { return }
+    // Match Sessions' short delay while the native picker dismisses.
+    do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
+    guard picker == nil, shouldRestoreFocusAfterPicker else { return }
+    shouldRestoreFocusAfterPicker = false
+    if model.mayEditDraft { isFocused = true }
+}
+.onDisappear {
+    shouldRestoreFocusAfterPicker = false
+    voiceInput.stopBeforeSubmittingDraft()
+}
+.onChange(of: scenePhase) { _, newPhase in
+    if newPhase != .active { voiceInput.suspend() }
+    else { voiceInput.resume() }
+}
+    }
+
+    private func composerContainerChunk3<V: View>(_ content: V) -> some View {
+        content
+.onChange(of: AppLock.shared.isLocked) { _, locked in
+    if locked { voiceInput.suspend() }
+    else if scenePhase == .active { voiceInput.resume() }
+}
+// Ask Hermex lands the passage here, so the keyboard should already be
+// up for whatever the user wants to ask about it.
+.onChange(of: model.quotes.count) { previous, current in
+    guard current > previous, model.mayEditDraft else { return }
+    isFocused = true
+}
+.padding(.bottom, keyboardIsVisible ? 10 : 0)
+    }
+
+    private func composerContainerChunk4<V: View>(_ content: V) -> some View {
+        content
+// The card rides the same keyboard-retaining overlay as the "+" picker, so
+// the keyboard stays up and the two cards look and move alike.
+.background {
+    HermexKeyboardRetainingOverlay(isPresented: choosingSendMode) {
+        SendChoiceCard(choices: busyChoices, onPick: { mode in
+            choosingSendMode = false
+            guard let action = model.preparePrompt(mode) else { return }
+            Task { await model.submit(action) }
+        }, onDismiss: { choosingSendMode = false })
+    }
+    .frame(width: 0, height: 0)
+}
+// The bot finishing, or the choices changing under the card, closes it:
+// the next send re-asks with the current truth.
+.onChange(of: busyChoices) { _, choices in
+    if choices.isEmpty { choosingSendMode = false }
+}
+    }
+
+    private func composerContainerChunk5<V: View>(_ content: V) -> some View {
+        content
+.onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+    keyboardIsVisible = true
+}
+.onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+    keyboardIsVisible = false
+}
+    }
+
 
     /// The one panel the caret can open: bots and workspace files for an `@`,
     /// this connection's skills for a `/` that opens the draft. The `@` panel
