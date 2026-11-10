@@ -139,14 +139,20 @@ VStack(alignment: .leading, spacing: 8) {
                         livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
                     )
                     let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
-                    transcriptStack(proxy: proxy, times: times, folds: folds, livePrompt: livePrompt)
-                    .padding(.horizontal, transcriptHorizontalPadding)
-                    // Centred in the reading column; the scroll view stays full width.
-                    .frame(
-                        maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
-                        alignment: .leading
+                    // The seam: the stack and its width modifiers are erased here, so
+                    // the checker never holds them together with the scroll-behaviour
+                    // chain below. AnyView costs one erase per transcript, not per row.
+                    let stacked: AnyView = AnyView(
+                        transcriptStack(proxy: proxy, times: times, folds: folds, livePrompt: livePrompt)
+                            .padding(.horizontal, transcriptHorizontalPadding)
+                            // Centred in the reading column; the scroll view stays full width.
+                            .frame(
+                                maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
+                                alignment: .leading
+                            )
+                            .frame(maxWidth: .infinity)
                     )
-                    .frame(maxWidth: .infinity)
+                    stacked
                     .padding(.top, 16)
                     .padding(.bottom, 44)
                     // A tapped row must stay under the finger: stop following so
