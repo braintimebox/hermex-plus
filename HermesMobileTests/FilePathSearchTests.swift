@@ -288,6 +288,7 @@ final class FilePathSearchTests: APIClientTestCase {
     }
     // MARK: - Extension queries
 
+    @MainActor
     func testOnlyAnExtensionSegmentCountsAsAnExtensionQuery() {
         XCTAssertEqual(ComposerFilePathSearch.extensionQuery(".ipa"), "ipa")
         XCTAssertEqual(ComposerFilePathSearch.extensionQuery("*.IPA"), "ipa")
