@@ -219,7 +219,7 @@ jobs:
           set -euo pipefail
           start_seconds=${SECONDS}
           # Tee'd so the failure step can report the actual compiler errors.
-          xcodebuild build-for-testing \
+          xcodebuild build-for-testing -quiet \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
             -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
@@ -550,7 +550,11 @@ jobs:
     name: Package IPA
     # Runs ALONGSIDE `test`, not after it. The IPA is built either way; whether
     # it is PUBLISHED is decided by the `publish` job, which needs both.
-    needs: guard
+    # Waits for the compile. While the port was failing on the test target, this
+    # job spent five minutes and a macOS runner producing an IPA nobody could
+    # ship, and the wasted runner pushed every later run down the queue. A green
+    # compile is the precondition; publishing still needs both jobs.
+    needs: [guard, unit-build]
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -628,7 +632,7 @@ jobs:
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
-          xcodebuild \
+          xcodebuild -quiet \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
             -configuration Release \

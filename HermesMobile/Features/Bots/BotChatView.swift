@@ -128,44 +128,47 @@ VStack(alignment: .leading, spacing: 8) {
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
-                ScrollView {
-                    // Eager over a bounded window, like the Sessions transcript: a
-                    // settled reply is a hosted selection document, and a lazy stack
-                    // places rows it has not built from an estimate, which strands
-                    // the scroll under load (issue #553).
-                    let livePrompt = model.liveMessages.first(where: { $0.role == "user" })
-                    let times = BotTranscriptTimes(
-                        messages: model.messages, start: window.start(count: model.messages.count),
-                        livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
-                    )
-                    let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
-                    // The seam: the stack and its width modifiers are erased here, so
-                    // the checker never holds them together with the scroll-behaviour
-                    // chain below. AnyView costs one erase per transcript, not per row.
-                    let stacked: AnyView = AnyView(
-                        transcriptStack(proxy: proxy, times: times, folds: folds, livePrompt: livePrompt)
-                            .padding(.horizontal, transcriptHorizontalPadding)
-                            // Centred in the reading column; the scroll view stays full width.
-                            .frame(
-                                maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
-                                alignment: .leading
-                            )
-                            .frame(maxWidth: .infinity)
-                    )
-                    stacked
-                    .padding(.top, 16)
-                    .padding(.bottom, 44)
-                    // A tapped row must stay under the finger: stop following so
-                    // neither the size-change anchor nor the next activity update
-                    // moves the reader. Latest brings them back.
-                    .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
-                    // One link router for the whole transcript.
-                    .transcriptLinks()
-                    .background {
-                        ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
-                            .accessibilityHidden(true)
+                let scrolling: AnyView = AnyView(
+                    ScrollView {
+                        // Eager over a bounded window, like the Sessions transcript: a
+                        // settled reply is a hosted selection document, and a lazy stack
+                        // places rows it has not built from an estimate, which strands
+                        // the scroll under load (issue #553).
+                        let livePrompt = model.liveMessages.first(where: { $0.role == "user" })
+                        let times = BotTranscriptTimes(
+                            messages: model.messages, start: window.start(count: model.messages.count),
+                            livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
+                        )
+                        let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
+                        // The seam: the stack and its width modifiers are erased here, so
+                        // the checker never holds them together with the scroll-behaviour
+                        // chain below. AnyView costs one erase per transcript, not per row.
+                        let stacked: AnyView = AnyView(
+                            transcriptStack(proxy: proxy, times: times, folds: folds, livePrompt: livePrompt)
+                                .padding(.horizontal, transcriptHorizontalPadding)
+                                // Centred in the reading column; the scroll view stays full width.
+                                .frame(
+                                    maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: transcriptHorizontalPadding),
+                                    alignment: .leading
+                                )
+                                .frame(maxWidth: .infinity)
+                        )
+                        stacked
+                        .padding(.top, 16)
+                        .padding(.bottom, 44)
+                        // A tapped row must stay under the finger: stop following so
+                        // neither the size-change anchor nor the next activity update
+                        // moves the reader. Latest brings them back.
+                        .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
+                        // One link router for the whole transcript.
+                        .transcriptLinks()
+                        .background {
+                            ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
+                                .accessibilityHidden(true)
+                        }
                     }
-                }
+                )
+                scrolling
                 .defaultScrollAnchor(ChatScrollPolicy.initialTranscriptAnchor, for: .initialOffset)
                 .onChange(of: model.messages.count, initial: true) { _, count in window.seed(count: count) }
                 .defaultScrollAnchor(ChatScrollPolicy.sizeChangeAnchor(shouldFollowLatestMessage: followsLatest), for: .sizeChanges)
