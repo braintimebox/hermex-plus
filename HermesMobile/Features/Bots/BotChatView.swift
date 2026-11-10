@@ -64,64 +64,84 @@ import SwiftUI
                                  folds: TranscriptTurnFolds,
                                  livePrompt: ChatMessage?) -> some View {
 VStack(alignment: .leading, spacing: 8) {
-    if window.hasEarlier(count: model.messages.count) {
-        // The window widens in place, so there is no loading state.
-        LoadOlderMessagesButton(isLoading: false) { loadEarlier(proxy: proxy) }
-    }
-    ForEach(model.messages[times.start...]) { message in
-        messageRow(message, times: times,
-                   fold: folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys))
-    }
-    settledActivity(anchoredTo: nil)
-    // The live turn reads like a settled one: prompt, work, then reply.
-    if let prompt = livePrompt {
-        if let startedAt = times.livePromptSeparator {
-            TranscriptTimeSeparator(timestamp: startedAt)
+    // Three seams instead of one expression. Each group is erased on its own, so
+    // the checker never holds ten conditional blocks, a ForEach and eleven view
+    // initialisers at once, which is what timed it out.
+    let settledRows: AnyView = AnyView(
+        VStack(alignment: .leading, spacing: 8) {
+            if window.hasEarlier(count: model.messages.count) {
+                // The window widens in place, so there is no loading state.
+                LoadOlderMessagesButton(isLoading: false) { loadEarlier(proxy: proxy) }
+            }
+            ForEach(model.messages[times.start...]) { message in
+                messageRow(message, times: times,
+                           fold: folds.rowState(for: message.id, expandedTurnKeys: expandedTurnKeys))
+            }
+            settledActivity(anchoredTo: nil)
         }
-        BotArtifactMessageView(message: prompt, model: model)
-    }
-    if model.liveActivity.hasTurnWork {
-        BotActivityBlocksView(
-            id: "bot-live", reasoning: model.liveActivity.reasoning,
-            toolCalls: model.liveActivity.toolCalls, isLive: true
-        )
-    }
-    if let reply = model.liveMessages.first(where: { $0.role == "assistant" }) {
-        BotArtifactMessageView(message: reply, model: model, isLive: true)
-    }
-    // How the last turn ended sits under it, before any plan or request.
-    if model.turnFailure != nil || model.turnNotice?.warning != nil {
-        BotTurnOutcomeRow(
-            failure: model.turnFailure, notice: model.turnNotice,
-            offersRetry: model.offersRetry, mayRetry: model.mayRetry,
-            onRetry: { Task { await model.retryFailedTurn() } }
-        )
-    }
-    if let plan = model.plan {
-        BotPlanRowView(plan: plan).id("bot-plan")
-    }
-    // The blocking request sits where the work stopped, so the
-    // command reads under the tool row that asked for it.
-    if let request = model.pendingRequest {
-        BotPendingRequestCard(
-            request: request, identity: identity,
-            isEnabled: model.mayAnswer, canStop: model.mayStop,
-            isAnswering: model.answeringRequestID != nil,
-            resolution: resolution(for: request),
-            onApprove: approve, onAnswer: answer, onSkip: skip,
-            onCredential: sendCredential,
-            onStop: { stopAction = model.prepareStop() },
-            onConnection: answerConnection
-        )
-        .id(BotChatView.requestAnchor)
-    } else if let withdrawal = model.withdrawnRequest {
-        // A withdrawn card leaves the reason in its slot until the next send or request.
-        BotRequestWithdrawalNote(withdrawal: withdrawal)
-    }
-    if let startedAt = model.workingRowStartedAt {
-        ChatWorkingRowView(startedAt: startedAt)
-    }
-    Color.clear.frame(height: 1).id("bot-transcript-bottom")
+    )
+    settledRows
+
+    let liveTurn: AnyView = AnyView(
+        VStack(alignment: .leading, spacing: 8) {
+            // The live turn reads like a settled one: prompt, work, then reply.
+            if let prompt = livePrompt {
+                if let startedAt = times.livePromptSeparator {
+                    TranscriptTimeSeparator(timestamp: startedAt)
+                }
+                BotArtifactMessageView(message: prompt, model: model)
+            }
+            if model.liveActivity.hasTurnWork {
+                BotActivityBlocksView(
+                    id: "bot-live", reasoning: model.liveActivity.reasoning,
+                    toolCalls: model.liveActivity.toolCalls, isLive: true
+                )
+            }
+            if let reply = model.liveMessages.first(where: { $0.role == "assistant" }) {
+                BotArtifactMessageView(message: reply, model: model, isLive: true)
+            }
+        }
+    )
+    liveTurn
+
+    let statusRows: AnyView = AnyView(
+        VStack(alignment: .leading, spacing: 8) {
+            // How the last turn ended sits under it, before any plan or request.
+            if model.turnFailure != nil || model.turnNotice?.warning != nil {
+                BotTurnOutcomeRow(
+                    failure: model.turnFailure, notice: model.turnNotice,
+                    offersRetry: model.offersRetry, mayRetry: model.mayRetry,
+                    onRetry: { Task { await model.retryFailedTurn() } }
+                )
+            }
+            if let plan = model.plan {
+                BotPlanRowView(plan: plan).id("bot-plan")
+            }
+            // The blocking request sits where the work stopped, so the command
+            // reads under the tool row that asked for it.
+            if let request = model.pendingRequest {
+                BotPendingRequestCard(
+                    request: request, identity: identity,
+                    isEnabled: model.mayAnswer, canStop: model.mayStop,
+                    isAnswering: model.answeringRequestID != nil,
+                    resolution: resolution(for: request),
+                    onApprove: approve, onAnswer: answer, onSkip: skip,
+                    onCredential: sendCredential,
+                    onStop: { stopAction = model.prepareStop() },
+                    onConnection: answerConnection
+                )
+                .id(BotChatView.requestAnchor)
+            } else if let withdrawal = model.withdrawnRequest {
+                // A withdrawn card leaves the reason in its slot until the next send or request.
+                BotRequestWithdrawalNote(withdrawal: withdrawal)
+            }
+            if let startedAt = model.workingRowStartedAt {
+                ChatWorkingRowView(startedAt: startedAt)
+            }
+            Color.clear.frame(height: 1).id("bot-transcript-bottom")
+        }
+    )
+    statusRows
 }
     }
 
