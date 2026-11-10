@@ -41,19 +41,24 @@ struct BotConnection: Codable, Equatable, Identifiable {
     private static let dashboardPaths: Set<String> = ["login", "auth", "api", "chat", "sessions"]
 
     /// Parses the connection form's text into the dashboard root every request is built
-    /// from, so a saved address never has a path, query or fragment. A pasted link is
-    /// reduced to its root: `ws`/`wss` become `http`/`https`, the query and fragment are
-    /// dropped, and a path starting with a `dashboardPaths` segment is cleared. Any other
-    /// path throws `BotAddressError.path`; credentials, other schemes and bad hosts or
-    /// ports throw `.invalid`. A missing scheme becomes HTTPS, or HTTP for private and
-    /// local hosts. The form's preview and dev auto-login parse through here too.
+    /// from. A pasted link is reduced: `ws`/`wss` become `http`/`https`, the query and
+    /// fragment are dropped, and trailing slashes go. A remaining path is the reverse-proxy
+    /// prefix the dashboard is served under — the form the host itself publishes as
+    /// `dashboard.public_url`, such as `https://host:8443/dash` — and it is kept, because
+    /// every request appends its own route to this address. A page a browser or a curl
+    /// command adds (`/dash/login`, `/dash/sessions/<id>`, `/api`) is cut, since the address
+    /// means the dashboard, not one of its pages, and a repeated segment (`/dash/dash`)
+    /// collapses to one. Empty segments and `.`/`..` throw `BotAddressError.path`;
+    /// credentials, other schemes and bad hosts or ports throw `.invalid`. A missing scheme
+    /// becomes HTTPS, or HTTP for private and local hosts. The form's preview and dev
+    /// auto-login parse through here too.
     static func address(_ text: String) throws -> URL {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, !value.contains(where: \.isWhitespace) else { throw BotAddressError.invalid }
         let hasScheme = value.contains("://")
         if !hasScheme {
             // A bare IPv6 literal needs brackets; bracketed literals may include a port.
-            if IPv6Address(value) != nil { value = "[\(value)]" }
+            if IPv6Address(value) != nil { value = "[" + value + "]" }
             value = "https://" + value
         }
         guard var parts = URLComponents(string: value) else { throw BotAddressError.invalid }
@@ -74,15 +79,53 @@ struct BotConnection: Codable, Equatable, Identifiable {
         guard !plainHost.allSatisfy({ $0.isNumber || $0 == "." }) || IPv4Address(plainHost) != nil else {
             throw BotAddressError.invalid
         }
-        if let first = path.split(separator: "/").first, !dashboardPaths.contains(first.lowercased()) {
-            throw BotAddressError.path(path)
-        }
+        path = try prefix(path)
         if !hasScheme && defaultsToHTTP(plainHost.lowercased()) { parts.scheme = "http" }
         parts.scheme = parts.scheme?.lowercased()
         parts.host = host.lowercased()
-        parts.path = ""
+        parts.path = path
         guard let url = parts.url else { throw BotAddressError.invalid }
         return url
+    }
+
+    /// The reverse-proxy prefix this address serves the dashboard under, without a trailing
+    /// slash: empty for a dashboard at the root. Every request is built by appending its own
+    /// path to the root, so a prefix here is what makes `/dash/api/status` come out instead
+    /// of `/api/status`.
+    static func prefix(_ address: URL) -> String {
+        var path = address.path
+        while path.hasSuffix("/") { path.removeLast() }
+        return path
+    }
+
+    /// Validates the typed path and reports back the prefix to keep. Pages a browser or
+    /// curl command adds to the root (`/login`, `/api/…`) are cleared, because the address
+    /// means the dashboard, not one of its pages. Anything else is the proxy prefix and is
+    /// kept as one clean segment chain.
+    private static func prefix(_ path: String) throws -> String {
+        guard !path.isEmpty else { return "" }
+        var segments = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        // `//`, a trailing `.` or `..` in any position is refused rather than normalised:
+        // silently repairing it would connect somewhere the user did not type.
+        guard segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw BotAddressError.path(path)
+        }
+        // A page the browser or a curl command appended (`/dash/login`, `/dash/sessions/abc`,
+        // `/api`) is not part of the prefix: the address means the dashboard, not one of its
+        // pages, so the path is cut at the first page segment.
+        if let cut = segments.firstIndex(where: { dashboardPaths.contains($0.lowercased()) }) {
+            segments = Array(segments[..<cut])
+        }
+        // `/dash/dash` is the same door twice; one copy is what the requests need, and keeping
+        // both would build `/dash/dash/api/status`.
+        var collapsed: [String] = []
+        for segment in segments where collapsed.last?.lowercased() != segment.lowercased() {
+            collapsed.append(segment)
+        }
+        guard !collapsed.isEmpty else { return "" }
+        // Left decoded on purpose: `URLComponents.path` percent-encodes on its own, and
+        // escaping here first would double the escapes (`%20` becomes `%2520`).
+        return "/" + collapsed.joined(separator: "/")
     }
 
     /// Infer a scheme only for an omitted one, never as a retry after TLS fails.
@@ -113,8 +156,8 @@ struct BotConnection: Codable, Equatable, Identifiable {
 /// `BotConnection.address(_:)`, so typing mistakes stay apart from `BotFailure`
 /// connection failures and never reach the inbox's retry rules.
 enum BotAddressError: LocalizedError, Equatable {
-    /// A path that isn't a dashboard page, as typed without trailing slashes. Usually a
-    /// reverse-proxy prefix, which Hermex can't use yet.
+    /// A path that can't be a proxy prefix: an empty segment (`//`), a `.`/`..` that would
+    /// escape the root, or a form the address is not meant to carry.
     case path(String)
     /// No usable HTTP or HTTPS host, or the address carries a username or password.
     case invalid
@@ -125,7 +168,7 @@ enum BotAddressError: LocalizedError, Equatable {
             // A first-strong isolate lays the path out left to right on its own, so its
             // leading "/" stays in front of it inside right-to-left translations.
             let shown = "\u{2068}\(path)\u{2069}"
-            return String(localized: "Remove “\(shown)” from the address. Hermex needs the dashboard's main address, like https://example.com:9119, and can't use a dashboard served under a path yet.")
+            return String(localized: "The address's path \(shown) isn't one Hermex can use. Enter the dashboard's address, like https://example.com:9119, or the proxy prefix it is served under, like https://example.com/dash.")
         case .invalid:
             return String(localized: "Enter the dashboard's HTTP or HTTPS address, like https://example.com:9119, without a username or password.")
         }

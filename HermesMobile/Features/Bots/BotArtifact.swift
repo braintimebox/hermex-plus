@@ -34,9 +34,15 @@ enum BotArtifactReference {
             }
             // Desktop may emit an authenticated download URL. Extract only its
             // path; never carry its token, Profile override, or session override forward.
+            // A dashboard served under a proxy prefix answers on `/dash/api/fs/download`, so
+            // the prefix the address carries is dropped before the route is matched.
+            let prefix = BotConnection.prefix(address)
+            let served = url.path
+            let route = prefix.isEmpty ? served
+                : (served.hasPrefix(prefix + "/") ? String(served.dropFirst(prefix.count)) : served)
             if ["https", "http"].contains(scheme.lowercased()),
                url.scheme == address.scheme, url.host == address.host, url.port == address.port,
-               ["/api/fs/download", "/api/files/download", "/api/media", "/api/fs/read-data-url"].contains(url.path),
+               ["/api/fs/download", "/api/files/download", "/api/media", "/api/fs/read-data-url"].contains(route),
                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
                let path = parts.queryItems?.first(where: { $0.name == "path" })?.value,
                !path.isEmpty, !path.contains("\0") { return path }

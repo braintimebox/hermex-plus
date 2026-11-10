@@ -73,7 +73,7 @@ enum BotFailure: Error, Equatable, LocalizedError {
         case .rejected(-32601): return String(localized: "This Hermes connection does not support Bot chat here.")
         case .rejected(4090): return String(localized: "Another Hermes process owns this conversation. Resolve it on the host, then refresh.")
         case .rejected(4130): return String(localized: "This conversation is too large to open here. Use Desktop.")
-        case .invalidAddress: return String(localized: "Enter a Hermes HTTP or HTTPS address without a path, credentials or query.")
+        case .invalidAddress: return String(localized: "Enter a Hermes HTTP or HTTPS address, without credentials or a query.")
         case .blocked: return String(localized: "Something in front of Hermes, such as Cloudflare Access, wants its own sign-in first. Add its service token under Connection Headers in the Hermes connection, or use an address that skips it, such as the dashboard's local network address.")
         case .browserSignIn: return String(localized: "This Hermes host only offers sign-in with a browser, which Hermex doesn't support yet. To connect now, add a dashboard username and password on the host.")
         case .upgradeRefused: return String(localized: "Hermes accepted the sign-in, but the live connection was refused. If a proxy or tunnel sits in front of Hermes, turn on WebSocket support and let the Sec-WebSocket-Protocol header through.")
