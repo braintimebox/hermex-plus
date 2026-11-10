@@ -79,6 +79,19 @@ final class ComposerFilePathSearch {
 
         generation &+= 1
         let generation = self.generation
+
+        // `@.ipa` is a workspace-wide extension query, not a folder listing: the
+        // typed segment names no directory, so listing the root would only ever
+        // answer with what sits at the top.
+        if let ext = Self.extensionQuery(query) {
+            isLoading = true
+            let hits = await searchByExtension(ext, sessionID: sessionID, apiClient: apiClient)
+            guard generation == self.generation else { return }
+            isLoading = false
+            matches = hits
+            return
+        }
+
         let request = Request(query: query)
 
         if listings[request.directory] == nil {
@@ -219,5 +232,59 @@ final class ComposerFilePathSearch {
             }
             .prefix(matchLimit)
             .map { Match(node: $0.node) }
+    }
+    // MARK: - Extension queries
+
+    /// Directories an extension query may list, and how deep it may descend.
+    /// Both caps exist because every level costs one request: a workspace-wide
+    /// walk must stay predictable on a slow host.
+    private static let extensionDepthLimit = 4
+    private static let extensionDirectoryLimit = 120
+
+    /// `@.ipa`, `@*.ipa`, `@.IPA` — a segment that is only an extension. Returns
+    /// the lowercased extension, or nil when the query names a folder or file.
+    static func extensionQuery(_ query: String) -> String? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.contains("/") else { return nil }
+        var candidate = trimmed
+        if candidate.hasPrefix("*") { candidate.removeFirst() }
+        guard candidate.hasPrefix("."), candidate.count > 1 else { return nil }
+        let ext = String(candidate.dropFirst()).lowercased()
+        guard ext.allSatisfy({ $0.isLetter || $0.isNumber }) else { return nil }
+        return ext
+    }
+
+    /// Every file in the workspace with the requested extension, breadth first,
+    /// stopping at the caps above. Directories are visited at most once, so a
+    /// host that reports a cycle cannot trap the walk.
+    private func searchByExtension(
+        _ ext: String,
+        sessionID: String,
+        apiClient: APIClient
+    ) async -> [Match] {
+        var pending: [(path: String, depth: Int)] = [(FileTree.rootPath, 0)]
+        var visited: Set<String> = []
+        var found: [FileTreeNode] = []
+
+        while !pending.isEmpty, visited.count < Self.extensionDirectoryLimit {
+            let next = pending.removeFirst()
+            guard visited.insert(next.path).inserted else { continue }
+            guard let nodes = try? await entries(in: next.path, sessionID: sessionID, apiClient: apiClient)
+            else { continue }
+            for node in nodes {
+                if node.isDirectory {
+                    if next.depth < Self.extensionDepthLimit {
+                        pending.append((node.path, next.depth + 1))
+                    }
+                } else if URL(fileURLWithPath: node.name).pathExtension.lowercased() == ext {
+                    found.append(node)
+                }
+            }
+        }
+
+        return found
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+            .prefix(Self.matchLimit)
+            .map { Match(node: $0) }
     }
 }

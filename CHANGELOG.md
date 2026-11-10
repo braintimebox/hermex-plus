@@ -1,3 +1,20 @@
+## 4.0.2 — `@.ipa`: extension queries across the workspace
+
+The composer's `@` panel listed one folder per query. A query whose segment is
+only an extension names no folder, so `@.ipa` answered with whatever sat at the
+workspace root — in practice nothing, and the file had to be found by walking
+the tree a folder at a time.
+
+- **`@.ipa`, `@*.ipa`, `@.PDF`** now walk the workspace breadth first and offer
+  every file with that extension, sorted by path.
+- **Bounded on purpose:** four levels deep and 120 folders per query, each
+  directory listed at most once. A folder is never re-listed, so a host that
+  reports a cycle cannot trap the walk, and the request count stays predictable
+  on a slow host.
+- **Nothing else changes:** a query naming a folder or a file keeps the old
+  single-folder behaviour, and a segment with a slash is never treated as an
+  extension.
+
 ## 4.0.1 — bots, brought over from the 1.9 line
 
 Bots existed in this fork as a skeleton: 14 of upstream's 61 files, and none of
