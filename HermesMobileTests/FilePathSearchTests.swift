@@ -32,6 +32,8 @@ final class FilePathSearchTests: APIClientTestCase {
         switch path {
         case ".":
             return #"{"path": ".", "entries": [\#(entryJSON("..", path: "..", type: "dir")), \#(entryJSON("escape", path: "escape", type: "symlink", extra: #", "target_outside_workspace": true"#)), \#(entryJSON("src", path: "src", type: "dir")), \#(entryJSON("README.md", path: "README.md", type: "file"))]}"#
+        case "src/Chat":
+            return #"{"path": "src/Chat", "entries": [\#(entryJSON("Deep.ipa", path: "src/Chat/Deep.ipa", type: "file")), \#(entryJSON("notes.md", path: "src/Chat/notes.md", type: "file"))]}"#
         case "src":
             return #"{"path": "src", "entries": [\#(entryJSON("Chat", path: "src/Chat", type: "dir")), \#(entryJSON("chores.md", path: "src/chores.md", type: "file")), \#(entryJSON("Main.swift", path: "src/Main.swift", type: "file")), \#(entryJSON("My File.swift", path: "src/My File.swift", type: "file"))]}"#
         default:
@@ -283,5 +285,38 @@ final class FilePathSearchTests: APIClientTestCase {
         await search.search("", sessionID: "s2", apiClient: client)
 
         XCTAssertEqual(log.listedPaths, [".", "."])
+    }
+    // MARK: - Extension queries
+
+    func testOnlyAnExtensionSegmentCountsAsAnExtensionQuery() {
+        XCTAssertEqual(ComposerFilePathSearch.extensionQuery(".ipa"), "ipa")
+        XCTAssertEqual(ComposerFilePathSearch.extensionQuery("*.IPA"), "ipa")
+        XCTAssertEqual(ComposerFilePathSearch.extensionQuery("  .pdf "), "pdf")
+        XCTAssertNil(ComposerFilePathSearch.extensionQuery("src/.ipa"))
+        XCTAssertNil(ComposerFilePathSearch.extensionQuery("src"))
+        XCTAssertNil(ComposerFilePathSearch.extensionQuery("."))
+        XCTAssertNil(ComposerFilePathSearch.extensionQuery(".ipa/x"))
+    }
+
+    @MainActor
+    func testAnExtensionQueryFindsFilesBelowTheRoot() async {
+        let log = RequestLog()
+        let search = ComposerFilePathSearch()
+
+        await search.search(".ipa", sessionID: "s1", apiClient: makeListingClient(log: log))
+
+        XCTAssertEqual(search.matches.map(\.path), ["src/Chat/Deep.ipa"])
+        XCTAssertTrue(log.listedPaths.contains("src/Chat"), "the walk must reach nested folders")
+        XCTAssertFalse(search.isLoading)
+    }
+
+    @MainActor
+    func testAnExtensionQueryOffersNothingWhenNoFileMatches() async {
+        let log = RequestLog()
+        let search = ComposerFilePathSearch()
+
+        await search.search(".dmg", sessionID: "s1", apiClient: makeListingClient(log: log))
+
+        XCTAssertTrue(search.matches.isEmpty)
     }
 }

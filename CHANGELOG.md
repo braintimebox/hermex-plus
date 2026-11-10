@@ -1,3 +1,17 @@
+## 3.9.75 — `@.ipa`: extension queries across the workspace
+
+The composer's `@` panel listed one folder per query. A query whose segment is
+only an extension names no folder, so `@.ipa` answered with whatever sat at the
+workspace root and the file had to be found by walking the tree a folder at a
+time.
+
+- **`@.ipa`, `@*.ipa`, `@.PDF`** walk the workspace breadth first and offer every
+  file with that extension, sorted by path.
+- **Bounded on purpose:** four levels deep and 120 folders per query, each
+  directory listed at most once, so request count stays predictable.
+- **Nothing else changes:** a query naming a folder or a file keeps the old
+  single-folder behaviour.
+
 ## 3.9.74 — scheduled messages keep their attachments
 
 A scheduled message always arrived without its files. The model has carried
