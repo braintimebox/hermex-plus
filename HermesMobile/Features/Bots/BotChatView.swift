@@ -134,12 +134,12 @@ VStack(alignment: .leading, spacing: 8) {
                         // settled reply is a hosted selection document, and a lazy stack
                         // places rows it has not built from an estimate, which strands
                         // the scroll under load (issue #553).
-                        let livePrompt = model.liveMessages.first(where: { $0.role == "user" })
-                        let times = BotTranscriptTimes(
+                        let livePrompt: ChatMessage? = model.liveMessages.first { $0.role == "user" }
+                        let times: BotTranscriptTimes = BotTranscriptTimes(
                             messages: model.messages, start: window.start(count: model.messages.count),
                             livePrompt: livePrompt, turnStartedAt: model.turnStartedAt, isMidTurn: isStreaming
                         )
-                        let folds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
+                        let folds: TranscriptTurnFolds = turnFolds(windowStart: times.start, hasLivePrompt: livePrompt != nil)
                         // The seam: the stack and its width modifiers are erased here, so
                         // the checker never holds them together with the scroll-behaviour
                         // chain below. AnyView costs one erase per transcript, not per row.
