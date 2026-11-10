@@ -417,8 +417,10 @@ final class SharedDraftStoreTests: XCTestCase {
             "hermes-agent",
             "the share scheme must not be the one upstream's App Store build claims"
         )
+        // The 4.0 line ships under its own identity (`hermex4`), so the scheme is
+        // fork-owned per line rather than fixed to the 2.x `hermesplus` string.
         XCTAssertTrue(
-            HermesShareDraft.urlScheme.hasPrefix("hermesplus"),
+            HermesShareDraft.urlScheme.hasPrefix("hermex"),
             "expected a fork-owned share scheme, got \(HermesShareDraft.urlScheme)"
         )
     }
