@@ -187,34 +187,7 @@ jobs:
         # Pinned to v2 by SHA per this repo's action-pinning policy.
         uses: chetan/git-restore-mtime-action@6365eabac94ee2b7a747f96998927a6a6e1994c4  # v2
 
-      - name: Select simulator
-        id: sim
-        run: |
-          set -euo pipefail
-          name=$(xcrun simctl list devices available --json | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          phones = [
-              device["name"]
-              for runtime, devices in data["devices"].items()
-              if "iOS" in runtime
-              for device in devices
-              if device.get("isAvailable") and device["name"].startswith("iPhone")
-          ]
-          preferred = "iPhone 17"
-          print(preferred if preferred in phones else phones[0] if phones else "")
-          ')
-          if [[ -z "${name}" ]]; then
-            echo "No available iPhone simulator found:" >&2
-            xcrun simctl list devices available >&2
-            exit 1
-          fi
-          echo "Using simulator: ${name}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-
       - name: Build for testing
-        env:
-          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
@@ -222,7 +195,7 @@ jobs:
           xcodebuild build-for-testing -quiet \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
-            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             COMPILATION_CACHE_ENABLE_CACHING=YES \
             SWIFT_ENABLE_COMPILE_CACHE=YES \
