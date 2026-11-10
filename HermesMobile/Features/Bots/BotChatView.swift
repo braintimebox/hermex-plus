@@ -179,7 +179,9 @@ VStack(alignment: .leading, spacing: 8) {
                     stacked
                         .padding(.top, 16)
                         .padding(.bottom, 44)
-                        .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
+                        // The fork has no disclosure-toggled modifier: following stops when the
+                        // set of expanded turns changes, which is the same signal.
+                        .onChange(of: expandedTurnKeys) { handleFollowEvent(.userScrollBegin) }
                         // One link router for the whole transcript.
                         .transcriptLinks()
                         .background {
