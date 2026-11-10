@@ -153,19 +153,22 @@ VStack(alignment: .leading, spacing: 8) {
                                 )
                                 .frame(maxWidth: .infinity)
                         )
-                        stacked
-                        .padding(.top, 16)
-                        .padding(.bottom, 44)
                         // A tapped row must stay under the finger: stop following so
                         // neither the size-change anchor nor the next activity update
                         // moves the reader. Latest brings them back.
-                        .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
-                        // One link router for the whole transcript.
-                        .transcriptLinks()
-                        .background {
-                            ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
-                                .accessibilityHidden(true)
-                        }
+                        let row: AnyView = AnyView(
+                            stacked
+                                .padding(.top, 16)
+                                .padding(.bottom, 44)
+                                .chatDisclosureToggled { handleFollowEvent(.userScrollBegin) }
+                                // One link router for the whole transcript.
+                                .transcriptLinks()
+                                .background {
+                                    ChatScrollObserver(isStreaming: isStreaming, onFollowEvent: handleFollowEvent, onMetrics: updateScrollMetrics)
+                                        .accessibilityHidden(true)
+                                }
+                        )
+                        row
                     }
                 )
                 scrolling
