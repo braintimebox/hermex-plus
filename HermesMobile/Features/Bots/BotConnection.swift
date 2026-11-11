@@ -104,7 +104,11 @@ struct BotConnection: Codable, Equatable, Identifiable {
     /// kept as one clean segment chain.
     private static func prefix(_ path: String) throws -> String {
         guard !path.isEmpty else { return "" }
-        var segments = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        // `path` arrives with its leading slash — "/dash", not "dash" — so the part after it is
+        // what splits into segments. Empty components stay in the list so a doubled slash still
+        // trips the guard below instead of being silently repaired.
+        let body = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        var segments = body.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         // `//`, a trailing `.` or `..` in any position is refused rather than normalised:
         // silently repairing it would connect somewhere the user did not type.
         guard segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
