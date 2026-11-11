@@ -170,7 +170,7 @@ enum BotTranscriptProjection {
         /// one at a time. The rows are merged here into the single answer the user wrote
         /// nothing between; the first row keeps the identity and the reaction row.
         var mergedAssistant: (id: String, parts: [String], timestamp: Double?, rowID: Int?,
-                              displayMetadata: [String: BotJSON]?, displayKind: String?)?
+                              displayMetadata: [String: JSONValue]?, displayKind: String?)?
 
         func flushAssistant() {
             guard let merged = mergedAssistant else { return }
