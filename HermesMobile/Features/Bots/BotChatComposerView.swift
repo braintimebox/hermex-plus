@@ -48,10 +48,13 @@ struct BotChatComposerView: View {
     private var isExpanded: Bool { isFocused || settingsPresented || picker != nil || shouldRestoreFocusAfterPicker || preview != nil || model.submittingPrompt != nil }
     private var showsToolbar: Bool { isExpanded }
     private var showsStop: Bool { model.mayStop || model.turn == .stopping }
-    /// Send is one button. Idle, it starts a turn; working, it asks what the
-    /// message should do, so it is live whenever any of those is.
+    /// Send is one button. Idle, it starts a turn. Working, it queues the message the way
+    /// 3.9.74 did — the owner wants a deferred send, not a question. The upstream card
+    /// (steer / queue / interrupt) is still there behind a long press, for the times the
+    /// answer should steer the running turn instead.
     private var canSend: Bool {
-        model.hasSendableInput && (model.maySubmit(.send) || !busyChoices.isEmpty)
+        model.hasSendableInput
+            && (model.maySubmit(.send) || model.maySubmit(.queue) || !busyChoices.isEmpty)
     }
     private var busyChoices: [BotPromptMode] {
         BotPromptMode.busyChoices(hasAttachments: !model.attachments.items.isEmpty).filter(model.maySubmit)
@@ -500,16 +503,27 @@ struct BotChatComposerView: View {
         .buttonStyle(.chatTactile(.icon))
         .disabled(!canSend)
         .accessibilityLabel(Text("Send"))
+        .accessibilityHint(Text("Queues the message while the bot works. Hold to choose steer, queue or interrupt."))
         .keyboardShortcut(.return, modifiers: .command)
+        // The upstream card is no longer the default on a working bot, so the way to it has
+        // to be discoverable and must not fire on a plain tap.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                guard !busyChoices.isEmpty else { return }
+                choosingSendMode = true
+            }
+        )
     }
 
-    /// Idle sends go straight out. On a working bot the message could steer,
-    /// queue or interrupt, and that is the user's call every time, so the card
-    /// asks before anything is written.
+    /// Idle sends go straight out. On a working bot the message queues — the deferred send
+    /// this app has always had — instead of opening a question. A long press on the send
+    /// button opens the upstream card for the times the answer should steer or interrupt.
     private func send() {
         voiceInput.stopBeforeSubmittingDraft()
         guard model.hasSendableInput else { return }
         if let action = model.preparePrompt(.send) {
+            Task { await model.submit(action) }
+        } else if let action = model.preparePrompt(.queue) {
             Task { await model.submit(action) }
         } else if !busyChoices.isEmpty {
             choosingSendMode = true
