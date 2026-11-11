@@ -1,14 +1,9 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/42825240888
-Commit: fc0f812fb50ef13601607aa30c413647df90453a
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/43024286646
+Commit: e17399881e21471b740c865ccba81dd20e7221ea
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:292:47: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:293:47: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:294:47: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:295:45: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:296:45: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:297:45: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobileTests/FilePathSearchTests.swift:298:45: error: call to main actor-isolated static method 'extensionQuery' in a synchronous nonisolated context
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotActivity.swift:183:41: error: cannot convert value of type '[String : BotJSON]?' to expected argument type '[String : JSONValue]?'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotActivity.swift:225:41: error: cannot assign value of type '(String, [String], Double?, Int?, [String : JSONValue]?, String?)' to type '(id: String, parts: [String], timestamp: Double?, rowID: Int?, displayMetadata: [String : BotJSON]?, displayKind: String?)?'
 ```
