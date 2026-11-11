@@ -179,6 +179,9 @@ final class BotDashboardPrefixTests: XCTestCase {
     func testPastedDownloadURLKeepsOnlyItsPath() throws {
         let pasted = "https://example.com:8443/dash/api/fs/download?path=%2Ftmp%2Fa.png&profile=work&session_id=s1"
         XCTAssertEqual(try BotArtifactReference.path(pasted, address: try prefixed()), "/tmp/a.png")
-        XCTAssertEqual(try BotArtifactReference.path(pasted, address: try root()), "/tmp/a.png")
+        // The same door without a prefix is the same host and port, so the pasted link still
+        // names this host. A different port is a different host and is refused by design.
+        let rootOnSameDoor = try BotConnection.address("https://example.com:8443")
+        XCTAssertEqual(try BotArtifactReference.path(pasted, address: rootOnSameDoor), "/tmp/a.png")
     }
 }
