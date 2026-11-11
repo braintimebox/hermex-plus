@@ -163,6 +163,28 @@ enum BotTranscriptProjection {
         var pendingTools: [ToolCall] = []
         var pendingReasoning: [String] = []
         var pendingStart: Int?
+        /// The turn's answer, joined. One logical turn is persisted as several assistant
+        /// rows (the host documents that on `serverID`: "one logical turn can be persisted
+        /// as several rows"), and showing each row as its own bubble made the bot look like
+        /// it was answering itself and tore a long answer into pieces that had to be copied
+        /// one at a time. The rows are merged here into the single answer the user wrote
+        /// nothing between; the first row keeps the identity and the reaction row.
+        var mergedAssistant: (id: String, parts: [String], timestamp: Double?, rowID: Int?,
+                              displayMetadata: [String: BotJSON]?, displayKind: String?)?
+
+        func flushAssistant() {
+            guard let merged = mergedAssistant else { return }
+            messages.append(ChatMessage(
+                role: "assistant",
+                content: merged.parts.joined(separator: "\n\n"),
+                timestamp: merged.timestamp,
+                messageId: merged.id,
+                rowID: merged.rowID,
+                displayMetadata: merged.displayMetadata,
+                displayKind: merged.displayKind
+            ))
+            mergedAssistant = nil
+        }
 
         func flush(anchor: String?) {
             guard let start = pendingStart, !pendingTools.isEmpty || !pendingReasoning.isEmpty else { return }
@@ -193,9 +215,22 @@ enum BotTranscriptProjection {
                 }
                 guard let text = row["text"].text else { continue }
                 let id = "\(root)/\(index)"
-                flush(anchor: id)
                 let displayKind = row["display_kind"].text
                 let isDelegationCompletion = displayKind == BotDelegationCompletion.displayKind
+                if role == "assistant", !isDelegationCompletion {
+                    // Tools that ran before this segment belong to the answer being built, so
+                    // they anchor to the merged row rather than to a bubble of their own.
+                    flush(anchor: mergedAssistant?.id ?? id)
+                    if mergedAssistant == nil {
+                        mergedAssistant = (id, [text], row["timestamp"].number, row["row_id"].integer,
+                                           row["display_metadata"].argumentDictionary, displayKind)
+                    } else {
+                        mergedAssistant?.parts.append(text)
+                    }
+                    continue
+                }
+                flushAssistant()
+                flush(anchor: id)
                 // A persisted steer arrives wrapped in the out-of-band marker.
                 // Unwrap it first so the trailing mention note is still a
                 // suffix and gets hidden like on any other user row.
@@ -214,6 +249,8 @@ enum BotTranscriptProjection {
                 continue
             }
         }
+        // A transcript that ends on an answer (the usual case) flushes it here.
+        flushAssistant()
         flush(anchor: nil)
         return (messages, activity)
     }

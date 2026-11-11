@@ -19,7 +19,11 @@ enum BotMessageActions {
         isHapticsEnabled: Bool,
         copy: @escaping (String) -> Void = { UIPasteboard.general.string = $0 }
     ) -> (() -> Void)? {
-        guard !isLive, message.role == "assistant",
+        // Copy is offered on every settled answer and, deliberately, on a live one too: the
+        // text already on screen is the text the user wants for an audit, and waiting for the
+        // turn to finish (which a stalled stream never does) is exactly when the button was
+        // missed. The pasteboard takes whatever arrived so far.
+        guard message.role == "assistant",
               message.displayKind != BotDelegationCompletion.displayKind else { return nil }
         return items(copyText: message.content, isHapticsEnabled: isHapticsEnabled, copy: copy).first?.perform
     }
