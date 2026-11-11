@@ -177,11 +177,15 @@ final class BotDashboardPrefixTests: XCTestCase {
     // MARK: Artifacts
 
     func testPastedDownloadURLKeepsOnlyItsPath() throws {
-        let pasted = "https://example.com:8443/dash/api/fs/download?path=%2Ftmp%2Fa.png&profile=work&session_id=s1"
-        XCTAssertEqual(try BotArtifactReference.path(pasted, address: try prefixed()), "/tmp/a.png")
-        // The same door without a prefix is the same host and port, so the pasted link still
-        // names this host. A different port is a different host and is refused by design.
+        let prefixedLink = "https://example.com:8443/dash/api/fs/download?path=%2Ftmp%2Fa.png&profile=work&session_id=s1"
+        XCTAssertEqual(try BotArtifactReference.path(prefixedLink, address: try prefixed()), "/tmp/a.png")
+
+        // A root install still recognises its own link, which carries no prefix.
+        let rootLink = "https://example.com:8443/api/fs/download?path=%2Ftmp%2Fb.png&profile=work&session_id=s1"
         let rootOnSameDoor = try BotConnection.address("https://example.com:8443")
-        XCTAssertEqual(try BotArtifactReference.path(pasted, address: rootOnSameDoor), "/tmp/a.png")
+        XCTAssertEqual(try BotArtifactReference.path(rootLink, address: rootOnSameDoor), "/tmp/b.png")
+
+        // And a path that belongs to another door is refused rather than guessed at.
+        XCTAssertThrowsError(try BotArtifactReference.path(prefixedLink, address: rootOnSameDoor))
     }
 }
