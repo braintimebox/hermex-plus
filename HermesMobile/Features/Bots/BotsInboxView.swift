@@ -15,6 +15,11 @@ struct BotsInboxHome {
     let server: URL
     private let home: BotsInboxHome?
     private let homeControl: HomeControl
+    /// The way back to Sessions when this inbox is the root of its own stack, which is how
+    /// the fork shows it. A stack's root has no previous screen, so the system chevron can
+    /// never appear on its own; the leading button below stands in for it. Nil where the
+    /// inbox is pushed instead, and the system back button does the job.
+    private let onClose: (() -> Void)?
     /// The bot a deep link named, resolved here because this is where the live roster
     /// is. Cleared once this inbox has settled, whether or not it matched (#554).
     @Binding private var pendingDestination: BotDestination?
@@ -51,9 +56,10 @@ struct BotsInboxHome {
 
     init(
         server: URL,
-        pendingDestination: Binding<BotDestination?> = .constant(nil)
+        pendingDestination: Binding<BotDestination?> = .constant(nil),
+        onClose: (() -> Void)? = nil
     ) where HomeControl == EmptyView {
-        self.init(server: server, pendingDestination: pendingDestination, home: nil) { EmptyView() }
+        self.init(server: server, pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
     }
 
     /// A Hermes server's home. Its sign-in form is reached through Settings there, so
@@ -62,20 +68,23 @@ struct BotsInboxHome {
         server: URL,
         pendingDestination: Binding<BotDestination?>,
         home: BotsInboxHome?,
+        onClose: (() -> Void)? = nil,
         @ViewBuilder homeControl: () -> HomeControl
     ) {
         self.server = server
         self.home = home
         self.homeControl = homeControl()
+        self.onClose = onClose
         _pendingDestination = pendingDestination
         _inbox = State(initialValue: BotInbox(server: server))
     }
 
     /// An inbox the caller built, such as one on scripted wires.
-    init(server: URL, inbox: BotInbox) where HomeControl == EmptyView {
+    init(server: URL, inbox: BotInbox, onClose: (() -> Void)? = nil) where HomeControl == EmptyView {
         self.server = server
         home = nil
         homeControl = EmptyView()
+        self.onClose = onClose
         _pendingDestination = .constant(nil)
         _inbox = State(initialValue: inbox)
     }
@@ -183,6 +192,16 @@ struct BotsInboxHome {
         }
         .modifier(BotsInboxTitle(home: home))
         .toolbar {
+            if let onClose {
+                // Stands in for the system back button: this inbox is a stack's root, so
+                // iOS has nothing to draw a chevron for. Same place and shape as upstream's.
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { onClose() } label: {
+                        Label("Sessions", systemImage: "chevron.backward")
+                    }
+                    .accessibilityIdentifier("bots-back-to-sessions")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Search bots and messages", systemImage: "magnifyingglass") { showingSearch = true }
                     .disabled(inbox.connection == nil)
