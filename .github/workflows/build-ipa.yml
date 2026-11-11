@@ -271,21 +271,29 @@ jobs:
     # The split comes from scripts/test_shards.py: it discovers every XCTestCase
     # in the sources and packs them by case count, so a new test file lands in a
     # shard without anyone updating a list.
-    name: Test (shard ${{ matrix.shard }}/1)
+    name: Test (shard ${{ matrix.shard }}/3)
     needs: [guard, unit-build]
     runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        # ONE shard. Measured on run 40213100922: a shard spends ~280 s on
-        # checkout, artifact download, simulator boot, install and runner
-        # startup, and 16 s running its 380 test cases. Sharding divided the
-        # 16 seconds and multiplied the 280: five shards queued for five macOS
-        # runners and the last one finished six minutes after a single shard
-        # would have. 143 test classes, ~1900 cases, ~90 s total - one shard
-        # holds them comfortably.
-        shard: [1]
+        # THREE shards, on the owner's instruction. What the numbers say, so the
+        # next reader does not have to re-derive it:
+        #
+        # Run 42978624775 (commit 8e960ca) split the Test job into 7m42s of setup
+        # — checkout, 265 MB test-build download, simulator boot (3m44s) and
+        # app/runner install (3m10s) — and 65s of actual execution (1962 cases).
+        # Sharding divides the 65s only: each shard still pays its own ~7m42s, so
+        # three shards land at ~8m04s against 9m45s single, for three runners
+        # instead of one. The earlier measurement that reverted sharding (run
+        # 40213100922: 280s setup, 16s of cases) is the same trade in sharper
+        # form.
+        #
+        # Kept because the owner chose it: it is worth ~1m40s of wall clock and
+        # it splits a red suite across three logs. The real lever is the setup
+        # cost, not the case count.
+        shard: [1, 2, 3]
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
@@ -434,8 +442,8 @@ jobs:
           # Осторожно: это ГИПОТЕЗА, а не подтверждённый выигрыш. Ранее замеренный
           # эксперимент с 4 воркерами (4016s против 689s) отвергнут и остаётся
           # отвергнутым — речь только о параллелизме при одном воркере.
-          SHARD_ARGS="$(python3 scripts/test_shards.py --count 1 --shard ${{ matrix.shard }})"
-          echo "shard ${{ matrix.shard }}/1: $(wc -w <<< "${SHARD_ARGS}") classes"
+          SHARD_ARGS="$(python3 scripts/test_shards.py --count 3 --shard ${{ matrix.shard }})"
+          echo "shard ${{ matrix.shard }}/3: $(wc -w <<< "${SHARD_ARGS}") classes"
           xcodebuild test-without-building $SHARD_ARGS \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
