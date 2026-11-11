@@ -51,6 +51,10 @@ struct ChatRunEnding: Equatable {
 @MainActor
 protocol ChatStreamCoordinatorDelegate: AnyObject {
     var streamCoordinatorSessionID: String? { get }
+    /// The host this run belongs to. A view model always knows it; the registry below is
+    /// only a fallback, and it is empty wherever a coordinator runs outside the app
+    /// (tests), which silently dropped every Live Activity start.
+    var streamCoordinatorServerURL: URL? { get }
     var streamCoordinatorDisplayTitle: String { get }
     var streamCoordinatorHasRunningLiveToolCall: Bool { get }
     var streamCoordinatorHasPendingPrompt: Bool { get }
@@ -97,6 +101,10 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse)
     @discardableResult
     func streamCoordinatorEnqueuePendingSteerLeftover(_ text: String) -> Bool
+}
+extension ChatStreamCoordinatorDelegate {
+    /// A delegate that cannot name its host leaves the lookup to the registry.
+    var streamCoordinatorServerURL: URL? { nil }
 }
 
 @MainActor
@@ -1226,7 +1234,8 @@ final class ChatStreamCoordinator {
         // host; the coordinator itself only knows the session, so the active
         // server comes from the registry.
         guard let sessionID = delegate?.streamCoordinatorSessionID,
-              let server = ServerRegistry.shared.activeServer.flatMap({ URL(string: $0.id) })
+              let server = delegate?.streamCoordinatorServerURL
+                ?? ServerRegistry.shared.activeServer.flatMap({ URL(string: $0.id) })
         else { return }
 
         liveActivityManager.start(

@@ -6637,6 +6637,8 @@ extension ChatViewModel: ChatAttachmentCoordinatorDelegate {
 
 extension ChatViewModel: ChatStreamCoordinatorDelegate {
     var streamCoordinatorSessionID: String? { sessionID }
+    /// The host this chat talks to; the coordinator needs it for the Live Activity.
+    var streamCoordinatorServerURL: URL? { server }
     var streamCoordinatorDisplayTitle: String { displayTitle }
     var streamCoordinatorHasRunningLiveToolCall: Bool { hasRunningLiveToolCall }
     var streamCoordinatorHasPendingPrompt: Bool {
