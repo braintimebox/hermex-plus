@@ -97,6 +97,14 @@ struct BotTurnActivity: Equatable {
             // UTF-8 length bounds the character count and is O(1), so the
             // O(n) count only runs once the text could be over the limit.
             if reasoning.utf8.count > Self.reasoningLimit, reasoning.count > Self.reasoningLimit { reasoning = String(reasoning.suffix(Self.reasoningLimit)) }
+        case "reasoning.available":
+            // A finalized reasoning block arrives after the deltas and is shown as its own
+            // paragraph; the port lost this case, so the block never reached the transcript.
+            guard let text = payload["text"].text, !text.isEmpty else { return true }
+            reasoning = reasoning.isEmpty ? text : reasoning + "\n" + text
+            if reasoning.utf8.count > Self.reasoningLimit, reasoning.count > Self.reasoningLimit {
+                reasoning = String(reasoning.suffix(Self.reasoningLimit))
+            }
         case "notification.show":
             guard let text = payload["text"].text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return true }
             let key = payload["key"].text ?? payload["id"].text ?? "notice-\(notices.count)"

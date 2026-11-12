@@ -1096,11 +1096,14 @@ enum LiveActivityReconciler {
             guard let status = await streamStatus(orphan.streamID), status.active == false else { continue }
             let outcome = reconciledOutcome(forTerminalState: status.journal?.terminalState)
             let didEnd = await endOrphan(orphan, outcome)
-            guard notifiesOnCompletion, didEnd, let alertOutcome = ResponseCompletionOutcome(outcome.status),
+            // 3.9.74's rule, restored: only a completed run notifies. The port widened this
+            // to every terminal state, so a failed orphan pinged the user too. Run 1da4db1
+            // carries the test that pins the original intent.
+            guard notifiesOnCompletion, didEnd, outcome.status == .complete,
                   (server == nil || orphan.server == server) else { continue }
             let age = now.timeIntervalSince(orphan.updatedAt)
             guard age >= 0, age <= recencyWindow else { continue }
-            await notify(orphan, alertOutcome)
+            await notify(orphan, .completed)
         }
     }
 }
