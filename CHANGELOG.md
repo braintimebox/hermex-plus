@@ -1,3 +1,24 @@
+## 4.0.3 — stability pass on the Bots port
+
+Five things the port lost or widened, each found by a red test rather than by
+reading the diff:
+
+- **Live Activity never started.** The coordinator asked `ServerRegistry` for the
+  host, which is empty outside the running app, so `start` was skipped silently.
+  The host now comes from the delegate, with the registry as the fallback.
+- **A failed run notified.** 3.9.74 alerted only on completion; the port widened
+  the guard to every terminal state. Completion-only, as before.
+- **`reasoning.available` had no handler**, so a finalized reasoning block never
+  reached the transcript.
+- **`eventsRetried` counted one short**: it was incremented on the next send
+  instead of where the retry is decided.
+- **An unconfirmed send bricked the composer.** `.uncertain` outranked every
+  snapshot and no control could write again. A full snapshot now settles it, and
+  the composer offers "Send again" / "Mark as sent" when the host stays silent.
+
+Also: draft tests compared a whole `ChatDraft` against one with no `lastUsedAt`,
+which the store stamps on every write.
+
 ## 4.0.2 — `@.ipa`: extension queries across the workspace
 
 The composer's `@` panel listed one folder per query. A query whose segment is

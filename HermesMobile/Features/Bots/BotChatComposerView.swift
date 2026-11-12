@@ -84,6 +84,26 @@ struct BotChatComposerView: View {
                 BotQuickReplyRow(replies: quickReplies) { model.applyQuickReply($0) }
                     .transition(.opacity)
             }
+            // `.uncertain` used to leave the composer dead with no way forward: the send
+            // never got an answer, so the field refused input for the rest of the session.
+            // The user is the one who can settle it.
+            if model.uncertainSend || model.uncertainStop {
+                HStack(spacing: 12) {
+                    Label("Not confirmed", systemImage: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Button("Send again") { Task { await model.resolveUncertainPrompt(resent: true) } }
+                        .font(.caption.weight(.semibold))
+                    Button("Mark as sent") { Task { await model.resolveUncertainPrompt(resent: false) } }
+                        .font(.caption)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity)
+                .accessibilityIdentifier("bot-uncertain-send")
+            }
             composerContainer
         }
         .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: pill)

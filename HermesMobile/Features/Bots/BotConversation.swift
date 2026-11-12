@@ -398,6 +398,18 @@ import OSLog
             && !localOperation && !uncertainSend && !uncertainStop && answeringRequestID == nil
     }
 
+    /// The user's answer to "did it send?" — the only exit from `.uncertain` when the host
+    /// never sends another snapshot, which is exactly a stalled stream.
+    func resolveUncertainPrompt(resent: Bool) async {
+        guard uncertainSend || uncertainStop else { return }
+        uncertainSend = false
+        uncertainStop = false
+        drafts.setBotSubmissionUncertain(false, for: draftKey)
+        turn = .idle
+        guard resent, let action = preparePrompt(.send) ?? preparePrompt(.queue) else { return }
+        await submit(action)
+    }
+
     func maySubmit(_ mode: BotPromptMode) -> Bool {
         !attachments.isImporting && (attachments.items.isEmpty || mode == .send || mode == .queue)
             && !unavailablePromptModes.contains(mode) && (mode == .send ? maySend : mayGuide)
@@ -932,6 +944,15 @@ import OSLog
         let continuation = snapshot["auto_continue"] != .null && snapshot["auto_continue"].flag != false
         let queued = snapshot["queued"] != .null
         let busy = running || continuation || queued || attention
+        // The host's own account settles a send we could not confirm: a full snapshot with
+        // nothing running means the message landed or never left. Either way the composer has
+        // to come back — `.uncertain` used to outrank every snapshot, so the field stayed dead
+        // for the rest of the session and looked like a frozen app.
+        if full, !busy, failure == nil, uncertainSend || uncertainStop {
+            uncertainSend = false
+            uncertainStop = false
+            drafts.setBotSubmissionUncertain(false, for: draftKey)
+        }
         if snapshotIsBusy != busy { turnRevision += 1; snapshotIsBusy = busy }
         if stopping { completionArmed = false } else if busy { completionArmed = true }
         if attention { turn = .needsAttention }
