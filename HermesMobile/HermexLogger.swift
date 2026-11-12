@@ -224,6 +224,7 @@ final class HermexLogger {
     private func send(_ events: [[String: Any]], to baseURL: URL) {
         isSending = true
         store.noteSent(events.count)
+        if retryAttempt > 0 { store.noteRetried(events.count) }
 
         let webhook = baseURL.appendingPathComponent("webhook/hermex-logs")
         var request = URLRequest(url: webhook)
@@ -369,9 +370,6 @@ final class HermexLogger {
             scheduleRetry(after: 1)
 
         case .retryable(let retryAfter):
-            // Counted where the retry is decided, not where the next send starts: a send can
-            // be triggered by a flush scheduled elsewhere, which left the counter one short.
-            store.noteRetried(orderedKeys.count)
             scheduleRetry(after: retryAfter ?? nextBackoff())
 
         case .permanent(let reason):
