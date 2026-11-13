@@ -531,7 +531,7 @@ struct BotChatComposerView: View {
         .accessibilityHint(Text("Queues the message while the bot works. Hold to choose steer, queue or interrupt."))
         .keyboardShortcut(.return, modifiers: .command)
         // Steer the running turn — shown alongside Send so the user can correct
-        # the agent mid-stream without opening the card.
+        // the agent mid-stream without opening the card.
         .contextMenu {
             Button {
                 onSteer()
