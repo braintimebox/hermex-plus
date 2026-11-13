@@ -1,3 +1,14 @@
+## 4.0.5 — the Bots screen finally reports what it does
+
+22 090 events on the host and **not one** carried a `Bot` screen: the ported
+Bots UI shipped without telemetry, so every "the message does not send" report
+had to be answered by reading code.
+
+Three events now cover the path: the send tap (turn, connection, `maySend`,
+`mayGuide`, uncertainty), a `submit refused` when the prepared action is stale,
+and `submit start` with mode, turn, character and attachment counts. The next
+failure is readable from `hermex-logs.jsonl` instead of guessed.
+
 ## 4.0.4 — the composer stops measuring on every frame
 
 Device telemetry (hermex-logs.jsonl) put the freeze on record: twenty-plus

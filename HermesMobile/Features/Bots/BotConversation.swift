@@ -1042,7 +1042,26 @@ import OSLog
     /// One deliberate action, one write. The durable marker covers every prompt
     /// mode; snapshots and matching history can never acknowledge that write.
     func submit(_ action: PromptAction) async {
-        guard action == preparePrompt(action.mode) else { return }
+        // Reaching here is the question every "it does not send" report turns on: did the tap
+        // become a write, or was it refused before anything left? Bots had no logging at all.
+        guard action == preparePrompt(action.mode) else {
+            HermexLogger.shared.log(
+                type: "event", screen: "BotChat",
+                message: "submit refused (stale action)",
+                extras: ["mode": action.mode.title, "turn": String(describing: turn)]
+            )
+            return
+        }
+        HermexLogger.shared.log(
+            type: "event", screen: "BotChat",
+            message: "submit start",
+            extras: [
+                "mode": action.mode.title,
+                "turn": String(describing: turn),
+                "chars": action.text.count,
+                "attachments": action.attachmentIDs.count
+            ]
+        )
         let owner = action.generation
         let attachmentLease = attachments.protectOperation()
         defer { withExtendedLifetime(attachmentLease) {} }
