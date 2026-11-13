@@ -1,3 +1,19 @@
+## 4.0.8 — bot telemetry that actually fires
+
+The 2 s stall on 13.11 was captured, but the bot screen sent **zero** telemetry
+events — “send tapped”, “submit start”, everything was missing from
+`hermex-logs.jsonl`. If the button tap didn’t log, we couldn’t tell whether
+the tap reached the code or the UI froze first.
+
+- **`send button tapped`** now fires the instant the send button is touched,
+  before any validation — if this doesn’t appear in the log, the tap never
+  reached the code (UI freeze, dead button, wrong build).
+- **`submit network send started`** fires when the HTTP request leaves the
+  app — if this appears but no stream follows, the problem is on the host,
+  not the app.
+- Surface stamp `surface: bots` on every event so a stall is attributable to
+  Bots vs Sessions without guessing.
+
 ## 4.0.7 — everything since 4.0.3, released
 
 Bots fixes: `json.loads` crash on malformed host answers, composer measure once

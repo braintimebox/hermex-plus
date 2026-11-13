@@ -555,20 +555,20 @@ struct BotChatComposerView: View {
     /// button opens the upstream card for the times the answer should steer or interrupt.
     private func send() {
         voiceInput.stopBeforeSubmittingDraft()
-        // Bots have no telemetry at all: 22 090 events on the host, none with a `Bot` screen.
-        // Every "the button does nothing" report so far was answered by reading code. This
-        // line, and the two in `submit`, make the next one answerable from the log.
+        // Log the button tap itself, before any validation — if this doesn't appear in the
+        // log, the tap never reached the code (UI freeze, dead button, wrong build).
         HermexLogger.shared.log(
             type: "event",
             screen: "BotChat",
-            message: "send tapped",
+            message: "send button tapped",
             extras: [
                 "turn": String(describing: model.turn),
                 "connected": model.connectionState == .connected ? 1 : 0,
                 "maySend": model.maySend ? 1 : 0,
                 "mayGuide": model.mayGuide ? 1 : 0,
                 "sendable": model.hasSendableInput ? 1 : 0,
-                "uncertain": model.uncertainSend || model.uncertainStop ? 1 : 0
+                "uncertain": model.uncertainSend || model.uncertainStop ? 1 : 0,
+                "hasDraft": model.draft?.isEmpty == false ? 1 : 0
             ]
         )
         guard model.hasSendableInput else { return }

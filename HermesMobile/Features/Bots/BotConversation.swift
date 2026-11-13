@@ -1103,6 +1103,17 @@ import OSLog
                 defer {
                     if owner == generation { isUploadingAttachments = false; attachmentUploadTask = nil }
                 }
+                HermexLogger.shared.log(
+                    type: "event",
+                    screen: "BotChat",
+                    message: "submit network send started",
+                    extras: [
+                        "mode": action.mode.title,
+                        "turn": String(describing: turn),
+                        "hasAttachments": action.attachmentIDs.count > 0 ? 1 : 0,
+                        "attachmentCount": action.attachmentIDs.count
+                    ]
+                )
                 text = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
             }
             try check(owner)
