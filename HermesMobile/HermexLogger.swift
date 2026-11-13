@@ -136,6 +136,22 @@ final class HermexLogger {
     /// Enqueue a diagnostic event. Never throws, never crashes.
     /// `extras` carries structured context (stack, memory, heavy op) for
     /// freeze/jank reports; merged into the event after the base fields.
+    /// Which chat surface is in front. A stall event names the view that blocked, but not
+    /// whether the user was in Sessions or in Bots, and the synthetic session id cannot answer
+    /// it — so the 2 s stall recorded on 13.11 could not be attributed to a screen the user
+    /// recognised.
+    private var currentSurface = "unknown"
+
+    /// Two seconds of identical diagnostic line is noise, not evidence: the composer logged
+    /// 3 523 events and the draft store 3 823 in one device log, burying the 23 that mattered.
+    private var lastEventKey: String?
+    private var lastEventAt: TimeInterval = 0
+    private var suppressedDuplicates = 0
+
+    func setSurface(_ surface: String) {
+        queue.async { self.currentSurface = surface }
+    }
+
     func log(
         type: String,
         durationMs: Double? = nil,
@@ -168,9 +184,20 @@ final class HermexLogger {
             if let durationMs { event["durationMs"] = durationMs }
             if let screen { event["screen"] = screen }
             if let extras { event.merge(extras) { _, new in new } }
+            event["surface"] = currentSurface
+            if type == "event" {
+                let key = "\(screen ?? "")|\(message.prefix(40))"
+                if key == lastEventKey, now - lastEventAt < 2 {
+                    suppressedDuplicates += 1
+                    return
+                }
+                lastEventKey = key
+                lastEventAt = now
+            }
             if type == "freeze" {
                 event["lastEvents"] = recentEvents
                 event["foreground"] = UIApplication.shared.applicationState == .active
+                event["suppressedDuplicates"] = suppressedDuplicates
             }
 
             // Persist first, then attempt delivery. Only a disk failure leaves

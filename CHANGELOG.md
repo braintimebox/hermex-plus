@@ -1,3 +1,15 @@
+## 4.0.6 — telemetry that can name the culprit
+
+The 2 s stall of 13.11 carried a stack (`AttributeGraph`), a flag that the chat was
+streaming, 150 messages and 68 displayed rows — and no way to tell **which** chat:
+`sessionId` was synthetic and the screen field named the view class, not the surface.
+
+- Every event now carries `surface` (bots / sessions), stamped by the composer that is
+  on screen.
+- Identical diagnostic lines within two seconds are dropped and counted, not shipped:
+  one device log held 3 523 `ComposerField` and 3 823 draft events against 23 stalls.
+- Freeze events report how many duplicates were suppressed.
+
 ## 4.0.5 — the Bots screen finally reports what it does
 
 22 090 events on the host and **not one** carried a `Bot` screen: the ported

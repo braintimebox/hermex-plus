@@ -107,6 +107,9 @@ struct BotChatComposerView: View {
             composerContainer
         }
         .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: pill)
+        // Stamps every following event with the surface it happened on, so a stall is
+        // attributable to Bots or Sessions without guessing.
+        .onAppear { HermexLogger.shared.setSurface("bots") }
         .animation(ChatMotion.quickState(reduceMotion: reduceMotion), value: showsQuickReplies)
         .onChange(of: storedQuickReplies, initial: true) { _, raw in
             quickReplies = BotQuickReplyStore.decode(raw)

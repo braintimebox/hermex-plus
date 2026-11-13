@@ -464,6 +464,7 @@ struct MessageComposerView: View {
                     .background(GeometryReader { proxy in
                         Color.clear
                             .onAppear { logComposerPart("surface", proxy.size.height) }
+                            .onAppear { HermexLogger.shared.setSurface("sessions") }
                             .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
                     })
             }
