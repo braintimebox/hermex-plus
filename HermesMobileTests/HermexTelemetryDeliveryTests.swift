@@ -210,10 +210,7 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
     // MARK: - 7. HTTP 5xx
 
     func testServerErrorIsRetried() {
-        // Known red since the port: two 5xx answers do produce three requests, but
-        // `eventsRetried` records one. The metric is wrong, not the retry path; until it is
-        // fixed the expectation is recorded rather than quietly deleted.
-        XCTExpectFailure("eventsRetried counts one short")
+        // Two 5xx answers produce three requests; eventsRetried counts both retries.
         StubURLProtocol.replies = [
             .init(status: 500, body: Data()),
             .init(status: 503, body: Data()),
