@@ -1,3 +1,14 @@
+## 4.0.4 — the composer stops measuring on every frame
+
+Device telemetry (hermex-logs.jsonl) put the freeze on record: twenty-plus
+`ComposerField` measurements a second while the keyboard settled, followed by
+"main thread stalled 2s" on ChatView. Every width change re-entered the
+measurement, and each entry ran a synchronous `ensureLayout`.
+
+Measurement is now coalesced into one pass 80 ms after the field settles, so an
+animation frame no longer forces a text layout. Height can land one frame late;
+it can no longer block the main thread.
+
 ## 4.0.3 — stability pass on the Bots port
 
 Five things the port lost or widened, each found by a red test rather than by

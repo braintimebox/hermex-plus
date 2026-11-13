@@ -637,8 +637,26 @@ private struct ComposerTextView: UIViewRepresentable {
             }
         }
 
+        /// One measurement per settle, not one per animation frame. The keyboard, the
+        /// accessory row and the mirrored layout pass all move the field's width, and every
+        /// move re-entered `reportHeight`; each entry ran `ensureLayout` and logged. The device
+        /// shows what that costs: twenty-plus `ComposerField` lines a second in
+        /// hermex-logs.jsonl, immediately followed by "main thread stalled 2s". A short
+        /// coalescing delay keeps the number honest and the height one frame late at worst.
+        private var pendingMeasure: DispatchWorkItem?
+
         func reportHeight(for textView: UITextView) {
             guard textView.bounds.width > 0 else { return }
+            pendingMeasure?.cancel()
+            let work = DispatchWorkItem { [weak self, weak textView] in
+                guard let self, let textView, textView.bounds.width > 0 else { return }
+                self.measure(textView)
+            }
+            pendingMeasure = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+        }
+
+        private func measure(_ textView: UITextView) {
 
             // HERMEX-FORK: источник истины — УЖЕ разложенный текст, а не
             // `sizeThatFits` с бесконечной высотой. sizeThatFits раскладывает
