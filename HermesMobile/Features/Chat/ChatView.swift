@@ -531,6 +531,9 @@ struct ChatView: View {
             quotedMessage: viewModel.quotedMessage,
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
+            onSteer: {
+                Task { await viewModel.submitStreamingMessage(draftMessage, behavior: .steer) }
+            },
             // track the action that happens right before the freeze
             onScheduleTapped: {
                 HermexLogger.shared.log(type: "event", screen: "ChatView", message: "schedule button tapped")

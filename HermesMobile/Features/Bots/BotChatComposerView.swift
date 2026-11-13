@@ -11,6 +11,8 @@ struct BotChatComposerView: View {
     @Binding var isFocused: Bool
     let onStop: () -> Void
     let onReconnect: () -> Void
+    /// Steer the bot's in-progress response — sends the draft as a steer hint.
+    let onSteer: () -> Void
     /// Scrolls the transcript back to the pending request card.
     let onShowRequest: () -> Void
     /// Leaves the chat for the inbox's sign-in form, after the host refused the password.
@@ -528,6 +530,16 @@ struct BotChatComposerView: View {
         .accessibilityLabel(Text("Send"))
         .accessibilityHint(Text("Queues the message while the bot works. Hold to choose steer, queue or interrupt."))
         .keyboardShortcut(.return, modifiers: .command)
+        // Steer the running turn — shown alongside Send so the user can correct
+        # the agent mid-stream without opening the card.
+        .contextMenu {
+            Button {
+                onSteer()
+            } label: {
+                Label("Steer", systemImage: "arrow.turn.up.right")
+            }
+            .disabled(!model.mayGuide)
+        }
         // The upstream card is no longer the default on a working bot, so the way to it has
         // to be discoverable and must not fire on a plain tap.
         .simultaneousGesture(

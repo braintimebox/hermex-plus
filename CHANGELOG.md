@@ -1,3 +1,17 @@
+## 4.0.7 — everything since 4.0.3, released
+
+Bots fixes: `json.loads` crash on malformed host answers, composer measure once
+per settle instead of once per frame (06:08:24 had nineteen ComposerField
+measurements in one second, then "main thread stalled 2s"), telemetry surface
+tagged `bots`/`sessions` so a stall names its surface instead of a synthetic
+session id, duplicate diagnostic lines dropped within two seconds, send path
+logged (tap / refused / start), one answer per turn instead of several bubbles,
+copy while a response streams, queue by tap instead of the upstream question
+card, Live Activity starts (host now comes from the delegate, not an empty
+registry), notify only on completion, `reasoning.available` handler restored,
+`eventsRetried` counted at the retryable outcome, uncertain-send composer
+unbricked by a full snapshot and "Send again" / "Mark as sent".
+
 ## 4.0.6 — telemetry that can name the culprit
 
 The 2 s stall of 13.11 carried a stack (`AttributeGraph`), a flag that the chat was

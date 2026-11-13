@@ -519,7 +519,14 @@ VStack(alignment: .leading, spacing: 8) {
             onStop: { stopAction = model.prepareStop() },
             onReconnect: { recoveryID = UUID() },
             onShowRequest: { showRequestID = UUID() },
-            onUpdateSignIn: onUpdateSignIn
+            onUpdateSignIn: onUpdateSignIn,
+            onSteer: {
+                Task {
+                    if let action = model.preparePrompt(.steer) {
+                        await model.submit(action)
+                    }
+                }
+            },
         )
         // Lined up with the reading column; the material fade below stays full width.
         .frame(maxWidth: ChatReadingWidth.maximumWidth(horizontalPadding: 16))

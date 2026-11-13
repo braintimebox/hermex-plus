@@ -168,6 +168,9 @@ struct MessageComposerView: View {
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
+    /// Steer the current streaming response — sends the draft as a steer hint
+    /// to modify the agent's in-progress answer.
+    let onSteer: () -> Void
     /// Extra hook fired when the Schedule menu item is tapped — used by the
     /// diagnostics logger to capture context right before a potential freeze.
     let onScheduleTapped: (() -> Void)?
@@ -913,6 +916,11 @@ struct MessageComposerView: View {
                     actionButtonTapped()
                 } label: {
                     Label("Send", systemImage: "arrow.up.circle.fill")
+                }
+                Button {
+                    onSteer()
+                } label: {
+                    Label("Steer", systemImage: "arrow.turn.up.right")
                 }
                 Button {
                     onScheduleTapped?()
