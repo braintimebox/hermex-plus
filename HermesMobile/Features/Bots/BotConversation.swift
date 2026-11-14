@@ -61,7 +61,9 @@ import OSLog
     let connection: BotConnection
     let server: URL
     private(set) var connectionState = ConnectionState.disconnected
-    private(set) var turn = TurnState.unknown
+    private(set) var turn = TurnState.unknown {
+        didSet { if turn != oldValue { syncStallWatchdog() } }
+    }
     private(set) var messages: [ChatMessage] = []
     private(set) var hasRecentTranscript = false
     @ObservationIgnored private var recentRoot: String?
@@ -178,6 +180,19 @@ import OSLog
     private var clockRevision = 0
     /// When this phone first saw the current turn, for a host that sends no start time.
     private var turnObservedAt = Date()
+    /// When a snapshot last confirmed where the running turn is. The watchdog reads
+    /// it to tell slow work from a host that went quiet, which look identical on screen.
+    private var lastHostActivityAt = Date()
+    /// True once a running turn has been silent longer than any provider retry would
+    /// explain. The chat draws it as a state with a way out, because an endless
+    /// spinner is indistinguishable from a frozen app.
+    private(set) var turnStalled = false
+    /// The refresh-driven watchdog. Nil whenever no turn is running, so a resting
+    /// chat costs nothing.
+    @ObservationIgnored private var stallTask: Task<Void, Never>?
+    /// How long a running turn may stay silent before the chat says so. Covers a
+    /// provider's retry ladder (three attempts) without hiding ordinary slow work.
+    static let stallSilence: TimeInterval = 45
     /// The failure the host keeps for the last turn (`inflight.error`), read from every
     /// snapshot, so reopening, backgrounding or a push tap rebuilds the same outcome
     /// row. Nil after a success or a Stop, and once the host starts the next turn. It
@@ -360,7 +375,7 @@ import OSLog
             && !localOperation && !uncertainSend && !uncertainStop
     }
     var mayStop: Bool {
-        connectionState == .connected && [.running, .needsAttention].contains(turn)
+        connectionState == .connected && [.running, .submitting, .needsAttention].contains(turn)
             && !localOperation && !uncertainStop
     }
 
@@ -970,6 +985,11 @@ import OSLog
             // so a duplicate or replayed frame cannot play it twice.
             if completionArmed { completionArmed = false; emit(.turnCompleted) }
         }
+        // A snapshot is the only sign of life a quiet host gives, and the only place a
+        // retained failure is read from: it settles any stall claim and restarts the
+        // watchdog's silence window.
+        lastHostActivityAt = Date()
+        if turnStalled { turnStalled = false }
         if settingsRevision == nil || settingsRevision == chatControls.snapshotRevision {
             chatControls.snapshot(snapshot["info"], idle: !busy)
         }
@@ -1066,7 +1086,7 @@ import OSLog
         let attachmentLease = attachments.protectOperation()
         defer { withExtendedLifetime(attachmentLease) {} }
         let mentionNote = mentions.annotation(for: action.text)
-        localOperation = true; submittingPrompt = action.mode
+        localOperation = true; submittingPrompt = action.mode; turn = .submitting
         errorMessage = nil
         defer { if generation == owner { submittingPrompt = nil; localOperation = false } }
         // Persist local copies before upload; an upload cannot start agent work.
@@ -1198,6 +1218,12 @@ import OSLog
                 }
                 refreshAfterPrompt()
             } else { disconnected(safe ? error : BotFailure.transport) }
+        }
+        
+        // If the request never left (validation/refusal before dispatch), turn is
+        // still .submitting — restore it so the composer isn't stranded mid-turn.
+        if generation == owner, turn == .submitting {
+            turn = .idle
         }
     }
 
@@ -1707,6 +1733,37 @@ import OSLog
         // Even an unseen request may be present in an older in-flight snapshot.
         requestRevision += 1
         return true
+    }
+
+    /// Keeps a running turn honest. A host that accepts a prompt and then says nothing
+    /// leaves the chat waiting on work that may already have failed — its failure is
+    /// only ever read from a snapshot. So while a turn runs this asks the host where it
+    /// is on a timer, and after a silence no provider retry ladder explains, it marks
+    /// the turn stalled so the chat can name the state instead of spinning forever.
+    private func syncStallWatchdog() {
+        let running = turn == .running || turn == .submitting
+        guard running, connectionState == .connected else {
+            stallTask?.cancel(); stallTask = nil
+            if turnStalled { turnStalled = false }
+            return
+        }
+        guard stallTask == nil else { return }
+        let owner = generation
+        stallTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled, let self, self.generation == owner else { return }
+                let stillRunning = self.turn == .running || self.turn == .submitting
+                guard stillRunning, self.connectionState == .connected else { return }
+                if !self.turnStalled, Date().timeIntervalSince(self.lastHostActivityAt) >= Self.stallSilence {
+                    self.turnStalled = true
+                }
+                // The host retains a failed turn's error in the snapshot, so asking
+                // again is what turns a silent hang into a row the user can act on.
+                self.snapshotDirty = true
+                self.scheduleRefresh()
+            }
+        }
     }
 
     private func scheduleRefresh() {

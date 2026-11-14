@@ -1,3 +1,29 @@
+## 4.0.9 — a quiet host is a state, not an endless spinner
+
+Sending a prompt to a bot could leave the chat spinning forever with no error, no
+reply and a composer that looked dead. The host had not hung: it was retrying a
+provider that answered `402 Insufficient Balance`, and the client never learned
+how the turn ended.
+
+**Why the error never arrived.** The chat re-reads the host's snapshot only when
+the host sends an event, and the host retains a failed turn's error *in that
+snapshot* (`inflight.error` / `error_surface`). While a provider retries, there
+are no events — so the client sat in `running`, the outcome row never rendered,
+and a failure that the host was already holding stayed invisible. An endless
+spinner and a frozen app look identical from the outside.
+
+- **Stall watchdog.** While a turn runs, the chat asks the host where it is every
+  10 s. That is enough to pick up a retained failure, so the existing outcome row
+  appears — billing link, Retry, the provider's own words — instead of silence.
+- **Named silence.** After 45 s with no answer the chat says so in plain words
+  and offers **Stop**, because "still working" was a guess no longer supported by
+  any evidence from the host.
+- Both clear on the next snapshot and on any turn change; a resting chat starts
+  no timer and spends nothing.
+
+This does not fix the provider, the balance or the model pinning — it makes the
+failure visible and actionable, which is what the app owes the user either way.
+
 ## 4.0.8 — bot telemetry that actually fires
 
 The 2 s stall on 13.11 was captured, but the bot screen sent **zero** telemetry

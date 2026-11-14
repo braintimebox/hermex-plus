@@ -114,6 +114,32 @@ VStack(alignment: .leading, spacing: 8) {
                     onRetry: { Task { await model.retryFailedTurn() } }
                 )
             }
+            // A running turn that has gone quiet is a state, not work in progress: name
+            // it and offer the way out, because an endless spinner reads as a frozen app
+            // and hides a failure the host may already be holding for us.
+            if model.turnStalled {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("The host has not answered for a while")
+                            .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("The turn may have failed on the host. Stop it, then send again or retry.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if model.mayStop {
+                        Button("Stop") { stopAction = model.prepareStop() }
+                            .buttonStyle(.chatDecision(.secondary))
+                    }
+                }
+                .pendingRequestBlockSurface()
+            }
             if let plan = model.plan {
                 BotPlanRowView(plan: plan).id("bot-plan")
             }
