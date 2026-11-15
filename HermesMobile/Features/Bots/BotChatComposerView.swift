@@ -610,31 +610,32 @@ struct BotChatComposerView: View {
         .buttonStyle(.chatTactile(.icon))
         .disabled(!canSend)
         .accessibilityLabel(Text("Send"))
-        .accessibilityHint(Text("Queues the message while the bot works. Hold to choose steer, queue or interrupt."))
+        .accessibilityHint(Text("Send. Hold for steer or queue."))
         .keyboardShortcut(.return, modifiers: .command)
-        // Steer the running turn — shown alongside Send so the user can correct
-        // the agent mid-stream without opening the card.
         .contextMenu {
+            Button {
+                send()
+            } label: {
+                Label("Send", systemImage: "arrow.up")
+            }
             Button {
                 onSteer()
             } label: {
                 Label("Steer", systemImage: "arrow.turn.up.right")
             }
             .disabled(!model.mayGuide)
-        }
-        // The upstream card is no longer the default on a working bot, so the way to it has
-        // to be discoverable and must not fire on a plain tap.
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-                guard !busyChoices.isEmpty else { return }
-                choosingSendMode = true
+            Button {
+                guard let action = model.preparePrompt(.queue) else { return }
+                Task { await model.submit(action) }
+            } label: {
+                Label("Queue", systemImage: "clock")
             }
-        )
+            .disabled(!model.maySubmit(.queue))
+        }
     }
 
     /// Idle sends go straight out. On a working bot the message queues — the deferred send
-    /// this app has always had — instead of opening a question. A long press on the send
-    /// button opens the upstream card for the times the answer should steer or interrupt.
+    /// this app has always had.
     private func send() {
         voiceInput.stopBeforeSubmittingDraft()
         // Log the button tap itself, before any validation — if this doesn't appear in the
@@ -658,8 +659,6 @@ struct BotChatComposerView: View {
             Task { await model.submit(action) }
         } else if let action = model.preparePrompt(.queue) {
             Task { await model.submit(action) }
-        } else if !busyChoices.isEmpty {
-            choosingSendMode = true
         }
     }
 }

@@ -5,7 +5,13 @@ Stop / mic sit on the same glass surface as the field instead of a separate
 bar underneath. Field padding 6, surface paddings 1/1, no opaque band — same
 as Sessions.
 
-## 4.1.2 — the Bots composer is laid out like Sessions, not just wired like it
+## 4.1.3 — Bots composer matches Sessions, send button long-press menu
+
+- **Send button like Sessions:** long-press opens context menu with **Send / Steer / Queue** instead of a separate modal card. Send goes straight out, Steer guides the running turn, Queue places the message behind the current one.
+- Composer toolbar row inside the card under the editor (same as Sessions).
+- Composer field padding 12 → 6, surface paddings 1/1.
+
+## 4.1.2 — Bots composer laid out like Sessions
 
 4.1.1 adopted the shared rules; the geometry still differed, and that is what reads
 as "a different composer".
