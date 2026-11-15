@@ -1,3 +1,20 @@
+## 4.1.2 — the Bots composer is laid out like Sessions, not just wired like it
+
+4.1.1 adopted the shared rules; the geometry still differed, and that is what reads
+as "a different composer".
+
+- **Controls row moved inside the card.** Sessions renders `toolbarRow` inside the
+  glass surface (`padding(.horizontal, 8).padding(.bottom, 6).padding(.top, 2)`);
+  Bots drew it as a separate row underneath, sitting on an opaque `systemBackground`
+  band with negative padding and an `ignoresSafeArea` escape. That band is what made
+  the Bots composer visually taller and visually detached from the field.
+- **Field padding 12 → 6**, matching the value Sessions measured down from 12
+  because the empty focused card read as four lines.
+- **Surface paddings 2/4 → 1/1**, the same as Sessions.
+
+Voice notes and Choose model (4.1.1 and 4.1.0) are unchanged; this release only
+aligns the layout.
+
 ## 4.1.1 — the Bots composer uses the same rules as Sessions
 
 Two of the Bots composer's own implementations were replaced by the shared ones,

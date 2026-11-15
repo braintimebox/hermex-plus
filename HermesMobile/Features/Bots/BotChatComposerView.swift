@@ -207,13 +207,9 @@ struct BotChatComposerView: View {
                 }
                 promptButtons
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .background(
-                Color(.systemBackground)
-                    .padding(.top, -10).padding(.bottom, -12)
-                    .ignoresSafeArea(edges: .bottom)
-            )
+            // No padding or opaque band here: Sessions renders this row inside the
+            // card, so the inset comes from the insertion site. The band it used to
+            // paint is what made the Bots composer taller than the Sessions one.
             .transition(ChatMotion.bottomOverlayTransition(reduceMotion: reduceMotion))
         }
     }
@@ -224,7 +220,6 @@ struct BotChatComposerView: View {
     VStack(spacing: 0) {
         if isFocused, model.mayEditDraft { autocomplete }
         composerSurface.padding(.horizontal, 16)
-        toolbarRow
     }
     }
 
@@ -401,7 +396,7 @@ struct BotChatComposerView: View {
                     selection: $selection, isFocused: $isFocused,
                     inputHeight: $inputHeight, measuredHeight: $measuredHeight,
                     isDisabled: !model.mayEditDraft, isCollapsed: !isExpanded,
-                    isKeyboardSendEnabled: canSend, verticalPadding: 12,
+                    isKeyboardSendEnabled: canSend, verticalPadding: 6,
                     chipSkills: model.slashSkills, chipFilePaths: model.fileChipPaths,
                     chipBots: model.mentions.chipReferences(avatars: mentionAvatars).values
                         .sorted { $0.profile.id < $1.profile.id },
@@ -432,9 +427,19 @@ struct BotChatComposerView: View {
             }
             .padding(.trailing, isExpanded ? 0 : ChatComposerMetrics.pillInset)
             .padding(.vertical, isExpanded ? 0 : ChatComposerMetrics.pillInset)
+
+            // Sessions puts the controls row INSIDE the card. Bots drew it as a
+            // separate row sitting on an opaque band, which is why the two
+            // composers read as different components; same paddings as Sessions.
+            if isExpanded {
+                toolbarRow
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .padding(.top, 2)
+            }
         }
-        .padding(.top, isExpanded ? 2 : 0)
-        .padding(.bottom, isExpanded ? 4 : 0)
+        .padding(.top, isExpanded ? 1 : 0)
+        .padding(.bottom, isExpanded ? 1 : 0)
         .modifier(ChatComposerSurfaceStyle(isExpanded: isExpanded))
     }
 
