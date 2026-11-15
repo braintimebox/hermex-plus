@@ -638,7 +638,7 @@ struct BotChatComposerView: View {
                 "mayGuide": model.mayGuide ? 1 : 0,
                 "sendable": model.hasSendableInput ? 1 : 0,
                 "uncertain": model.uncertainSend || model.uncertainStop ? 1 : 0,
-                "hasDraft": model.draft?.isEmpty == false ? 1 : 0
+                "hasDraft": model.draft.isEmpty ? 0 : 1
             ]
         )
         guard model.hasSendableInput else { return }
