@@ -38,7 +38,7 @@ WHAT IT CHECKS (fast, local, no Xcode needed)
 USAGE
     python3 scripts/pipeline-precheck.py          # run all checks
     python3 scripts/pipeline-precheck.py --check 3 # run one check
-    exit 0 = safe to push, exit 1 = BLOCKER
+    exit 0 = shape ok (types NOT checked), exit 1 = BLOCKER
 
 INSTALL (as a pre-push hook)
     python3 scripts/pipelines/release_hermesplus.py install
@@ -942,7 +942,8 @@ def main() -> int:
     if failed:
         print("PUSH BLOCKED — fix the blockers above, then re-run.")
         return 1
-    print("ALL CHECKS PASSED — safe to push.")
+    print("SHAPE CHECKS PASSED — structure only; Swift types and XCTest are NOT")
+    print("verified here (no toolchain on Linux). The compiler runs in CI.")
     if ADVISORIES:
         print()
         print("Advisory (not blocking):")
