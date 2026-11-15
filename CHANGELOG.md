@@ -1,3 +1,10 @@
+## 4.1.3 — Bots composer layout matches Sessions
+
+Moves the controls row inside the composer card, under the editor, so Send /
+Stop / mic sit on the same glass surface as the field instead of a separate
+bar underneath. Field padding 6, surface paddings 1/1, no opaque band — same
+as Sessions.
+
 ## 4.1.2 — the Bots composer is laid out like Sessions, not just wired like it
 
 4.1.1 adopted the shared rules; the geometry still differed, and that is what reads
