@@ -1,3 +1,25 @@
+## 4.1.1 — the Bots composer uses the same rules as Sessions
+
+Two of the Bots composer's own implementations were replaced by the shared ones,
+and the workflow now builds `feat/**` on push instead of waiting to be started by
+hand.
+
+- **Attachment strip no longer reserves empty space.** Bots painted
+  `ComposerAttachmentStripView` on every expanded state, attachments or not —
+  exactly the band `ChatComposerGrowth` exists to remove (~25 pt above an empty
+  field). It now asks `showsAttachmentStrip(hasAttachments:)`.
+- **One send gate.** `canSend` was a private expression that combined content and
+  the available mode. The content and busy half now comes from
+  `ChatComposerSendGate.isDisabled(...)`, so "is there anything to send" has one
+  answer on both surfaces; which mode that send becomes (send / queue / steer)
+  stays Bots' own decision.
+- **Pushes build.** `feat/**` added to the workflow's branches. Every run in this
+  line had been a manual `workflow_dispatch`, which is why a failed build waited
+  for someone to remember it.
+
+The status pill stays: it carries reconnect, update sign-in, show request, cancel
+upload, dismiss and retry — six actions the Sessions status line cannot express.
+
 ## 4.1.0 — cumulative: everything from 4.0.7 to 4.1.0
 
 This release is the rollup the owner asked for: every fix shipped between 4.0.7

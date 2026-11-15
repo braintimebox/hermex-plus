@@ -58,9 +58,21 @@ struct BotChatComposerView: View {
     /// 3.9.74 did — the owner wants a deferred send, not a question. The upstream card
     /// (steer / queue / interrupt) is still there behind a long press, for the times the
     /// answer should steer the running turn instead.
+    /// Content and busy flags come from the shared gate, so "is there anything to
+    /// send" has one answer on both surfaces; which mode that send becomes
+    /// (send / queue / steer) stays Bots' own decision.
     private var canSend: Bool {
-        model.hasSendableInput
-            && (model.maySubmit(.send) || model.maySubmit(.queue) || !busyChoices.isEmpty)
+        let gateDisabled = ChatComposerSendGate.isDisabled(
+            hasText: model.hasSendableInput,
+            hasQuotes: !model.quotes.isEmpty,
+            hasStagedAttachments: !model.attachments.items.isEmpty,
+            isSending: model.submittingPrompt != nil,
+            isCompressingSession: false,
+            isUploadingAttachment: model.attachments.isImporting,
+            isUpdatingConfiguration: model.chatControls.isApplying || model.chatControls.isLoading
+        )
+        guard !gateDisabled else { return false }
+        return model.maySubmit(.send) || model.maySubmit(.queue) || !busyChoices.isEmpty
     }
     private var busyChoices: [BotPromptMode] {
         BotPromptMode.busyChoices(hasAttachments: !model.attachments.items.isEmpty).filter(model.maySubmit)
@@ -374,7 +386,10 @@ struct BotChatComposerView: View {
     /// identity as the attachment strip and controls move around it.
     private var composerSurface: some View {
         VStack(spacing: 0) {
-            if isExpanded {
+            // ChatComposerGrowth.showsAttachmentStrip: an empty strip reserves a band
+            // above the field for content it does not have. Sessions fixed this in the
+            // shared component; Bots kept painting the strip on every expanded state.
+            if isExpanded, ChatComposerGrowth.showsAttachmentStrip(hasAttachments: !model.attachments.items.isEmpty) {
                 ComposerAttachmentStripView(attachments: model.attachments.items, onRemove: { id in
                     Task { await model.attachments.remove(id) }
                 }, onPreview: { preview = $0 })

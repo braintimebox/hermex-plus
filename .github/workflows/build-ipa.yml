@@ -43,6 +43,10 @@ on:
       # is the only way to start one when the Actions REST API is throttled into
       # answering 404 for the whole repository.
       - 'bots/**'
+      # Work branches build on push too. Without this the branch only ever built
+      # via workflow_dispatch, so every attempt depended on someone remembering
+      # to start it — the loop could not run on its own.
+      - 'feat/**'
     paths-ignore:
       - 'README.md'
   workflow_dispatch:
