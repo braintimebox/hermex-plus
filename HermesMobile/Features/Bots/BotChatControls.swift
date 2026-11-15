@@ -64,7 +64,10 @@ import Observation
     var mayChangeEffort: Bool { mayChangeModel && supportsEffort }
     var mayChangeFast: Bool { mayChangeModel && showsFast }
 
-    var mayChangeModel: Bool { context != nil && !isApplying && !isLoading && !unavailable.contains("model.options") && !unavailable.contains("config.set") && catalog.active != nil }
+    /// A bot created without a pinned model reports an empty `model` on the host, so
+    /// `catalog.active` is nil. That must not be a dead end: the picker is exactly how
+    /// the user assigns the first model. Only an unusable host takes this away.
+    var mayChangeModel: Bool { context != nil && !isApplying && !isLoading && !unavailable.contains("model.options") && !unavailable.contains("config.set") }
     var mayChangeWorkspace: Bool { context != nil && idle && !isApplying && !unavailable.contains("session.cwd.set") }
     var mayControl: Bool { context != nil && !isApplying && !unavailable.contains("session.control") }
 

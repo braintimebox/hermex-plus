@@ -37,6 +37,10 @@ struct BotChatComposerView: View {
     @State private var measuredHeight: CGFloat = 0
     @State private var keyboardIsVisible = false
     @State private var voiceInput = ComposerVoiceInputController()
+    /// Hold-to-record, as in Sessions. The clip lands in the same attachment draft the
+    /// "+" picker feeds, so a voice note and a picked file are sent the same way.
+    @State private var voiceNoteRecorder = ComposerVoiceNoteRecorder()
+    @State private var voiceNoteCancelArmed = false
 
     @State private var settingsPresented = false
     /// Error texts the user tapped away or that timed out. A new error with
@@ -105,6 +109,17 @@ struct BotChatComposerView: View {
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 .transition(.opacity)
                 .accessibilityIdentifier("bot-uncertain-send")
+            }
+            if voiceNoteRecorder.isRecording {
+                ComposerVoiceRecordingBar(
+                    elapsed: voiceNoteRecorder.elapsed,
+                    isCancelArmed: voiceNoteCancelArmed,
+                    onStop: { finishVoiceNote(translationHeight: 0) },
+                    onCancel: cancelVoiceNote
+                )
+                .padding(.horizontal, 16)
+            } else if let voiceNoteStatus {
+                ComposerVoiceStatusView(status: voiceNoteStatus)
             }
             composerContainer
         }
@@ -238,6 +253,13 @@ struct BotChatComposerView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardIsVisible = false
         }
+        // The cap is enforced here too, not only on finger-up: a held button that
+        // nobody lifts must not record forever.
+        .onChange(of: voiceNoteRecorder.elapsed) { _, elapsed in
+            if voiceNoteRecorder.isRecording, elapsed >= ComposerVoiceNoteRecorder.maximumDuration {
+                finishVoiceNote(translationHeight: 0)
+            }
+        }
     }
 
     /// The composer's glass surface and the presentation it owns; split from
@@ -284,6 +306,8 @@ struct BotChatComposerView: View {
         .onDisappear {
             shouldRestoreFocusAfterPicker = false
             voiceInput.stopBeforeSubmittingDraft()
+            // Leaving mid-recording keeps no half clip: the draft it would join is gone.
+            if voiceNoteRecorder.isRecording { voiceNoteRecorder.cancel() }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active { voiceInput.stopKeepingTranscript() }
@@ -438,11 +462,15 @@ struct BotChatComposerView: View {
             isListening: voiceInput.isListening,
             isDisabled: isVoiceInputDisabled,
             color: Color(.secondaryLabel),
-            isRecordingVoiceNote: false,
+            isRecordingVoiceNote: voiceNoteRecorder.isRecording,
             onTap: toggleVoiceInput,
-            onRecordingStart: {},
-            onRecordingDragChanged: { _ in },
-            onRecordingEnd: { _ in }
+            onRecordingStart: startVoiceNoteRecording,
+            onRecordingDragChanged: { height in
+                voiceNoteCancelArmed = ComposerVoiceNoteGesture.isCancelArmed(dragTranslationHeight: height)
+            },
+            onRecordingEnd: { height in
+                finishVoiceNote(translationHeight: height)
+            }
         )
     }
 
@@ -471,6 +499,48 @@ struct BotChatComposerView: View {
         case .idle:
             return nil
         }
+    }
+
+    private var isVoiceNoteRecordingDisabled: Bool {
+        !model.mayEditDraft || model.attachments.isImporting || voiceInput.isRequestingPermission
+    }
+
+    private var voiceNoteStatus: ComposerVoiceStatus? {
+        if voiceNoteRecorder.isRequestingPermission {
+            return ComposerVoiceStatus(text: String(localized: "Requesting microphone access..."),
+                                       systemImage: "mic.badge.plus", isError: false)
+        }
+        if let message = voiceNoteRecorder.errorMessage {
+            return ComposerVoiceStatus(text: message, systemImage: "exclamationmark.triangle", isError: true)
+        }
+        return nil
+    }
+
+    /// Hold recognized → start recording a voice note, as in Sessions. Dictation stops
+    /// first so one microphone session is open at a time.
+    @MainActor
+    private func startVoiceNoteRecording() {
+        guard !isVoiceNoteRecordingDisabled, !voiceNoteRecorder.isRecording else { return }
+        if voiceInput.isListening { voiceInput.stopKeepingTranscript() }
+        voiceNoteCancelArmed = false
+        Task { await voiceNoteRecorder.begin() }
+    }
+
+    /// Finger lifted (or the duration cap hit). Slid past the cancel threshold drops the
+    /// clip; otherwise it is staged into the attachment draft the send already reads.
+    @MainActor
+    private func finishVoiceNote(translationHeight: CGFloat) {
+        let shouldCancel = ComposerVoiceNoteGesture.isCancelArmed(dragTranslationHeight: translationHeight)
+        voiceNoteCancelArmed = false
+        guard !shouldCancel else { voiceNoteRecorder.cancel(); return }
+        guard let note = voiceNoteRecorder.finish() else { return }
+        Task { await model.attachments.stage(data: note.data, filename: note.filename) }
+    }
+
+    @MainActor
+    private func cancelVoiceNote() {
+        voiceNoteCancelArmed = false
+        voiceNoteRecorder.cancel()
     }
 
     @MainActor

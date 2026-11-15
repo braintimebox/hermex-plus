@@ -1,3 +1,66 @@
+## 4.1.0 — cumulative: everything from 4.0.7 to 4.1.0
+
+This release is the rollup the owner asked for: every fix shipped between 4.0.7
+and 4.0.9, plus the two Bots gaps that were still open — a model picker that
+refused to appear on a bot with no model, and a composer that could not record a
+voice note.
+
+### Bots composer catches up with Sessions
+
+- **Voice notes.** The microphone button on the Bots composer had empty
+  handlers: `isRecordingVoiceNote: false`, and no start, drag or end callback.
+  Hold-to-record now works the way Sessions does — the clip is staged into the
+  same attachment draft the "+" picker feeds, slides up past the threshold to
+  cancel, and is capped at five minutes. A half clip is dropped when the screen
+  goes away, and dictation stops first so only one microphone session is open.
+- **Model picker on a bot with no model.** Creating a bot without pinning a
+  model is allowed, and the host then reports an empty `model` in `model.options`.
+  `BotModelCatalog.active` was nil, `mayChangeModel` required it to be non-nil,
+  and `BotComposerSettings` drew its menu inside `if let active` — so a bot with
+  no model showed **no model control at all** and refused every change. The one
+  screen that could have fixed it was unreachable, and the user was left with a
+  bot that could not answer and no way to give it a model. Now the composer
+  offers **Choose model** whenever the host can accept one, and the same picker
+  sheet assigns the first model.
+
+### The silence this line is named after (4.0.9)
+
+Sending a prompt could leave the chat spinning with no error, no reply and a
+dead composer. The host had not hung: it was retrying a provider that answered
+`402 Insufficient Balance`, and the client never learned how the turn ended.
+
+- **Stall watchdog.** While a turn runs the chat asks the host where it is every
+  10 s, which is enough to pick up a retained failure (`inflight.error`) and let
+  the existing outcome row appear.
+- **Named silence.** After 45 s with no answer the chat says so and offers
+  **Stop**.
+- **The submit window is covered.** `turn` now reaches `.submitting` when Send is
+  tapped, the watchdog no longer disarms itself during `localOperation`, and
+  `mayStop` includes `.submitting` — so the banner that names a silent host also
+  carries the button that gets out of it. A request refused before dispatch
+  restores `.idle` instead of stranding the composer mid-turn.
+
+### Telemetry that fires (4.0.8)
+
+- `send button tapped` on the touch itself, before validation: if it is missing
+  from the log, the tap never reached the code.
+- `submit network send started` when the request leaves the app: if it is present
+  and no stream follows, the fault is on the host.
+- `surface: bots` / `surface: sessions` on every event, so a stall names its
+  screen instead of a synthetic session id.
+
+### The Bots port fixes (4.0.7)
+
+`json.loads` crash on malformed host answers; composer measured once per settle
+instead of once per frame (nineteen `ComposerField` measurements in one second,
+then "main thread stalled 2s"); duplicate diagnostic lines dropped within two
+seconds; one answer per turn instead of several bubbles; copy while a response
+streams; queue by tap instead of the upstream question card; Live Activity starts
+from the delegate rather than an empty registry and notifies only on completion;
+`reasoning.available` restored; `eventsRetried` counted at the retryable outcome;
+the uncertain-send composer unbricked by a full snapshot plus "Send again" /
+"Mark as sent".
+
 ## 4.0.9 — a quiet host is a state, not an endless spinner
 
 Sending a prompt to a bot could leave the chat spinning forever with no error, no

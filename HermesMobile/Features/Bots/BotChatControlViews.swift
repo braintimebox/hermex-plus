@@ -26,6 +26,21 @@ struct BotComposerSettings: View {
                     onSelectModel: { selectModel($0, context: owner) }, onSelectEffort: { change(.effort($0), context: owner) },
                     onShowAllModels: { sheetContext = owner; preparePresentation(); showsModels = true }
                 )
+            } else if settings.mayChangeModel {
+                // A bot created without a pinned model reports no active model, so the
+                // menu above has nothing to draw. The picker is then the only way to give
+                // the bot its first model, and hiding it stranded the user in Edit.
+                Button {
+                    sheetContext = owner; preparePresentation(); showsModels = true
+                } label: {
+                    ComposerInlineControlLabel(
+                        title: String(localized: "Choose model"), systemImage: "cpu",
+                        showsChevron: true, color: .secondary,
+                        controlFont: AppFont.subheadline(), chevronFont: AppFont.caption2()
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Choose model")
             }
             if let workspace = settings.workspace {
                 ComposerWorkspaceSelectorButton(
