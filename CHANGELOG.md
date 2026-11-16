@@ -1,3 +1,16 @@
+## 4.1.4 — Bots composer: controls row back under the editor
+
+4.1.3 shipped the controls row inside the editor's `HStack`, so the toolbar
+stood to the right of the text field and squeezed it — the composer read as
+deformed. Sessions keeps the row in the card's `VStack`, under the editor.
+
+- `toolbarRow` moved out of the `HStack` into the `VStack` of `composerSurface`,
+  gated by `showsToolbar`, with the Sessions insets (horizontal 8, bottom 6, top 2).
+- Pill insets `.padding(.trailing/.vertical, isExpanded ? 0 : pillInset)` moved
+  from the surface's `VStack` onto the editor's `HStack`, exactly where Sessions
+  keeps them.
+- Surface keeps the 1/1 paddings in the expanded state.
+
 ## 4.1.3 — Bots composer layout matches Sessions
 
 Moves the controls row inside the composer card, under the editor, so Send /

@@ -424,14 +424,22 @@ struct BotChatComposerView: View {
                         if showsStop { stopButton } else { actionButton }
                     }
                 }
-                // Sessions puts the controls row INSIDE the card, right under the editor.
-                // Bots drew it as a separate row underneath — that gap is what made the
-                // composer read as two stacked cards instead of one.
+            }
+            .padding(.trailing, isExpanded ? 0 : ChatComposerMetrics.pillInset)
+            .padding(.vertical, isExpanded ? 0 : ChatComposerMetrics.pillInset)
+
+            // Sessions puts the controls row INSIDE the card, in the card's VStack *under*
+            // the editor — not inside the editor's HStack. Inside the HStack it sat to the
+            // right of the text field and squeezed it: that is the deformity 4.1.3 shipped.
+            if showsToolbar {
                 toolbarRow
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .padding(.top, 2)
             }
         }
-        .padding(.trailing, isExpanded ? 0 : ChatComposerMetrics.pillInset)
-        .padding(.vertical, isExpanded ? 0 : ChatComposerMetrics.pillInset)
+        .padding(.top, isExpanded ? 1 : 0)
+        .padding(.bottom, isExpanded ? 1 : 0)
         .modifier(ChatComposerSurfaceStyle(isExpanded: isExpanded))
     }
 
