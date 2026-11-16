@@ -14,4 +14,4 @@ APP_VERSION = 4.1.4
 
 // Monotonic build number. Keep it a sortable timestamp (YYYYMMDDHHMM) so two
 // builds of the same APP_VERSION are still distinguishable in the About screen.
-APP_BUILD = 202611162105
+APP_BUILD = 202611162230

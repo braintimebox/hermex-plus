@@ -203,9 +203,15 @@ struct BotChatComposerView: View {
                     BotComposerSettings(settings: model.chatControls, preparePresentation: {
                         settingsPresented = true; isFocused = false
                     }, dismissPresentation: { settingsPresented = false })
-                    voiceControlButton
                 }
-                promptButtons
+                // Sessions pulls the mic and the send circle out of the horizontal
+                // scroller on purpose: a scrollable control on a phone-width row sits
+                // off-screen until you drag the row sideways, and dragging means
+                // nothing in a chat. Only the selectors scroll; these stay visible.
+                HStack(alignment: .center, spacing: 8) {
+                    voiceControlButton
+                    promptButtons
+                }
             }
             // No padding or opaque band here: Sessions renders this row inside the
             // card, so the inset comes from the insertion site. The band it used to

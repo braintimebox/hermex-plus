@@ -10,6 +10,9 @@ deformed. Sessions keeps the row in the card's `VStack`, under the editor.
   from the surface's `VStack` onto the editor's `HStack`, exactly where Sessions
   keeps them.
 - Surface keeps the 1/1 paddings in the expanded state.
+- Mic and Send/Stop pulled out of the horizontal control scroller, as Sessions
+  does: a scrollable control on a phone-width row stays off-screen until the row
+  is dragged, so only the selectors scroll now.
 
 ## 4.1.3 — Bots composer layout matches Sessions
 
