@@ -38,7 +38,8 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
     /// Logger with a long retry delay, so automatic retries never race the
     /// assertions; tests drive delivery explicitly with `flushNowForTesting()`.
     private func makeLogger(maxEvents: Int = 500,
-                            retryDelays: [TimeInterval] = [60]) -> HermexLogger {
+                            retryDelays: [TimeInterval] = [60],
+                            flushDebounce: TimeInterval = 0) -> HermexLogger {
         let store = TelemetryEventQueue(fileURL: temp.fileURL, maxEvents: maxEvents)
         return HermexLogger(store: store,
                             session: session,
@@ -568,16 +569,27 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
     func testConfirmedCountBelowBatchKeepsTheRemainder() {
         // 3 events; the server accounts for only 2. The follow-up attempt gets
         // `received: 0`, so the unconfirmed tail is forced to stay put.
+        //
+        // The batch has to be exactly one request carrying all three events, or
+        // "the confirmed head" means nothing: with `flushDebounce: 0` the flush
+        // started inside the first `log()`, so on a fast machine the batch held a
+        // single event, `received: 2` confirmed that one, and the queue settled at
+        // 2 — the 8 s wait then timed out. The debounce keeps the three together
+        // and the test forces the single flush itself.
         StubURLProtocol.replies = [
             .init(status: 200, body: ackBody(received: 2, stored: 2)),
         ]
         StubURLProtocol.fallback = .init(status: 200, body: ackBody(received: 0, stored: 0))
-        let logger = makeLogger()
+        let logger = makeLogger(flushDebounce: 0.5)
 
         logger.log(type: "error", message: "a")
         logger.log(type: "error", message: "b")
         logger.log(type: "error", message: "c")
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedBodies.count >= 1 })
+        XCTAssertEqual(logger.pendingEventsForTesting().count, 3,
+                       "the debounce must keep the three events queued")
+        logger.flushNowForTesting()
+        XCTAssertTrue(waitUntil { StubURLProtocol.receivedEventCount == 3 },
+                      "the three events must travel as one batch")
         // Wait for the outcome the assertions below describe, not for a proxy:
         // `isIdleForTesting()` is already true before the ack is applied, so the
         // test used to read the queue before the confirmed head was removed.
