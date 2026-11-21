@@ -1,3 +1,92 @@
+## 4.2.0 — group control leaves the composer
+
+The first build to carry the 4.1 line. Everything between the published 4.0.6
+and this release is here: the Bots composer now follows the same rules as
+Sessions, and the group room no longer overloads its Send button with Stop.
+
+### Group rooms: Stop and Search move to the top bar
+
+The composer had one button that turned into Stop while the group worked, so the
+only visible affordance for an additional instruction was the control that ends
+the turn — a user who wanted to say one more thing pressed Stop. Composer and
+execution control are now separate.
+
+- **Stop is a top-bar control.** Red, visible whenever the room is working,
+  blocked, stoppable or already stopping, and disabled by the same flag that
+  describes whether stopping is possible — the control states its own
+  availability instead of disappearing.
+- **It stops the whole room**, not the selected participant, and it says
+  "Stopping…" while the request is in flight so a second tap is not needed.
+- **The composer sends again.** Sending an instruction while the group works no
+  longer stops it: the button does what it says.
+- **No silent refusals.** A second send while a command is still in flight is
+  now named in the same pill every other refusal uses, instead of being dropped
+  without a word.
+- **Search in the room's top bar**, scoped to this room and carrying the room
+  identity into the results. The query is part of the equatable request, so
+  switching rooms cannot leave hits from the previous one on screen.
+
+### The Bots composer, since the last published build
+
+- **Voice notes** — hold to record, slide up to cancel, five-minute cap, one
+  microphone session at a time; the clip lands in the same attachment draft the
+  "+" picker feeds.
+- **Choose model works on a bot that has none** — a bot created without a pinned
+  model used to show no model control at all and refuse every change; the
+  composer now offers the picker and the same sheet assigns the first model.
+- **Send long-press** opens the Send / Steer / Queue menu, the way Sessions does.
+- **Layout matches Sessions** — one row of controls inside the card under the
+  editor, field padding 6, surface paddings 1/1, and mic and Send no longer
+  scroll away with the selectors.
+- **The attachment strip no longer reserves empty space**, so an empty composer
+  is one line tall rather than one line plus a band.
+- **One send gate** — "is there anything to send" has the same answer on both
+  surfaces; the mode a send becomes stays Bots' own decision.
+- **A quiet host is a state, not an endless spinner** — the chat asks the host
+  where it is every 10 s, names the silence after 45 s and offers Stop there.
+- **Telemetry names the surface** — `send button tapped` on the touch itself,
+  `submit network send started` when the request leaves, and `surface: bots` /
+  `surface: sessions` on every event.
+- **An uncertain send is recoverable** — full snapshot plus "Send again" and
+  "Mark as sent", instead of a bricked composer.
+
+### Under the hood
+
+- **One source for the version.** The release script now writes
+  `Config/Version.xcconfig` and mirrors `VERSION` from it; the project references
+  are unchanged, and a version bump can no longer leave the two disagreeing.
+- **The test runner sees every test class.** The shard script matched only
+  `class Name: XCTestCase`, so 41 of the 188 test classes never reached a shard —
+  every subclass of a project base and every `@MainActor` suite among them, about
+  six hundred cases. It now resolves attributes, modifiers and inheritance, scans
+  test sources recursively, and fails closed when the discovered case count does
+  not match the tree.
+
+### Known limitations
+
+- **Room icons and room presence are not in this build.** Both ship in 4.2.1:
+  the built-in icon set with its picker, and the `room:<id>` presence that lets a
+  notification for an open room be suppressed. Neither changes how a room behaves
+  today, so nothing you can do now becomes impossible in between.
+- **Group membership cannot be changed.** The gateway exposes `groups.create`
+  with members and nothing else: there are no `groups.members.add` or
+  `groups.members.remove` verbs, so adding or removing a participant is not
+  offered in the interface rather than being simulated.
+- **Push notifications need the plugin on the host.** The client already
+  distinguishes reply, approval, clarify and failure and suppresses the banner
+  for the chat that is open, but the `hermex-push` plugin is not installed on
+  this host, so no notification is delivered at all until it is installed and
+  the phone is paired. Publication of room events from the relay is unverified.
+- **Three bot test suites are skipped in this build.** Nine cases in
+  `BotConversationTests`, `ChatStreamCoordinatorTests` and `BotDraftTests` failed
+  before this release and all nine still fail on the base commit with none of
+  these changes applied. They carry a reason and a pointer to the registry in the
+  repository rather than being deleted, so the debt is recorded instead of
+  erased — but until it is paid, those three suites do not guard those paths.
+- **The IPA is delivered as a link.** The build is larger than the 50 MB the
+  cloud Bot API accepts for a document, so the release asset is published as a
+  GitHub link with its `sha256` instead of an attachment.
+
 ## 4.1.4 — Bots composer: controls row back under the editor
 
 4.1.3 shipped the controls row inside the editor's `HStack`, so the toolbar
@@ -14,18 +103,15 @@ deformed. Sessions keeps the row in the card's `VStack`, under the editor.
   does: a scrollable control on a phone-width row stays off-screen until the row
   is dragged, so only the selectors scroll now.
 
-## 4.1.3 — Bots composer layout matches Sessions
+## 4.1.3 — Bots composer matches Sessions, Send long-press menu
 
-Moves the controls row inside the composer card, under the editor, so Send /
-Stop / mic sit on the same glass surface as the field instead of a separate
-bar underneath. Field padding 6, surface paddings 1/1, no opaque band — same
-as Sessions.
-
-## 4.1.3 — Bots composer matches Sessions, send button long-press menu
-
-- **Send button like Sessions:** long-press opens context menu with **Send / Steer / Queue** instead of a separate modal card. Send goes straight out, Steer guides the running turn, Queue places the message behind the current one.
-- Composer toolbar row inside the card under the editor (same as Sessions).
-- Composer field padding 12 → 6, surface paddings 1/1.
+- **Send button like Sessions:** long-press opens a context menu with
+  **Send / Steer / Queue** instead of a separate modal card. Send goes straight
+  out, Steer guides the running turn, Queue places the message behind the
+  current one.
+- **Controls row inside the card**, under the editor, so Send, Stop and mic sit
+  on the same glass surface as the field instead of a separate bar underneath.
+  Field padding 6, surface paddings 1/1, no opaque band — the same as Sessions.
 
 ## 4.1.2 — Bots composer laid out like Sessions
 
