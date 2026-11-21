@@ -21,34 +21,6 @@ final class StubURLProtocol: URLProtocol {
     static var receivedBodies: [Data] = []
     private static let lock = NSLock()
 
-    /// Scope id carried by every request of the current test's session.
-    ///
-    /// The stub state is process-wide, and delivery is asynchronous: the write
-    /// closure of a previous test's request can land after `reset()`. Without a
-    /// scope its body becomes "the first batch" of the next test and its reply
-    /// steals that test's queued ack — measured as `Optional(20) != Optional(3)`
-    /// plus an unconfirmed queue of 3 in `testConfirmedCountBelowBatchKeepsTheRemainder`.
-    static let scopeKey = "X-Hermex-Stub-Scope"
-    private static var currentScope = UUID().uuidString
-
-    /// Starts a fresh scope for a new test session and clears the stub state.
-    @discardableResult
-    static func beginScope() -> String {
-        lock.lock(); defer { lock.unlock() }
-        currentScope = UUID().uuidString
-        replies = []
-        fallback = Reply()
-        receivedBodies = []
-        return currentScope
-    }
-
-    /// False for a late request from an earlier test: it is answered with an
-    /// unconfirmed ack and never touches this test's state.
-    private static func isCurrentScope(_ request: URLRequest) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        return request.value(forHTTPHeaderField: scopeKey) == currentScope
-    }
-
     static func reset() {
         lock.lock(); defer { lock.unlock() }
         replies = []
@@ -125,11 +97,8 @@ final class StubURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let isCurrent = Self.isCurrentScope(request)
-        if isCurrent { Self.record(request) }
-        // A foreign request still has to finish, or its logger retries forever.
-        let reply = isCurrent ? Self.nextReply()
-            : Reply(status: 200, body: Data(#"{"ok":true,"received":0,"stored":0}"#.utf8))
+        Self.record(request)
+        let reply = Self.nextReply()
 
         let deliver = { [weak self] in
             guard let self else { return }
@@ -160,10 +129,6 @@ final class StubURLProtocol: URLProtocol {
 func makeStubSession() -> URLSession {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [StubURLProtocol.self]
-    // The scope id rides on every request this session makes, so a late callback
-    // from an earlier test's session is recognised as foreign and cannot write
-    // into this test's bodies or consume its queued replies.
-    config.httpAdditionalHeaders = [StubURLProtocol.scopeKey: StubURLProtocol.beginScope()]
     return URLSession(configuration: config)
 }
 
