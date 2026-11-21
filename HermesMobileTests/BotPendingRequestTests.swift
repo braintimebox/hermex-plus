@@ -249,11 +249,12 @@ import XCTest
         XCTAssertEqual(request.questions.count, 1)
         await model.answerQuestion(action(model),
                                    [BotQuestionAnswer(questionID: nil, text: "Primary (Recommended)")])
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        // An unkeyed answer goes through `request.answer` with the envelope id;
+        // `clarify.lock` exists only for batch questions that carry a `qid`.
+        let sent = wire.calls.filter { $0.0 == "request.answer" }
         XCTAssertEqual(sent.count, 1)
-        XCTAssertEqual(sent.first?.1["request_id"], .string("clr-1"))
-        XCTAssertEqual(sent.first?.1["answer"], .string("Primary (Recommended)"))
-        XCTAssertNil(sent.first?.1["question_id"])
+        XCTAssertEqual(sent.first?.1["id"], .string("clr-1"))
+        XCTAssertEqual(sent.first?.1["result"], .object(["answer": .string("Primary (Recommended)")]))
         XCTAssertEqual(model.requestResolution?.outcome, .answered)
         model.suspend()
     }
@@ -273,7 +274,7 @@ import XCTest
             BotQuestionAnswer(questionID: "q0", text: "Primary"),
             BotQuestionAnswer(questionID: "q1", selections: ["Archive"])
         ])
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        let sent = wire.calls.filter { $0.0 == "clarify.lock" }
         XCTAssertEqual(sent.map { $0.1["question_id"] }, [.string("q0"), .string("q1")])
         XCTAssertEqual(sent.last?.1["answer"], .string(#"["Archive"]"#))
         XCTAssertEqual(model.requestResolution?.outcome, .answered)
@@ -288,7 +289,7 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q9", text: "nope")])
-        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.respond" }.isEmpty)
+        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.lock" }.isEmpty)
         model.suspend()
     }
 
@@ -307,11 +308,11 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q0", text: "a")])
-        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.respond" }.isEmpty)
+        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.lock" }.isEmpty)
         XCTAssertNil(model.requestResolution)
         // Declining the whole request is still one deliberate unkeyed answer.
         await model.skipQuestion(action(model))
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.count, 1)
+        XCTAssertEqual(wire.calls.filter { $0.0 == "request.answer" }.count, 1)
         model.suspend()
     }
 
@@ -329,7 +330,7 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q1", text: "b")])
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.map { $0.1["question_id"] },
+        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.lock" }.map { $0.1["question_id"] },
                        [.string("q1")])
         model.suspend()
     }
@@ -350,7 +351,7 @@ import XCTest
         await model.answerQuestion(action(model), [
             BotQuestionAnswer(questionID: "q0", text: "a"), BotQuestionAnswer(questionID: "q1", text: "b")
         ])
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.count, 1)
+        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.lock" }.count, 1)
         XCTAssertEqual(model.requestResolution?.outcome, .alreadyResolved)
         XCTAssertFalse(model.mayAnswer)
         model.suspend()
@@ -364,10 +365,10 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.skipQuestion(action(model))
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        let sent = wire.calls.filter { $0.0 == "request.answer" }
         XCTAssertEqual(sent.count, 1)
-        XCTAssertEqual(sent.first?.1["answer"], .string(""))
-        XCTAssertNil(sent.first?.1["question_id"])
+        XCTAssertEqual(sent.first?.1["result"], .object(["answer": .string("")]))
+        XCTAssertEqual(sent.first?.1["id"], .string("clr-3"))
         model.suspend()
     }
 

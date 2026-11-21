@@ -664,9 +664,14 @@ actor BotMemoryDrafts: ChatDraftPersisting {
     var attention = false
     var pendingApproval: BotJSON?
     var pendingClarify = BotJSON.null
-    /// What `approval.respond` reports unblocking, and what `clarify.respond` reports.
+    /// What `approval.respond` reports unblocking, and what `clarify.lock` /
+    /// `request.answer` report as their status.
     var approvalResolved = 1
     var clarifyStatus = "ok"
+    /// What `clarify.lock` reports as still unanswered. The client locks one
+    /// question per request and keeps going while this list is non-empty, so a
+    /// non-empty default is what makes a two-question batch send two locks.
+    var clarifyRemaining: [String] = ["pending"]
     /// What `sudo.respond` / `secret.respond` report; "ok" or "expired".
     var credentialStatus = "ok"
     var respondFailure: BotFailure?
@@ -714,7 +719,15 @@ actor BotMemoryDrafts: ChatDraftPersisting {
             if let respondFailure { throw respondFailure }
             if approvalResolved > 0 { attention = false; pendingApproval = nil }
             return .object(["resolved": .number(Double(approvalResolved))])
-        case "clarify.respond":
+        case "clarify.lock":
+            // Batch answers. The client locks one question per request and reads
+            // `remaining` to decide whether to continue; an empty list ends the
+            // batch early, so the default keeps one token in it.
+            if let respondFailure { throw respondFailure }
+            return .object(["status": .string(clarifyStatus),
+                            "remaining": .array(clarifyRemaining.map { .string($0) })])
+        case "request.answer":
+            // An unkeyed answer (single question, or a skip) riding the envelope id.
             if let respondFailure { throw respondFailure }
             if clarifyStatus == "ok" { pendingClarify = .null }
             return .object(["status": .string(clarifyStatus)])
