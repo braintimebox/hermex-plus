@@ -14,6 +14,13 @@ on:
         description: "Space-separated targets, e.g. HermesMobileTests/Class/testCase"
         required: true
         default: "HermesMobileTests/HermexTelemetryDeliveryTests/testConfirmedCountBelowBatchKeepsTheRemainder"
+  # `workflow_dispatch` resolves the file on the DEFAULT branch, so a workflow that
+  # only exists on a work branch cannot be dispatched from it. A push to
+  # `ci/subset/**` with the targets in `.ci/only-testing.txt` gives the same
+  # on-demand subset run without touching `main`.
+  push:
+    branches:
+      - 'ci/subset/**'
 
 permissions:
   contents: read
@@ -68,8 +75,16 @@ jobs:
           ONLY_TESTING: ${{ inputs.only_testing }}
         run: |
           set -euo pipefail
+          targets="${ONLY_TESTING:-}"
+          if [[ -z "${targets}" && -f .ci/only-testing.txt ]]; then
+            targets=$(grep -vE '^\s*(#|$)' .ci/only-testing.txt | tr '\n' ' ')
+          fi
+          if [[ -z "${targets}" ]]; then
+            echo "No targets: pass only_testing or commit .ci/only-testing.txt" >&2
+            exit 1
+          fi
           args=()
-          for target in ${ONLY_TESTING}; do
+          for target in ${targets}; do
             args+=("-only-testing:${target}")
           done
           echo "targets: ${args[*]}"
