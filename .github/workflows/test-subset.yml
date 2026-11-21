@@ -60,6 +60,35 @@ jobs:
           echo "Using simulator: ${udid}"
           echo "udid=${udid}" >> "$GITHUB_OUTPUT"
 
+      # The release pipeline warms these before it compiles; this runner did not, so
+      # every subset paid a cold SPM resolve plus a cold Swift compile. Keys are
+      # copied from build-ipa.yml, including the deliberate exclusion of
+      # project.pbxproj from the CAS key (a version bump would invalidate it).
+      - name: Compute SPM fingerprint
+        id: spm
+        run: |
+          set -euo pipefail
+          fp=$(awk '/Begin XCRemoteSwiftPackageReference section/,/End XCRemoteSwiftPackageReference section/' \
+                 "${PROJECT_PATH}/project.pbxproj" | sha256sum | cut -c1-16)
+          echo "Using SPM fingerprint: ${fp}"
+          echo "fingerprint=${fp}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ steps.spm.outputs.fingerprint }}-v3
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Restore Xcode compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/CompilationCache.noindex
+          key: xcode-cas-${{ runner.os }}-${{ hashFiles('HermesMobile/**/*.swift', 'HermesMobile/**/*.m', 'HermesMobile/**/*.h', 'Package.resolved', '**/Package.resolved') }}
+          restore-keys: |
+            xcode-cas-${{ runner.os }}-
+
       - name: Build for testing
         env:
           SIMULATOR_UDID: ${{ steps.sim.outputs.udid }}
