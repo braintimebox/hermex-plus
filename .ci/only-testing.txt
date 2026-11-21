@@ -1,2 +1,3 @@
 HermesMobileTests/HermexTelemetryDeliveryTests/testConcurrentEventsKeepOrderAndUniqueness
 HermesMobileTests/HermexTelemetryDeliveryTests/testConfirmedCountBelowBatchKeepsTheRemainder
+# control: second push so the workflow already exists in history
