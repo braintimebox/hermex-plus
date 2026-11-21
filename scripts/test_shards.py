@@ -28,35 +28,188 @@ import sys
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent.parent / "HermesMobileTests"
-CLASS_PATTERN = re.compile(r"^\s*(?:final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*XCTestCase", re.MULTILINE)
-TEST_METHOD_PATTERN = re.compile(r"^\s*func\s+test[A-Za-z0-9_]*\s*\(", re.MULTILINE)
-ANY_METHOD_PATTERN = re.compile(r"^\s*(?:@MainActor\s*)?(?:private\s+)?func\s+", re.MULTILINE)
+# Attributes and access modifiers may precede `class`, and the superclass is not
+# always XCTestCase: `final class APIClientGitTests: APIClientTestCase` is a test
+# class through a project base. The previous pattern demanded exactly
+# `class Name: XCTestCase`, so 41 of the 188 test classes were invisible and the
+# sharded release path ran a subset of the suite while claiming to run all of it.
+DECL_PATTERN = re.compile(
+    r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*"
+    r"(?:(?:final|open|public|internal|fileprivate|private)\s+)*"
+    r"class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z_][A-Za-z0-9_.]*))?",
+    re.MULTILINE,
+)
+TEST_METHOD_PATTERN = re.compile(
+    r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*func\s+test[A-Za-z0-9_]*\s*\(", re.MULTILINE)
+RUNNER_BASE = "XCTestCase"
+EXTENSION_PATTERN = re.compile(
+    r"^\s*extension\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*[^{]*)?\{", re.MULTILINE)
 TARGET = "HermesMobileTests"
 
 
+def _body_end(skeleton: str, brace: int) -> int:
+    depth = 0
+    for index in range(brace, len(skeleton)):
+        char = skeleton[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return len(skeleton)
+
+
+def _skeleton(text: str) -> str:
+    """Same length, comments and string literals blanked.
+
+    Brace counting needs this: a `}` inside a fixture string closed the class body
+    early, so `ReviewDiffSelectionTests` looked like a class with zero test methods
+    and its five cases were "unattributed" — the coverage gate's first four hits
+    were all this artefact.
+    """
+    out = list(text)
+    index, total = 0, len(text)
+    while index < total:
+        char = text[index]
+        if char == "/" and index + 1 < total and text[index + 1] == "/":
+            while index < total and text[index] != "\n":
+                out[index] = " "
+                index += 1
+            continue
+        if char == "/" and index + 1 < total and text[index + 1] == "*":
+            out[index] = out[index + 1] = " "
+            index += 2
+            while index + 1 < total and not (text[index] == "*" and text[index + 1] == "/"):
+                if text[index] != "\n":
+                    out[index] = " "
+                index += 1
+            if index + 1 < total:
+                out[index] = out[index + 1] = " "
+                index += 2
+            continue
+        if char == '"':
+            if text.startswith('"""', index):
+                for offset in range(3):
+                    out[index + offset] = " "
+                index += 3
+                while index < total and not text.startswith('"""', index):
+                    if text[index] != "\n":
+                        out[index] = " "
+                    index += 1
+                for offset in range(3):
+                    if index + offset < total:
+                        out[index + offset] = " "
+                index += 3
+                continue
+            out[index] = " "
+            index += 1
+            while index < total:
+                if text[index] == "\\" and index + 1 < total:
+                    out[index] = out[index + 1] = " "
+                    index += 2
+                    continue
+                if text[index] == '"':
+                    out[index] = " "
+                    index += 1
+                    break
+                if text[index] != "\n":
+                    out[index] = " "
+                index += 1
+            continue
+        index += 1
+    return "".join(out)
+
+
+def _class_bodies(text: str) -> list[tuple[str, str | None, str]]:
+    """(name, superclass, body) for every class and extension in `text`.
+
+    Extensions matter: a test class routinely spreads its cases over
+    `extension ComposerChipTokenizerTests { … }` blocks, and those cases belong to
+    the class's weight — `-only-testing` runs them with the class.
+    """
+    skeleton = _skeleton(text)
+    found: list[tuple[str, str | None, str]] = []
+    for match in DECL_PATTERN.finditer(skeleton):
+        brace = skeleton.find("{", match.end())
+        if brace == -1:
+            continue
+        found.append((match.group(1), match.group(2), text[brace:_body_end(skeleton, brace)]))
+    for match in EXTENSION_PATTERN.finditer(skeleton):
+        brace = match.end() - 1
+        found.append((match.group(1), None, text[brace:_body_end(skeleton, brace)]))
+    return found
+
+
+def _scan(test_dir: Path) -> tuple[dict[str, str | None], dict[str, list[tuple[str, str | None, str]]]]:
+    if not test_dir.is_dir():
+        raise SystemExit(f"BLOCKER: test directory not found: {test_dir}")
+    declarations: dict[str, str | None] = {}
+    per_file: dict[str, list[tuple[str, str | None, str]]] = {}
+    for path in sorted(test_dir.glob("*.swift")):
+        bodies = _class_bodies(path.read_text(errors="replace"))
+        for name, superclass, _body in bodies:
+            # Only real declarations carry the superclass; an extension's `None`
+            # must not shadow it when the two live in different files.
+            if superclass is not None:
+                declarations.setdefault(name, superclass)
+        per_file[path.name] = bodies
+    return declarations, per_file
+
+
+def test_classes(declarations: dict[str, str | None]) -> set[str]:
+    """Classes that XCTest can run: XCTestCase and anything deriving from it."""
+    known = {RUNNER_BASE}
+    changed = True
+    while changed:
+        changed = False
+        for name, superclass in declarations.items():
+            if superclass in known and name not in known:
+                known.add(name)
+                changed = True
+    return {name for name, superclass in declarations.items() if superclass in known}
+
+
 def discover(test_dir: Path = TESTS_DIR) -> dict[str, int]:
-    """Map class name -> number of `func test…` methods in it.
+    """Map test class name -> number of `func test…` methods in its body.
 
     The weight matters: classes differ by two orders of magnitude (a 2-case
     singleton vs a 60-case view-model suite). Balancing by class count gives
     three shards of 48/46/49 that still finish minutes apart; balancing by case
     count is what makes the shards actually overlap in wall clock.
     """
-    if not test_dir.is_dir():
-        raise SystemExit(f"BLOCKER: test directory not found: {test_dir}")
-    weights: dict[str, int] = {}
-    for path in sorted(test_dir.glob("*.swift")):
-        text = path.read_text(errors="replace")
-        marks = [(m.start(), m.group(1)) for m in CLASS_PATTERN.finditer(text)]
-        if not marks:
-            continue
-        for idx, (pos, name) in enumerate(marks):
-            end = marks[idx + 1][0] if idx + 1 < len(marks) else len(text)
-            body = text[pos:end]
-            weights[name] = weights.get(name, 0) + len(TEST_METHOD_PATTERN.findall(body))
-    if not weights:
+    declarations, per_file = _scan(test_dir)
+    classes = test_classes(declarations)
+    if not classes:
         raise SystemExit(f"BLOCKER: no XCTestCase classes found under {test_dir}")
+    weights = {name: 0 for name in classes}
+    for bodies in per_file.values():
+        for name, _superclass, body in bodies:
+            if name in weights:
+                weights[name] += len(TEST_METHOD_PATTERN.findall(body))
     return weights
+
+
+def coverage_problems(test_dir: Path = TESTS_DIR) -> list[str]:
+    """Every `func test…` in the tree must sit in a class the shards know about.
+
+    Without this, a discovery hole is silent: the shard looks green because the
+    cases it never received did not run. The gate is the reason the hole above
+    cannot come back unnoticed.
+    """
+    declarations, per_file = _scan(test_dir)
+    classes = test_classes(declarations)
+    problems: list[str] = []
+    for path in sorted(test_dir.glob("*.swift")):
+        text = TEST_METHOD_PATTERN.findall(path.read_text(errors="replace"))
+        attributed = sum(
+            len(TEST_METHOD_PATTERN.findall(body))
+            for name, _superclass, body in per_file.get(path.name, [])
+            if name in classes
+        )
+        if len(text) != attributed:
+            problems.append(f"{path.name}: {len(text)} test methods, {attributed} inside discovered classes")
+    return problems
 
 
 def assign(weights: dict[str, int], count: int) -> list[list[str]]:
@@ -88,6 +241,17 @@ def main() -> int:
         raise SystemExit(f"BLOCKER: --shard must be within 1..{args.count}")
 
     weights = discover()
+    # Fail closed: a discovery hole looks exactly like a green shard. The check is
+    # cheap (one pass over the test sources) and it is the only thing standing
+    # between "the suite ran" and "the shard received what discovery found".
+    problems = coverage_problems()
+    if problems:
+        print("BLOCKER: test methods outside the classes the shards are built from:", file=sys.stderr)
+        for line in problems[:10]:
+            print(f"  {line}", file=sys.stderr)
+        if len(problems) > 10:
+            print(f"  … and {len(problems) - 10} more file(s)", file=sys.stderr)
+        raise SystemExit(1)
     buckets = assign(weights, args.count)
 
     if args.format == "table":
