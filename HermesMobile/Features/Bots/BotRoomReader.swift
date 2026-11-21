@@ -339,7 +339,16 @@ import Observation
     /// write closure. A lost reply never starts another command.
     private func command(_ call: HermesCall, validate: @escaping () throws -> Void,
                          accept: (BotJSON) throws -> Void) async {
-        guard let client = wire, allows(call.method), !busy else { sending = nil; return }
+        guard let client = wire, allows(call.method) else { sending = nil; return }
+        // A second tap while the first command is still in flight used to be dropped
+        // without a trace: the request id would collide, so the tap has to be refused
+        // locally — but a refusal nobody can see is a silent discard. Say it in the
+        // same pill every other refusal uses.
+        guard !busy else {
+            sending = nil
+            commandMessage = String(localized: "An earlier action is still in flight — send again in a moment.")
+            return
+        }
         let token = UUID(), epoch = room.epoch
         commandID = token; busy = true; dispatched = false; commandMessage = nil
         do {

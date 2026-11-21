@@ -53,29 +53,26 @@ struct BotRoomComposerView: View {
         .padding(.horizontal, 16).padding(.bottom, 8)
     }
 
+    /// Rooms send or stop, never both from one control: Stop lives in the top bar
+    /// (room-level execution control), the composer only submits messages. While the
+    /// group works this button stays Send, because `maySend` does not look at the
+    /// room's execution status — the room accepts a message at any point.
     private var actionButton: some View {
-        let stop = reader.showsStop
-        let enabled = stop ? reader.mayStop : reader.maySend(in: threadID)
-        let appearance = ChatComposerActionAppearance(isStop: stop, isDisabled: !enabled,
+        let enabled = reader.maySend(in: threadID)
+        let appearance = ChatComposerActionAppearance(isStop: false, isDisabled: !enabled,
             colorScheme: colorScheme, tintsPrimaryActions: tintsPrimaryActions, themeHex: themeHex)
         return Button {
-            if stop { Task { await reader.stop() } } else { send() }
+            send()
         } label: {
-            Group {
-                if reader.awaitingStop || reader.status.stopping > 0 {
-                    Text("Stopping…").font(.caption).padding(.horizontal, 8)
-                } else {
-                    Image(systemName: stop ? "stop.fill" : "arrow.up")
-                        .font(.system(size: iconSize, weight: .semibold))
-                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                        .frame(width: ChatComposerMetrics.actionSize)
-                }
-            }
+            Image(systemName: "arrow.up")
+                .font(.system(size: iconSize, weight: .semibold))
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .frame(width: ChatComposerMetrics.actionSize)
             .frame(minHeight: ChatComposerMetrics.actionSize)
             .background(appearance.background).foregroundStyle(appearance.foreground).clipShape(Capsule())
         }
         .buttonStyle(.chatTactile(.icon)).disabled(!enabled)
-        .accessibilityLabel(stop ? Text("Stop every bot in this room") : Text("Send"))
+        .accessibilityLabel(Text("Send"))
     }
 
     private func send() { Task { await reader.send(threadID: threadID) } }

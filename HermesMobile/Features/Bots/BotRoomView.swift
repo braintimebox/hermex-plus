@@ -15,16 +15,21 @@ import SwiftUI
     @State private var isNearBottom = true
     @State private var pendingSequence: Int?
     @State private var showRequestID = UUID()
+    @State private var showingSearch = false
     @State private var dismissedErrors: Set<String> = []
     @State private var window = BotRoomTranscriptWindow()
     private var followsLatest: Bool { followLatch.isFollowing }
     let roster: [BotProfile]
     let avatars: [String: UIImage]
+    /// The room's own search reuses `BotSearchView` narrowed to this room, so the
+    /// inbox is passed down instead of duplicating the index query here.
+    let inbox: BotInbox?
     /// Leaves the room for the inbox's sign-in form, after the host refused the password.
     let onUpdateSignIn: () -> Void
 
-    init(reader: BotRoomReader, roster: [BotProfile], avatars: [String: UIImage], threadID: String? = nil, sequence: Int? = nil, onUpdateSignIn: @escaping () -> Void = {}) {
+    init(reader: BotRoomReader, roster: [BotProfile], avatars: [String: UIImage], inbox: BotInbox? = nil, threadID: String? = nil, sequence: Int? = nil, onUpdateSignIn: @escaping () -> Void = {}) {
         _reader = State(initialValue: reader); self.roster = roster; self.avatars = avatars
+        self.inbox = inbox
         self.onUpdateSignIn = onUpdateSignIn; self.threadID = threadID
         _pendingSequence = State(initialValue: sequence ?? (threadID == nil ? reader.initialSequence : nil))
     }
@@ -206,6 +211,35 @@ ToolbarItem(placement: .topBarLeading) {
     .accessibilityLabel(reader.room.name)
     .accessibilityHint("Opens this room’s profile.")
 }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
+                .accessibilityLabel(Text("Search this room"))
+                .disabled(inbox == nil)
+        }
+        if showsRoomStop {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { Task { await reader.stop() } } label: { roomStopLabel }
+                    .buttonStyle(.plain)
+                    .tint(.red)
+                    .disabled(!reader.mayStop)
+                    .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
+            }
+        }
+    }
+
+    /// The room-level Stop is visible whenever the group is doing something — working,
+    /// blocked, stoppable, or already stopping — and disabled by `mayStop`, so the
+    /// control itself says whether stopping is possible instead of disappearing.
+    private var showsRoomStop: Bool {
+        reader.status.working || reader.status.blocked || reader.status.stoppable > 0 || reader.finishingStop
+    }
+
+    @ViewBuilder private var roomStopLabel: some View {
+        if reader.finishingStop {
+            Text("Stopping…").font(.caption.weight(.semibold)).foregroundStyle(.red)
+        } else {
+            Image(systemName: "stop.fill").font(.system(size: 15, weight: .bold)).foregroundStyle(.red)
+        }
     }
 
     var body: some View {
@@ -230,7 +264,7 @@ ToolbarItem(placement: .topBarLeading) {
             BotRoomProfileView(reader: reader, roster: roster, avatars: avatars, onUpdateSignIn: onUpdateSignIn)
         }
         .navigationDestination(item: $selectedThread) { selected in
-            BotRoomView(reader: reader, roster: roster, avatars: avatars, threadID: selected,
+            BotRoomView(reader: reader, roster: roster, avatars: avatars, inbox: inbox, threadID: selected,
                         sequence: threadSequence, onUpdateSignIn: onUpdateSignIn)
         }
         .onChange(of: selectedThread) { _, selected in
@@ -257,6 +291,16 @@ ToolbarItem(placement: .topBarLeading) {
             }
         }
         .transcriptLinks()
+        .sheet(isPresented: $showingSearch) {
+            if let inbox {
+                BotSearchView(inbox: inbox, roomIDs: [reader.room.id],
+                              onSelectRoom: { room, sequence in
+                                  guard room.id == reader.room.id, let sequence else { return }
+                                  pendingSequence = sequence
+                              },
+                              onSelect: { _ in })
+            }
+        }
     }
 
     private var availableSearchSequence: Int? {

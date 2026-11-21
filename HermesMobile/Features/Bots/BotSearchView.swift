@@ -17,11 +17,18 @@ import SwiftUI
     @State private var searchError = false
     @State private var isSearching = false
     @State private var selectedHit: BotHistoryCache.Hit?
+    /// A room's own search narrows the same index to one room instead of the whole
+    /// inbox; nil keeps the inbox scope.
+    private let roomScope: Set<String>?
     let cache: BotHistoryCache
 
-    init(inbox: BotInbox, cache: BotHistoryCache = .shared, query: String = "", onSelectRoom: @escaping (BotGroupRoom, Int?) -> Void = { _, _ in }, onSelect: @escaping (BotProfile) -> Void) {
+    init(inbox: BotInbox, cache: BotHistoryCache = .shared, query: String = "", roomIDs: Set<String>? = nil, onSelectRoom: @escaping (BotGroupRoom, Int?) -> Void = { _, _ in }, onSelect: @escaping (BotProfile) -> Void) {
         self.inbox = inbox; self.cache = cache; self.onSelect = onSelect; self.onSelectRoom = onSelectRoom
+        self.roomScope = roomIDs
         _query = State(initialValue: query)
+        // Gate 10 wants every stored property assigned by an init that assigns others:
+        // `@FocusState` is storage, so it is initialized explicitly rather than assumed.
+        _searchFocused = FocusState()
     }
 
     private struct SearchRequest: Equatable {
@@ -35,7 +42,7 @@ import SwiftUI
     }
     private var request: SearchRequest {
         SearchRequest(query: query.trimmingCharacters(in: .whitespacesAndNewlines),
-                      connectionID: inbox.connection?.id, profiles: inbox.profiles.map(\.id), roomIDs: inbox.searchableRoomIDs, hasLiveRoster: inbox.link == .live,
+                      connectionID: inbox.connection?.id, profiles: inbox.profiles.map(\.id), roomIDs: roomScope ?? inbox.searchableRoomIDs, hasLiveRoster: inbox.link == .live,
                       includesMessages: scope != .bots, active: scenePhase == .active)
     }
     private var visibleHits: [BotHistoryCache.Hit] { hitRequest == request ? hits : [] }

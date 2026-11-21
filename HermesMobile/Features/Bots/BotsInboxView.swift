@@ -591,7 +591,7 @@ extension BotsInboxView {
                         toast = String(localized: "This room’s history is no longer available.")
                     }, onChanged: { inbox.updateRoom($0, connectionID: key.connectionID) }, onDisbanded: {
                         inbox.removeRoom(key); selection.room = nil
-                    }), roster: inbox.profiles, avatars: inbox.avatars,
+                    }), roster: inbox.profiles, avatars: inbox.avatars, inbox: inbox,
                         onUpdateSignIn: { inbox.noteRejectedSignIn(connection); selection.room = nil; updateSignIn() })
                     .id(key)
                 }
