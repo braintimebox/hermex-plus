@@ -1,0 +1,95 @@
+# Dispatch-only runner for a named subset of tests.
+#
+# Why this exists: `pr-ci` runs the whole suite in ~13 minutes, which is too slow
+# to discriminate between two neighbouring test cases, and `build-ipa`'s shards
+# cannot be re-run alone (`--failed` fails on `test-build` before the tests).
+# A subset run answers "does B fail because of A?" in about five minutes without
+# touching either release path. It never runs on push or on a pull request.
+name: Test subset
+
+on:
+  workflow_dispatch:
+    inputs:
+      only_testing:
+        description: "Space-separated targets, e.g. HermesMobileTests/Class/testCase"
+        required: true
+        default: "HermesMobileTests/HermexTelemetryDeliveryTests/testConfirmedCountBelowBatchKeepsTheRemainder"
+
+permissions:
+  contents: read
+
+jobs:
+  subset:
+    name: Subset
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PROJECT_PATH: HermesMobile.xcodeproj
+      SCHEME: HermesMobile
+      DERIVED_DATA_PATH: DerivedData
+      RESULT_BUNDLE_PATH: SubsetResults.xcresult
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Select simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          name=$(xcrun simctl list devices available \
+            | grep -oE '^\s+iPhone[^()]*\(' \
+            | head -1 \
+            | sed -E 's/^\s+//; s/\s*\($//')
+          if [[ -z "${name}" ]]; then
+            echo "No available iPhone simulator found:" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Using simulator: ${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcodebuild build-for-testing \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Build-for-testing duration: $((SECONDS - start_seconds))s"
+
+      - name: Test the requested subset
+        env:
+          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: |
+          set -euo pipefail
+          args=()
+          for target in ${ONLY_TESTING}; do
+            args+=("-only-testing:${target}")
+          done
+          echo "targets: ${args[*]}"
+          start_seconds=${SECONDS}
+          # One worker and no parallelism: the question this job answers is about
+          # neighbouring cases sharing state, and a cloned simulator changes that.
+          xcodebuild test-without-building "${args[@]}" \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            -resultBundlePath "${RESULT_BUNDLE_PATH}" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Subset duration: $((SECONDS - start_seconds))s"
+
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: subset-results
+          path: ${{ env.RESULT_BUNDLE_PATH }}
+          if-no-files-found: ignore
