@@ -395,9 +395,11 @@ import XCTest
         XCTAssertTrue(request.handling.contains("TAVILY_API_KEY"))
 
         await model.answerCredential(action(model), value: "tvly-123")
-        let sent = wire.calls.last { $0.0 == "secret.respond" }
-        XCTAssertEqual(sent?.1["value"], .string("tvly-123"))
-        XCTAssertNil(sent?.1["password"])
+        // Every answer rides one method now: request.answer with the envelope id and
+        // the value under `result`. The per-kind methods are gone from the client.
+        let sent = wire.calls.last { $0.0 == "request.answer" }
+        XCTAssertEqual(sent?.1["id"], .string("sec-1"))
+        XCTAssertEqual(sent?.1["result"], .object(["value": .string("tvly-123")]))
         model.suspend()
     }
 
@@ -408,8 +410,8 @@ import XCTest
         let model = await blocked(on: wire)
         wire.onEvent?(BotFixtureWire.request("secret", id: "sec-2"))
         await model.skipCredential(action(model))
-        let sent = wire.calls.last { $0.0 == "secret.respond" }
-        XCTAssertEqual(sent?.1["value"], .string(""))
+        let sent = wire.calls.last { $0.0 == "request.answer" }
+        XCTAssertEqual(sent?.1["result"], .object(["value": .string("")]))
         XCTAssertEqual(model.requestResolution?.outcome, .answered)
         model.suspend()
     }
@@ -437,7 +439,7 @@ import XCTest
         await model.answerCredential(action(model), value: "hunter2")
         XCTAssertEqual(model.requestResolution?.outcome, .uncertain)
         XCTAssertEqual(model.connectionState, .disconnected)
-        XCTAssertEqual(wire.calls.filter { $0.0 == "sudo.respond" }.count, 1)
+        XCTAssertEqual(wire.calls.filter { $0.0 == "request.answer" }.count, 1)
         model.suspend()
     }
 
@@ -447,10 +449,16 @@ import XCTest
         let model = await blocked(on: wire)
         wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-5"))
         let stale = action(model)
+        // The host withdraws a replaced prompt; envelopes live in a list, so without
+        // the cancel the first one keeps the slot and the second never wins it.
+        wire.onEvent?(.object([
+            "session_id": .string("runtime"), "seq": .number(1), "type": .string("request.cancel"),
+            "payload": .object(["id": .string("sudo-5"), "method": .string("sudo")])
+        ]))
         wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-6"))
         XCTAssertEqual(model.pendingRequest?.requestID, "sudo-6")
         await model.answerCredential(stale, value: "hunter2")
-        XCTAssertTrue(wire.calls.filter { $0.0 == "sudo.respond" }.isEmpty)
+        XCTAssertTrue(wire.calls.filter { $0.0 == "request.answer" }.isEmpty)
         XCTAssertNil(model.requestResolution)
         // The live prompt is still answerable; only the stale action was refused.
         XCTAssertTrue(model.mayAnswer)

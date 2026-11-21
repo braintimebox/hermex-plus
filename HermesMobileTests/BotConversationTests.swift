@@ -672,6 +672,8 @@ actor BotMemoryDrafts: ChatDraftPersisting {
     /// question per request and keeps going while this list is non-empty, so a
     /// non-empty default is what makes a two-question batch send two locks.
     var clarifyRemaining: [String] = ["pending"]
+    /// How many batch questions were locked so far, so `remaining` can shrink.
+    private var clarifyLocks = 0
     /// What `sudo.respond` / `secret.respond` report; "ok" or "expired".
     var credentialStatus = "ok"
     var respondFailure: BotFailure?
@@ -721,16 +723,23 @@ actor BotMemoryDrafts: ChatDraftPersisting {
             return .object(["resolved": .number(Double(approvalResolved))])
         case "clarify.lock":
             // Batch answers. The client locks one question per request and reads
-            // `remaining` to decide whether to continue; an empty list ends the
-            // batch early, so the default keeps one token in it.
+            // `remaining` to decide whether to continue: a non-empty list keeps the
+            // loop going, an empty one ends the batch as answered. So the list has to
+            // shrink with every lock, not stay constant — a constant list made the
+            // last answer return "no outcome" instead of `.answered`.
             if let respondFailure { throw respondFailure }
+            clarifyLocks += 1
             return .object(["status": .string(clarifyStatus),
-                            "remaining": .array(clarifyRemaining.map { .string($0) })])
+                            "remaining": .array(clarifyRemaining.dropFirst(clarifyLocks).map { .string($0) })])
         case "request.answer":
-            // An unkeyed answer (single question, or a skip) riding the envelope id.
+            // One method for every answer: the envelope id plus `result`. A dropped
+            // prompt answers `expired`; a credential prompt's status is
+            // `credentialStatus`, a question's is `clarifyStatus`.
             if let respondFailure { throw respondFailure }
-            if clarifyStatus == "ok" { pendingClarify = .null }
-            return .object(["status": .string(clarifyStatus)])
+            let answered = params["id"]?.text ?? params["request_id"]?.text ?? ""
+            let status = answered.hasPrefix("clr-") ? clarifyStatus : credentialStatus
+            if status == "ok" { pendingClarify = .null }
+            return .object(["status": .string(status)])
         case "sudo.respond", "secret.respond", "mcp.setup.respond":
             if let respondFailure { throw respondFailure }
             return .object(["status": .string(credentialStatus)])
