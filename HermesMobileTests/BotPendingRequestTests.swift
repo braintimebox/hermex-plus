@@ -556,7 +556,15 @@ import XCTest
     private func action(_ model: BotConversation,
                         file: StaticString = #filePath, line: UInt = #line) -> BotConversation.AnswerAction {
         guard let action = model.prepareAnswer() else {
-            XCTFail("Expected an answerable request", file: file, line: line)
+            // Three different conditions produce nil here, and the old message named
+            // none of them: "Expected an answerable request" reads the same whether the
+            // request never arrived, arrived unanswerable, or lost its runtime — three
+            // distinct diagnoses that a 4-minute subset run must be able to tell apart.
+            let request = model.pendingRequest
+            XCTFail("Expected an answerable request — pendingRequest: \(request == nil ? "nil" : "present")"
+                    + ", isAnswerable: \(request.map { String($0.isAnswerable) } ?? "n/a")"
+                    + ", runtime: \(model.runtime ?? "nil")",
+                    file: file, line: line)
             return BotConversation.AnswerAction(generation: -1, runtime: "", requestID: "")
         }
         return action
