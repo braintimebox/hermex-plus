@@ -588,8 +588,17 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         XCTAssertEqual(logger.pendingEventsForTesting().count, 3,
                        "the debounce must keep the three events queued")
         logger.flushNowForTesting()
-        XCTAssertTrue(waitUntil { StubURLProtocol.receivedEventCount == 3 },
-                      "the three events must travel as one batch")
+        // Assert the batch on the request that carried it. `receivedEventCount` is
+        // cumulative: a partial ack (2 of 3) makes the logger flush the remainder at
+        // once, so by the time this waits the counter can already read 4 — the check
+        // then fails not because the batch was split but because a later request
+        // landed first. Reading the first body states the property being tested.
+        XCTAssertTrue(waitUntil { !StubURLProtocol.receivedBodies.isEmpty },
+                      "the flush must post a batch")
+        let firstBatch = StubURLProtocol.receivedBodies.first
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [[String: Any]]
+        XCTAssertEqual(firstBatch?.count, 3,
+                       "the three events must travel as one batch")
         // Wait for the outcome the assertions below describe, not for a proxy:
         // `isIdleForTesting()` is already true before the ack is applied, so the
         // test used to read the queue before the confirmed head was removed.
