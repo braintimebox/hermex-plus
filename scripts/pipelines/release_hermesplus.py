@@ -46,6 +46,7 @@ WORKS = Path(os.environ.get("HERMEX_WORKSPACE", str(Path.home() / "workspace")))
 STATUS = ROOT / "docs" / "hermesplus-status.yaml"
 SNAPSHOT = ROOT / "docs" / "project-snapshot.md"
 VERSION = ROOT / "VERSION"
+VERSION_XCCONFIG = ROOT / "Config" / "Version.xcconfig"
 CHANGELOG = ROOT / "CHANGELOG.md"
 PBXPROJ = ROOT / "HermesMobile.xcodeproj" / "project.pbxproj"
 GITHOOKS_DIR = ".githooks"
@@ -77,6 +78,7 @@ def git(*args: str, check: bool = True) -> str:
 # `git_commit_push`, which stages precisely these plus scripts/ and .github/.
 RELEASE_OWNED = {
     "VERSION",
+    "Config/Version.xcconfig",
     "CHANGELOG.md",
     "README.md",
     "docs/project-snapshot.md",
@@ -126,39 +128,38 @@ def bump_patch(v: str) -> str:
 
 
 def write_version(new_v: str) -> None:
-    """Write the version to every place that has to agree, in one shot.
+    """Write the version to the single source, then mirror it where CI reads it.
 
-    MARKETING_VERSION is the human-facing version (3.6.2). CURRENT_PROJECT_VERSION
-    is the build number iOS compares when installing over an existing app — it must
-    move forward on every release or the update can be rejected as "same build".
-    Upstream's own AGENTS.md says a unique YYYYMMDDHHMM value each time; this script
-    previously left it pinned at 1 forever, which is the defect this fixes.
+    Config/Version.xcconfig is the source: project.pbxproj reads `$(APP_VERSION)`
+    in all 16 places and `$(APP_BUILD)` in all 8, so it holds no literal to
+    replace. Writing VERSION alone (what this script used to do) left the
+    xcconfig on the old version, and the precheck gate refused the release with
+    "VERSION is '4.2.0' but Config/Version.xcconfig says '4.1.4'"; the pbxproj
+    sweep it ran in addition matched nothing and printed "nothing replaced".
+
+    APP_BUILD must move forward on every release or iOS can refuse the update as
+    "same build", so it stays a YYYYMMDDHHMM timestamp.
     """
     import datetime as _dt
 
     old_v = current_version()
-    VERSION.write_text(new_v + "\n", encoding="utf-8")
-
     build_no = _dt.datetime.now().strftime("%Y%m%d%H%M")
-    pbx = PBXPROJ.read_text(encoding="utf-8")
 
-    before_marketing = pbx.count(f"MARKETING_VERSION = {old_v};")
-    pbx = pbx.replace(f"MARKETING_VERSION = {old_v};", f"MARKETING_VERSION = {new_v};")
+    text = VERSION_XCCONFIG.read_text(encoding="utf-8")
+    text, versions = re.subn(r"(?m)^APP_VERSION\s*=\s*\S+$", f"APP_VERSION = {new_v}", text)
+    text, builds = re.subn(r"(?m)^APP_BUILD\s*=\s*\S+$", f"APP_BUILD = {build_no}", text)
+    if versions != 1 or builds != 1:
+        sys.exit(f"FAILED: Config/Version.xcconfig holds APP_VERSION×{versions} and "
+                 f"APP_BUILD×{builds}; expected exactly one of each")
+    VERSION_XCCONFIG.write_text(text, encoding="utf-8")
 
-    # Every CURRENT_PROJECT_VERSION line is rewritten to the same new build number,
-    # preserving indentation and the trailing semicolon.
-    before_build = len(re.findall(r"CURRENT_PROJECT_VERSION = \d+;", pbx))
-    pbx = re.sub(r"CURRENT_PROJECT_VERSION = \d+;",
-                 f"CURRENT_PROJECT_VERSION = {build_no};", pbx)
-
-    PBXPROJ.write_text(pbx, encoding="utf-8")
-
-    if before_marketing == 0:
-        print(f"  ⚠ MARKETING_VERSION {old_v} not found in pbxproj — nothing replaced")
-    if before_build == 0:
-        print("  ⚠ CURRENT_PROJECT_VERSION not found in pbxproj — nothing replaced")
+    sync = str(ROOT / "scripts" / "sync-version.py")
+    sh([sys.executable, sync])
+    sh([sys.executable, sync, "--check"])
+    if current_version() != new_v:
+        sys.exit(f"FAILED: VERSION is {current_version()!r} after the mirror, expected {new_v!r}")
     print(f"  version {old_v} → {new_v} · build number → {build_no}"
-          f" ({before_build} target(s))")
+          f" (Config/Version.xcconfig · VERSION mirrored)")
 
 
 def prepend_changelog(new_v: str, note: str) -> None:
@@ -206,6 +207,7 @@ def git_commit_push(msg: str) -> None:
     """
     tracked = [
         "VERSION",
+        "Config/Version.xcconfig",
         "CHANGELOG.md",
         "README.md",
         "docs/project-snapshot.md",
