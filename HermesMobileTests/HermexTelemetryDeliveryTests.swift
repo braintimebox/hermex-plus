@@ -28,10 +28,13 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
     }
 
     override func tearDown() {
+        // Cut in-flight work first: a callback that lands after `reset()` is
+        // exactly the leak that moved a 20-event batch into the next test.
+        session?.invalidateAndCancel()
+        session = nil
         StubURLProtocol.reset()
         temp.cleanup()
         temp = nil
-        session = nil
         super.tearDown()
     }
 
@@ -44,7 +47,11 @@ final class HermexTelemetryDeliveryTests: XCTestCase {
         return HermexLogger(store: store,
                             session: session,
                             serverURLProvider: { URL(string: "http://stub.local")! },
-                            flushDebounce: 0,
+                            // Passed through, not pinned to 0: the batching test asks
+                            // for 0.5 s and before this line the argument was dropped,
+                            // so "the debounce keeps the three events queued" could
+                            // never hold — the first `log()` flushed immediately.
+                            flushDebounce: flushDebounce,
                             retryDelays: retryDelays)
     }
 
