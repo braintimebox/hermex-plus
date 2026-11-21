@@ -17,6 +17,9 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     /// content-based discriminator. Optional because local-only messages
     /// never carry it; `messageId` is untouched and unchanged.
     let serverID: Int?
+    /// The host's durable `row_id`, the identity `message.react` addresses.
+    /// Distinct from `serverID`: it is per bot-activity row, not per session row.
+    let rowID: Int?
     let name: String?
     let toolCallId: String?
     let toolUseId: String?
@@ -28,6 +31,13 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
     /// Server-measured wall-clock seconds for the whole turn, set on its final
     /// assistant message (`_turnDuration`). Absent on older transcripts.
     let turnDuration: Double?
+    /// Metadata the host attaches for presentation only (reactions, custom tags).
+    /// The Bots screens read reactions from it; the field is optional and absent
+    /// on older hosts, so every reader treats nil as "no metadata".
+    let displayMetadata: [String: JSONValue]?
+    /// The row kind the host asks the transcript to draw ("tool", "system",
+    /// "reaction"). The Bots screens branch on it, and the fork never carried it.
+    let displayKind: String?
 
     init(
         role: String?,
@@ -43,13 +53,17 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         attachments: [MessageAttachment]? = nil,
         turnTps: Double? = nil,
         serverID: Int? = nil,
-        turnDuration: Double? = nil
+        rowID: Int? = nil,
+        turnDuration: Double? = nil,
+        displayMetadata: [String: JSONValue]? = nil,
+        displayKind: String? = nil
     ) {
         self.role = role
         self.content = content
         self.timestamp = timestamp
         self.messageId = messageId
         self.serverID = serverID
+        self.rowID = rowID
         self.name = name
         self.toolCallId = toolCallId
         self.toolUseId = toolUseId
@@ -59,6 +73,8 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         self.attachments = attachments
         self.turnTps = turnTps
         self.turnDuration = turnDuration
+        self.displayMetadata = displayMetadata
+        self.displayKind = displayKind
     }
 
     enum CodingKeys: String, CodingKey {
@@ -67,6 +83,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         case timestamp
         case messageId
         case serverID = "id"
+        case rowID = "row_id"
         case name
         case toolCallId
         case toolUseId
@@ -76,6 +93,10 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         case turnTps = "_turnTps"
         case turnDuration = "_turnDuration"
         case underscoredTimestamp = "_ts"
+        case displayMetadata = "display_metadata"
+        case displayMetadataCamel = "displayMetadata"
+        case displayKind
+        case displayKindSnake = "display_kind"
     }
 
     init(from decoder: Decoder) throws {
@@ -87,6 +108,7 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
             ?? container.decodeLossyDoubleIfPresent(forKey: .timestamp)
         messageId = container.decodeLossyStringIfPresent(forKey: .messageId)
         serverID = container.decodeLossyIntIfPresent(forKey: .serverID)
+        rowID = container.decodeLossyIntIfPresent(forKey: .rowID)
         name = container.decodeLossyStringIfPresent(forKey: .name)
         toolCallId = container.decodeLossyStringIfPresent(forKey: .toolCallId)
         toolUseId = container.decodeLossyStringIfPresent(forKey: .toolUseId)
@@ -97,6 +119,12 @@ struct ChatMessage: Decodable, Equatable, Identifiable {
         attachments = Self.attachments(decodedAttachments, enrichedByMarkerIn: content)
         turnTps = container.decodeLossyDoubleIfPresent(forKey: .turnTps)
         turnDuration = container.decodeLossyDoubleIfPresent(forKey: .turnDuration)
+        // The host has spelled this key both ways; a strict single-key decode
+        // silently dropped reactions whenever the other spelling arrived.
+        displayMetadata = (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadata))
+            ?? (try? container.decodeIfPresent([String: JSONValue].self, forKey: .displayMetadataCamel))
+        displayKind = (try? container.decodeIfPresent(String.self, forKey: .displayKind))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .displayKindSnake))
     }
 
     private static func attachments(
@@ -467,5 +495,54 @@ private extension JSONValue {
         }
 
         return String(data: data, encoding: .utf8)
+    }
+}
+
+extension ChatMessage {
+    static let steerDisplayKind = "steer"
+
+    /// The exact out-of-band wrapper hermes-agent ≥ 2026.9.11 persists around
+    /// each mid-turn steer. Recognition requires this exact text; a bare
+    /// prefix match would misfire on user text that merely mentions it.
+    private static let steerMarkerOpen = "[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]"
+    private static let steerMarkerClose = "[/OUT-OF-BAND USER MESSAGE]"
+
+    /// True for a steering hint: either the server flagged it with
+    /// `display_kind: "steer"`, or the content is exactly the out-of-band
+    /// marker block (older rows, or rows that lost the flag).
+    var isSteerMessage: Bool {
+        displayKind == Self.steerDisplayKind
+            || (role == "user" && Self.isSteerWrappedContent(content))
+    }
+
+    /// The steer text with the out-of-band wrapper stripped. For non-steer
+    /// messages this is the raw content.
+    var steerText: String {
+        Self.strippedSteerText(from: content) ?? content ?? ""
+    }
+
+    /// Strips the `[OUT-OF-BAND USER MESSAGE …] … [/OUT-OF-BAND USER MESSAGE]`
+    /// wrapper hermes-agent ≥ 2026.9.11 persists around each mid-turn steer.
+    /// Returns nil unless the content is exactly a marker-wrapped block: the
+    /// first line is the exact opening marker and the last line is the exact
+    /// closing marker.
+    static func strippedSteerText(from content: String?) -> String? {
+        guard let content else { return nil }
+        let lines = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+        guard lines.count >= 2,
+              lines[0].trimmingCharacters(in: .whitespaces) == Self.steerMarkerOpen,
+              lines[lines.count - 1].trimmingCharacters(in: .whitespaces) == Self.steerMarkerClose
+        else {
+            return nil
+        }
+        return lines[1..<(lines.count - 1)]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func isSteerWrappedContent(_ content: String?) -> Bool {
+        strippedSteerText(from: content) != nil
     }
 }

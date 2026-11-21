@@ -234,6 +234,16 @@ struct ContentView: View {
             }
         }
 
+        // HERMEX-FORK: "share received" only proved the payload arrived at the
+        // routing switch. If staging failed afterwards the log looked healthy
+        // and the user saw nothing. Staged/ack-failed makes the outcome visible.
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "ShareImport",
+            message: "share_staged",
+            extras: ["source": reservation.source.rawValue]
+        )
+
         // Only a container-backed payload has an inbox record to acknowledge.
         // URL and pasteboard payloads are consumed at claim time, so there is
         // nothing to release and no directory to require.
@@ -245,6 +255,15 @@ struct ContentView: View {
         do {
             try HermesShareDraft.consume(reservation, from: directory)
         } catch {
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "ShareImport",
+                message: "share_ack_failed",
+                extras: [
+                    "source": reservation.source.rawValue,
+                    "error": String(describing: error)
+                ]
+            )
             // Keep the share recoverable if acknowledgement fails after routing.
             try? HermesShareDraft.release(reservation, in: directory)
         }

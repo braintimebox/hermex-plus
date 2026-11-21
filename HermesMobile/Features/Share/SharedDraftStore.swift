@@ -314,6 +314,109 @@ enum HermesShareDraft {
         pasteboard.items = []
     }
 
+    // MARK: - General pasteboard (the only transport with no App Group dependency)
+
+    /// Copies the text onto the system pasteboard.
+    ///
+    /// A *named* pasteboard is not guaranteed to be visible across the app and
+    /// its extension on a re-signed sideloaded build: Apple scopes named boards
+    /// to the app's signing identity (same team ID, with App Group membership
+    /// tied to persistence), and the identity a sideloader re-signs under is not
+    /// the one the project's App Group was issued for. Whether it happens to work
+    /// therefore varies with the signer — it is not a guarantee we can rely on.
+    ///
+    /// The general board needs no entitlement and no team identity, so it is the
+    /// one transport that survives that case. The cost is the iOS paste-permission
+    /// banner on the user's first paste, which is acceptable when the alternative
+    /// is losing the text.
+    ///
+    /// Setting is synchronous and does not require permission, so a `true` here
+    /// means the text is on the board; it does not mean the app was opened.
+    @discardableResult
+    static func saveTextToGeneralPasteboard(_ draft: String) -> Bool {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        UIPasteboard.general.string = trimmed
+        return true
+    }
+
+    /// What actually carried a share out of the extension.
+    ///
+    /// The extension must not report success it cannot substantiate, so each
+    /// transport reports its own result and the user-facing message follows from
+    /// the combination instead of from a single optimistic flag.
+    enum ShareDeliveryOutcome: Equatable {
+        /// The App Group inbox accepted the payload: text and attachments survive.
+        case container
+        /// The App-Group-scoped named pasteboard accepted it.
+        case namedPasteboard
+        /// Only the text could be carried, on the general pasteboard. The user
+        /// has to paste it; any attachments were NOT delivered.
+        case textOnlyGeneralPasteboard
+        /// Nothing was carried. Reporting success here would be a lie.
+        case unavailable
+
+        /// True only when the full payload reached transferable storage.
+        var carriedFullPayload: Bool {
+            switch self {
+            case .container, .namedPasteboard: return true
+            case .textOnlyGeneralPasteboard, .unavailable: return false
+            }
+        }
+    }
+
+    /// Pure mapping from transport results to the outcome. Kept free of side
+    /// effects so the negative cases are unit-testable without an extension host.
+    static func deliveryOutcome(
+        containerDelivered: Bool,
+        namedPasteboardDelivered: Bool,
+        generalPasteboardDelivered: Bool
+    ) -> ShareDeliveryOutcome {
+        if containerDelivered { return .container }
+        if namedPasteboardDelivered { return .namedPasteboard }
+        if generalPasteboardDelivered { return .textOnlyGeneralPasteboard }
+        return .unavailable
+    }
+
+    /// What the extension can honestly claim about opening the containing app.
+    enum ShareOpenOutcome: Equatable {
+        /// `extensionContext.open` reported success.
+        case confirmed
+        /// A fallback dispatched the request; whether the app opened is unknown.
+        /// This is deliberately not a success state.
+        case dispatchedOnly
+        /// No path could even send the request.
+        case failed
+    }
+
+    /// User-facing text for a delivery outcome. `nil` means "say nothing".
+    static func statusMessage(forDelivery outcome: ShareDeliveryOutcome) -> String? {
+        switch outcome {
+        case .container, .namedPasteboard:
+            return nil
+        case .textOnlyGeneralPasteboard:
+            return "Could not attach files on this build. The text was copied — paste it into Hermex."
+        case .unavailable:
+            return "Could not save shared content on this build."
+        }
+    }
+
+    /// User-facing text for an open outcome. Only a confirmed open stays silent;
+    /// an unconfirmed dispatch must not look like success.
+    ///
+    /// The wording stays neutral on purpose: the inline-URL path carries the text
+    /// in the link and saves nothing to disk, so claiming "saved" would be a
+    /// second false statement.
+    static func statusMessage(forOpen outcome: ShareOpenOutcome) -> String? {
+        switch outcome {
+        case .confirmed:
+            return nil
+        case .dispatchedOnly, .failed:
+            return "Open Hermex manually to finish the share."
+        }
+    }
+
+
     /// HERMEX-FORK: claims a fallback payload as a reservation so the app has one
     /// import path for both transports. The pasteboard is cleared on read, which
     /// is what makes it consume-once — the App Group path uses a reservation file
@@ -548,8 +651,21 @@ enum HermesShareDraft {
                 try writeJSON(metadata, to: metadataURL)
                 try setProtectedFileAttributes(at: metadataURL, fileManager: fileManager)
             } catch {
+                // HERMEX-FORK: the rollback itself must be checked. `try?` on
+                // moveItem left the item in `reserved/` when the move failed,
+                // and nothing ever looks there unless a reservation expires —
+                // the share became permanently invisible. If the move back
+                // fails, delete the stale reservation metadata so the recovery
+                // pass (recoverExpiredReservations) can pick the item up, and
+                // report the original error either way.
                 try? fileManager.removeItem(at: reservationURL(in: reservedURL))
-                try? fileManager.moveItem(at: reservedURL, to: pendingURL)
+                do {
+                    try fileManager.moveItem(at: reservedURL, to: pendingURL)
+                } catch {
+                    // The item stays in reserved/ without metadata; the next
+                    // recovery pass treats it by modification date and moves
+                    // it back to pending/ instead of losing it.
+                }
                 throw error
             }
 
@@ -835,7 +951,21 @@ enum HermesShareDraft {
             if fileManager.fileExists(atPath: pendingURL.path) {
                 try fileManager.removeItem(at: reservedURL)
             } else {
-                try fileManager.moveItem(at: reservedURL, to: pendingURL)
+                // HERMEX-FORK: a failed move must not strand the item in
+                // `reserved/`. It stays invisible to `reserveNextPendingImport`
+                // and silently stops the share from ever being delivered. On a
+                // move failure, drop the reservation metadata (already done
+                // above) so the next pass sees a reservations-free record and
+                // retries instead of parking it forever; the payload itself is
+                // left untouched on disk.
+                do {
+                    try fileManager.moveItem(at: reservedURL, to: pendingURL)
+                } catch {
+                    // Leave the item in place rather than deleting it: a
+                    // later recovery pass retries the same move, and the
+                    // payload is never lost.
+                    continue
+                }
             }
         }
     }

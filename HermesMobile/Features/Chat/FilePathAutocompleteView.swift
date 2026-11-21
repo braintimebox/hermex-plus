@@ -135,3 +135,71 @@ struct FilePathAutocompleteView: View {
         return String(localized: "\(kind), \(match.name)")
     }
 }
+
+struct FilePathRow: View {
+    let match: ComposerFilePathSearch.Match
+    let onSelect: (ComposerFilePathSearch.Match) -> Void
+
+    var body: some View {
+        Button {
+            onSelect(match)
+        } label: {
+            HStack(spacing: 12) {
+                icon(for: match)
+                    .frame(width: 20)
+
+                Text(match.name)
+                    .font(Font.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .layoutPriority(2)
+
+                if !match.parentPath.isEmpty {
+                    Text(match.parentPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .layoutPriority(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if match.isDirectory {
+                    Image(systemName: "chevron.forward")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: match))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// The same glyphs the file tree draws: a quiet grey folder, or the file's
+    /// own type icon.
+    @ViewBuilder
+    private func icon(for match: ComposerFilePathSearch.Match) -> some View {
+        if match.isDirectory {
+            Image(systemName: "folder")
+                .font(.system(size: 16))
+                .foregroundStyle(Color(uiColor: .systemGray))
+        } else {
+            FileIcon.resolve(match.name).image
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
+        }
+    }
+
+    private func accessibilityLabel(for match: ComposerFilePathSearch.Match) -> String {
+        let kind = match.isDirectory ? String(localized: "Folder") : String(localized: "File")
+        return String(localized: "\(kind), \(match.name)")
+    }
+}

@@ -129,12 +129,31 @@ else:
     print(f"ok  CHANGELOG top == {version}")
 
 # --- 3. pbxproj MARKETING_VERSION ---
+# The project may reference the single source of truth directly
+# (`MARKETING_VERSION = "$(APP_VERSION)"`) instead of repeating a literal.
+# Resolve both forms so the check keeps its meaning: every occurrence must end up
+# at the same version as VERSION.
+VERSION_XCCONFIG_FILE = "Config/Version.xcconfig"
+xcconfig_version = ""
+try:
+    for _line in read(VERSION_XCCONFIG_FILE).splitlines():
+        _s = _line.strip()
+        if _s.startswith("APP_VERSION") and "=" in _s:
+            xcconfig_version = _s.partition("=")[2].strip().strip('"')
+            break
+except FileNotFoundError:
+    xcconfig_version = ""
+
 try:
     pbx = read(PBXPROJ_FILE)
-    mv_versions = re.findall(r"MARKETING_VERSION = ([\d.]+);", pbx)
+    mv_literals = re.findall(r'MARKETING_VERSION = "?([\d.]+)"?;', pbx)
+    mv_refs = len(re.findall(r'MARKETING_VERSION = "\$\(APP_VERSION\)";', pbx))
 except FileNotFoundError:
-    mv_versions = []
+    mv_literals = []
+    mv_refs = 0
     fail(f"{PBXPROJ_FILE} not found")
+
+mv_versions = list(mv_literals) + ([xcconfig_version] if xcconfig_version else []) * mv_refs
 
 if not mv_versions:
     fail(f"{PBXPROJ_FILE}: no MARKETING_VERSION found")
@@ -145,8 +164,15 @@ else:
             f"pbxproj MARKETING_VERSION {sorted(unique)} != VERSION {version} "
             f"(stale build version in logs)"
         )
+    elif mv_refs and xcconfig_version != version:
+        fail(
+            f"Config/Version.xcconfig APP_VERSION {xcconfig_version!r} != VERSION {version!r}"
+        )
     else:
-        print(f"ok  MARKETING_VERSION == {version} ({len(mv_versions)} occurrences)")
+        detail = f"{len(mv_literals)} literal(s)"
+        if mv_refs:
+            detail += f" + {mv_refs} reference(s) to $(APP_VERSION)"
+        print(f"ok  MARKETING_VERSION == {version} ({detail})")
 
 # --- 4. README header has no version ---
 try:

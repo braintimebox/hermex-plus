@@ -149,6 +149,9 @@ struct ChatAttachmentPreviewView: View {
             imageContent(file)
         case let .audio(data):
             audioContent(data)
+        case let .quickLook(file):
+            QuickLookFileView(url: file.url)
+                .ignoresSafeArea()
         case let .unavailable(message):
             unavailableContent(message)
         }
@@ -252,6 +255,10 @@ struct ChatAttachmentPreviewView: View {
                 parts.append(ByteCountFormatter.string(fromByteCount: Int64(file.originalByteCount), countStyle: .file))
             case let .audio(data):
                 parts.append(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))
+            case .quickLook:
+                // Quick Look previews carry no byte count of their own, so the
+                // row falls back to the attachment's recorded size.
+                break
             case .unavailable:
                 break
             }
@@ -327,7 +334,9 @@ struct ChatAttachmentImageLightbox: View {
         case let .unavailable(message):
             return .failure(message)
 
-        case .text, .audio:
+        case .text, .audio, .quickLook:
+            // The lightbox only draws images; everything else reports why it is
+            // not shown here, even when its own screen can present it.
             return .failure(String(localized: "Preview is not available for this attachment."))
 
         case .none:

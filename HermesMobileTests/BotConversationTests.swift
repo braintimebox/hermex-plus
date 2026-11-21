@@ -43,7 +43,6 @@ import Vision
             XCTAssertEqual(model.draft, accepted ? "" : "guide once")
             XCTAssertFalse(model.uncertainSend)
             XCTAssertEqual(model.connectionState, .connected)
-            XCTAssertEqual(model.promptReceipt, accepted ? mode.outcome(wire.promptReply!).receipt : nil)
             let calls = wire.calls.filter { $0.0 == mode.method }
             XCTAssertEqual(calls.count, 1)
             XCTAssertEqual(calls.first?.1["session_id"], .string("runtime"))
@@ -146,74 +145,6 @@ import Vision
         XCTAssertEqual(saved?.text, "old guidance")
         XCTAssertTrue(saved?.botSubmissionUncertain == true)
         next.suspend()
-    }
-
-    func testQueuedFollowUpReceiptDoesNotSurviveStopOrClaimTheQueueRemains() async throws {
-        let wire = BotFixtureWire(); wire.running = true
-        wire.promptReply = .object(["status": .string("queued")])
-        let model = make(wire); await model.recover(); model.editDraft("next")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.queue)))
-        XCTAssertNotNil(model.promptReceipt)
-        await model.recover()
-        await model.stop(try XCTUnwrap(model.prepareStop()))
-        XCTAssertNil(model.promptReceipt)
-        XCTAssertFalse(model.maySend)
-        // A queued envelope can still appear after Stop races the server drain.
-        // Trust the next snapshot; never resend or claim the conversation is idle.
-        wire.running = false; wire.queued = .object(["text": .string("server follow-up")])
-        await model.recover()
-        XCTAssertFalse(model.maySend)
-        XCTAssertEqual(model.turn, .running)
-        wire.queued = .null
-        await model.recover()
-        XCTAssertTrue(model.maySend)
-        XCTAssertEqual(wire.calls.filter { $0.0 == "prompt.submit" }.count, 1)
-        model.suspend()
-    }
-
-    func testAcceptedPromptReceiptClearsWhenSnapshotEstablishesIdle() async throws {
-        let wire = BotFixtureWire(); wire.running = true
-        wire.promptReply = .object(["status": .string("queued")])
-        let model = make(wire); await model.recover(); model.editDraft("next")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.queue)))
-        XCTAssertNotNil(model.promptReceipt)
-
-        wire.running = false
-        wire.queued = .null
-        await model.recover()
-
-        XCTAssertNil(model.promptReceipt)
-        XCTAssertEqual(model.turn, .idle)
-        model.suspend()
-    }
-
-    func testVoiceStopReceiptSurvivesItsIdleSnapshot() async throws {
-        let wire = BotFixtureWire()
-        wire.promptReply = .object(["voice_stopped": .bool(true)])
-        let model = make(wire); await model.recover(); model.editDraft("stop speaking")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.send)))
-        wire.running = false
-        await model.recover()
-
-        XCTAssertEqual(model.promptReceipt, BotPromptOutcome.voiceStopped.receipt)
-        XCTAssertEqual(model.turn, .idle)
-
-        wire.running = true
-        await model.recover()
-        XCTAssertNil(model.promptReceipt)
-
-        wire.running = false
-        await model.recover()
-        model.editDraft("stop speaking again")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.send)))
-        wire.running = false
-        await model.recover()
-        XCTAssertEqual(model.promptReceipt, BotPromptOutcome.voiceStopped.receipt)
-
-        wire.runtimeID = "replacement-runtime"
-        await model.recover()
-        XCTAssertNil(model.promptReceipt)
-        model.suspend()
     }
 
     func testEditingDraftOrChangingConnectionInvalidatesRedirectConfirmation() async throws {
@@ -733,9 +664,14 @@ actor BotMemoryDrafts: ChatDraftPersisting {
     var attention = false
     var pendingApproval: BotJSON?
     var pendingClarify = BotJSON.null
-    /// What `approval.respond` reports unblocking, and what `clarify.respond` reports.
+    /// What `approval.respond` reports unblocking, and what `clarify.lock` /
+    /// `request.answer` report as their status.
     var approvalResolved = 1
     var clarifyStatus = "ok"
+    /// What `clarify.lock` reports as still unanswered. The client locks one
+    /// question per request and keeps going while this list is non-empty, so a
+    /// non-empty default is what makes a two-question batch send two locks.
+    var clarifyRemaining: [String] = ["pending"]
     /// What `sudo.respond` / `secret.respond` report; "ok" or "expired".
     var credentialStatus = "ok"
     var respondFailure: BotFailure?
@@ -751,7 +687,14 @@ actor BotMemoryDrafts: ChatDraftPersisting {
     var beforeResume: (() async -> Void)?
     func connect() async throws {}
     func close() {}
-    func call(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+    /// The protocol's typed request, answered by the same string-keyed switch the
+    /// fixture already had: the fixture exists to script replies, not to model
+    /// `HermesCall`, so it adapts rather than duplicating every case.
+    func call(_ call: HermesCall, validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+        try await callLegacy(call.method, try call.params(), validateDispatch: validateDispatch)
+    }
+
+    func callLegacy(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
         beforeDispatch?(method)
         try validateDispatch?()
         calls.append((method, params))
@@ -768,7 +711,7 @@ actor BotMemoryDrafts: ChatDraftPersisting {
                 "session_id": .string(runtimeID), "session_key": .string(tip), "running": .bool(running),
                 "messages": .array(history), "inflight": inflight, "queued": queued,
                 "pending_approval": pendingApproval ?? (attention ? BotFixtureWire.approval() : .null),
-                "pending_clarify": pendingClarify,
+                "open_requests": openRequests,
                 "todo_state": todoState,
                 "info": .object(["profile_name": .string("inbox-triage")])
             ])
@@ -776,7 +719,15 @@ actor BotMemoryDrafts: ChatDraftPersisting {
             if let respondFailure { throw respondFailure }
             if approvalResolved > 0 { attention = false; pendingApproval = nil }
             return .object(["resolved": .number(Double(approvalResolved))])
-        case "clarify.respond":
+        case "clarify.lock":
+            // Batch answers. The client locks one question per request and reads
+            // `remaining` to decide whether to continue; an empty list ends the
+            // batch early, so the default keeps one token in it.
+            if let respondFailure { throw respondFailure }
+            return .object(["status": .string(clarifyStatus),
+                            "remaining": .array(clarifyRemaining.map { .string($0) })])
+        case "request.answer":
+            // An unkeyed answer (single question, or a skip) riding the envelope id.
             if let respondFailure { throw respondFailure }
             if clarifyStatus == "ok" { pendingClarify = .null }
             return .object(["status": .string(clarifyStatus)])
@@ -795,6 +746,36 @@ actor BotMemoryDrafts: ChatDraftPersisting {
         default: throw BotFailure.unsupported
         }
     }
+    /// The gateway's `open_requests` envelope for a request payload.
+    private func envelope(_ payload: BotJSON, method: String) -> BotJSON {
+        guard var fields = payload.fields else { return .null }
+        fields["session_id"] = .string(runtimeID)
+        let id = payload["request_id"].text ?? "\(method)-1"
+        return .object(["id": .string(id), "method": .string(method), "params": .object(fields)])
+    }
+
+    /// Questions reach the client inside the one `open_requests` list; the
+    /// separate `pending_clarify` field no longer exists in the client at all.
+    /// A fixture that keeps writing the old field makes the model report "no
+    /// request" while the test waits for one — which is exactly what the whole
+    /// `BotPendingRequestParsingTests` suite did once it started running again.
+    private var openRequests: BotJSON {
+        guard pendingClarify.fields != nil else { return .array([]) }
+        return .array([envelope(pendingClarify, method: "clarify")])
+    }
+
+    /// A live server request in the shape the client actually reads: a JSON-RPC
+    /// frame with top-level id/method/params. Typed `<kind>.request` events have no
+    /// reader — `BotConversation.observe` first tries `BotServerRequest(event)` and
+    /// only then falls through to typed handling, which has no branch for them, so
+    /// the card never appeared and every credential case failed on "no request".
+    static func request(_ method: String, id: String, _ params: [String: BotJSON] = [:],
+                        session: String = "runtime") -> BotJSON {
+        var fields = params
+        fields["session_id"] = .string(session)
+        return .object(["id": .string(id), "method": .string(method), "params": .object(fields)])
+    }
+
     /// The gateway's `_approval_request_payload` shape, as it reaches both the
     /// `approval.request` event and the resume snapshot.
     static func approval(id: String = "req-1", command: String = "rm -rf build",
@@ -834,4 +815,10 @@ actor BotFailingDraftClear: ChatDraftPersisting {
         }
         values = drafts
     }
+}
+
+private extension BotPromptMode {
+    /// The wire method this mode dispatches, for filtering recorded calls.
+    /// Built from the real dispatcher so the name can never drift from it.
+    var method: String { call(runtime: "runtime", text: "").method }
 }

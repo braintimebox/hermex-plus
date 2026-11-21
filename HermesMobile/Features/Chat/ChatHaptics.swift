@@ -8,6 +8,31 @@ enum ChatHapticFeedback: Equatable {
     case warning
 }
 
+/// A Bot Chat or room action the host confirmed, published by the model for its
+/// view to play through `ChatHaptics.botFeedback`. Models set it only on a success
+/// path that already passed their stale-reply checks. `id` grows with every event,
+/// so two identical events in a row both reach the view's `onChange`.
+struct BotFeedback: Equatable {
+    enum Event: Equatable {
+        case sent
+        case approved(BotApprovalRequest.Choice)
+        /// A clarify answer or skip, or a credential value or skip.
+        case answered
+        case stopped
+        /// A turn this screen watched go from busy to idle.
+        case turnCompleted
+    }
+
+    let event: Event
+    let id: Int
+
+    /// The event that follows `previous`, with a fresh id.
+    init(_ event: Event, after previous: BotFeedback?) {
+        self.event = event
+        id = (previous?.id ?? 0) + 1
+    }
+}
+
 @MainActor
 enum ChatHaptics {
     typealias Performer = @MainActor (ChatHapticFeedback) -> Void
@@ -51,6 +76,13 @@ enum ChatHaptics {
 
     /// Any transcript disclosure: tool cards, tool groups, reasoning, marker cards.
     static func disclosureToggled(isEnabled: Bool, performer: Performer? = nil) {
+        emit(.selection, isEnabled: isEnabled, performer: performer)
+    }
+
+    /// A composer autocomplete row was accepted (a mention, a command, a name).
+    /// Its own case because it is the one haptic the Bots composer shares with
+    /// the session one.
+    static func autocompleteAccepted(isEnabled: Bool, performer: Performer? = nil) {
         emit(.selection, isEnabled: isEnabled, performer: performer)
     }
 
@@ -106,6 +138,24 @@ enum ChatHaptics {
         mutating func reset() {
             lastPulseAt = nil
         }
+    }
+
+    /// A Bot Chat or room action the host confirmed. The bot model publishes
+    /// `BotFeedback` with a growing id so a repeated action still reaches the
+    /// view; this maps each event onto the feel the chat screens use.
+    static func botFeedback(_ feedback: BotFeedback, isEnabled: Bool, performer: Performer? = nil) {
+        let haptic: ChatHapticFeedback
+        switch feedback.event {
+        case .sent, .answered:
+            haptic = .lightImpact
+        case .approved:
+            haptic = .success
+        case .stopped:
+            haptic = .warning
+        case .turnCompleted:
+            haptic = .success
+        }
+        emit(haptic, isEnabled: isEnabled, performer: performer)
     }
 
     private static func emit(_ feedback: ChatHapticFeedback, isEnabled: Bool, performer: Performer?) {

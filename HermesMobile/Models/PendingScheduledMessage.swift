@@ -15,6 +15,26 @@ final class PendingScheduledMessage {
     /// SwiftData не сделает lightweight-миграцию существующей базы.
     var attachmentsJSON: String? = nil
 
+    /// HERMEX-FORK: 3.9.65 — terminal failure state for a scheduled message.
+    ///
+    /// WHY: a non-retryable failure (HTTP 404 on a session the server no longer
+    /// has) was retried on every delivery cycle forever — one message produced
+    /// 620 failed requests over 68 hours. `retryable` was already computed by
+    /// `DeliveryFailure.classify` but the caller ignored it.
+    ///
+    /// `terminalFailureReason` is nil while the message is still deliverable.
+    /// Once set, the message is never picked up automatically again, but it is
+    /// kept so the user still sees what was not delivered and why.
+    /// Optional with a default — SwiftData needs that for a lightweight migration.
+    var terminalFailureReason: String? = nil
+    var terminalFailureAt: Date? = nil
+    /// Attempts made so far. Bounds retryable errors too, so no error class can
+    /// keep a message in flight forever.
+    var failedAttemptCount: Int = 0
+
+    /// True when automatic delivery has been given up for this message.
+    var isDeliveryTerminal: Bool { terminalFailureReason != nil }
+
     /// Расшифрованные вложения. Пустой массив, если поле пустое или битое —
     /// отложенное сообщение без читаемых вложений должно остаться отправляемым.
     var attachments: [ScheduledMessageAttachment] {
@@ -72,6 +92,37 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
         self.size = size
         self.isImage = isImage
         self.draftFileName = draftFileName
+    }
+
+    /// Payload shape the chat API expects for a sent attachment. Mirrors
+    /// `PendingAttachment.toJSONValue()` exactly, so a scheduled send carries the
+    /// same fields an immediate send carries.
+    func toJSONValue() -> JSONValue {
+        var object: [String: JSONValue] = [
+            "name": .string(name),
+            "path": .string(path),
+            "mime": .string(mime),
+        ]
+        if let size {
+            object["size"] = .number(Double(size))
+        }
+        object["is_image"] = .bool(isImage)
+        return .object(object)
+    }
+
+    /// Rebuild a composer attachment for the same-chat delivery path, which sends
+    /// through the normal machinery. The upload already happened when the message
+    /// was scheduled, so only the server-side `path` matters here.
+    func toPendingAttachment() -> PendingAttachment {
+        PendingAttachment(
+            name: name,
+            path: path,
+            mime: mime,
+            size: size,
+            isImage: isImage,
+            thumbnailData: nil,
+            draftFileName: draftFileName
+        )
     }
 
     init(pending: PendingAttachment) {

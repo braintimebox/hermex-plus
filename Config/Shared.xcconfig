@@ -7,33 +7,17 @@
 
 DEVELOPMENT_TEAM = 6GYD9C9N6R
 APP_IDENTIFIER_SUFFIX =
-// HERMEX-FORK: the fork must sign under its own identifier, or iOS reads it as
-// the same app as upstream's App Store Hermex and refuses the install beside it.
-// Upstream signs as com.uzairansar.hermesmobile, and an
-// app is identified by this string alone — sharing it means iOS treats Hermex
-// Plus and Hermex as the SAME app, so the two can never be installed side by
-// side and an install can be refused as a conflict. Hermex Plus therefore signs
-// under this fork's own namespace. Everything else derives from these two
-// variables (share extension, live-activity widget, app group, keychain
-// service), so nothing else has to be kept in step by hand.
-//
-// Consequence for existing installs: a new bundle identifier is a new app. The
-// first build lands as a fresh install and the previous install keeps working
-// until it is deleted; the Keychain access group changes, so the saved server
-// URL and password must be entered once more. Server-side data is untouched.
-APP_BUNDLE_IDENTIFIER = com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
-APP_GROUP_IDENTIFIER = group.com.braintimebox.hermexplus$(APP_IDENTIFIER_SUFFIX)
-
-// HERMEX-FORK: the fork must also open its links under a URL scheme of its own.
-// Upstream declares `hermes-agent`, and iOS resolves a scheme to ONE app. With
-// the App Store Hermex installed beside Hermex Plus both apps claim it, so the
-// share extension's request to open `hermes-agent://share` can be handed to the
-// App Store app — the share sheet then opens the wrong app's window. A scheme
-// from this namespace cannot be claimed by anyone else, which is what makes the
-// share round-trip deterministic. Branch builds keep their suffix, as the
-// bundle identifier does.
-APP_URL_SCHEME_NAME = hermesplus
+// HERMEX-FORK: the fork's identity (bundle id, app group, URL scheme,
+// display name, product name, line) lives in Config/Identity.xcconfig —
+// see the long explanation there. Version and build number live in
+// Config/Version.xcconfig. Nothing identity-related belongs in this file,
+// so a second line is a change to one file, not to the project.
 
 // Optional per-machine overrides. This include must stay last: later
 // assignments win, so Local.xcconfig values override the defaults above.
+// Version and identity live in their own files so a whole line (stable/test)
+// is switched in one place. Order matters: Local.xcconfig stays last.
+#include "Version.xcconfig"
+#include "Identity.xcconfig"
+
 #include? "Local.xcconfig"

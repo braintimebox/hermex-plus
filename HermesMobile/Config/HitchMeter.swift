@@ -83,6 +83,8 @@ final class HitchMeter: NSObject {
     func start() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(frameDidArrive(_:)))
+        // 3.9.71: preferredFrameRateRange removed here too — see the note in
+        // MainThreadWatchdog. The range hurt pacing on a 60 fps pipeline.
         link.add(to: .main, forMode: .common)
         displayLink = link
     }

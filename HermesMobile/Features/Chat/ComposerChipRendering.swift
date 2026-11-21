@@ -155,6 +155,23 @@ enum ComposerChipRenderer {
             )?.withTintColor(tint, renderingMode: .alwaysOriginal)
         case let .asset(name):
             return UIImage(named: name)
+        case let .bot(reference):
+            // A bot chip draws the connection's decoded avatar when the inbox has
+            // one; otherwise it falls back to the same muted glyph treatment a
+            // skill gets, so a chip never renders empty while the roster loads.
+            if let avatar = reference.avatar {
+                return avatar.withRenderingMode(.alwaysOriginal)
+            }
+            let tint = usesAccentIcon
+                ? UIColor.systemBlue.resolvedColor(with: traits)
+                : UIColor.secondaryLabel.resolvedColor(with: traits)
+            return UIImage(
+                systemName: "sparkles",
+                withConfiguration: UIImage.SymbolConfiguration(
+                    pointSize: metrics.iconSize - 2,
+                    weight: .medium
+                )
+            )?.withTintColor(tint, renderingMode: .alwaysOriginal)
         }
     }
 

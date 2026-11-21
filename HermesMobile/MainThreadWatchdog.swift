@@ -12,7 +12,18 @@ enum HeavyOperationTracker {
     private static var currentLabel: String?
     private static var currentStart: Date?
 
+    /// HERMEX-FORK: 3.9.65 — main thread only.
+    ///
+    /// The tracker is consumed by the main-thread freeze report, so a label set
+    /// by a background write is not "what was in flight on main" — it is a
+    /// coincidence that also *overwrites* the real main-thread label, and its
+    /// `end()` clears it. 3.9.64 freeze 3 262 ms was attributed to
+    /// `CacheStore.cacheMessages`, which runs on `CacheStore.writeQueue`; the
+    /// attribution was noise. Background work is already visible through its
+    /// own phase (`Cache Write`), so it loses nothing by staying out of this
+    /// tracker.
     static func begin(_ label: String) {
+        guard Thread.isMainThread else { return }
         lock.lock()
         currentLabel = label
         currentStart = Date()
@@ -20,10 +31,18 @@ enum HeavyOperationTracker {
     }
 
     static func end() {
+        guard Thread.isMainThread else { return }
         lock.lock()
         currentLabel = nil
         currentStart = nil
         lock.unlock()
+    }
+
+    /// Read-only view for tests: which main-thread operation is in flight.
+    static var currentLabelForTesting: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentLabel
     }
 
     /// HERMES-FORK: instrumented operation labels. Each label tells freeze
@@ -358,6 +377,7 @@ final class MainThreadWatchdog {
     private var lastFreezeReportAt = Date(timeIntervalSince1970: 0)
     private var nextEscalationInterval: TimeInterval = 5.0
     private var timer: DispatchSourceTimer?
+    private var memoryTimer: DispatchSourceTimer?
     private var currentScreen: String?
     private var lastStutterReport = Date(timeIntervalSince1970: 0)
 
@@ -412,6 +432,23 @@ final class MainThreadWatchdog {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
+
+        // HERMEX-FORK: memory used to be sampled only when we froze, so a session
+        // that climbed to 1.5 GB left no trace until it died. A cheap 30 s sample
+        // turns "it got heavy" into a curve we can read after the fact.
+        let mem = DispatchSource.makeTimerSource(queue: queue)
+        mem.schedule(deadline: .now() + 30, repeating: 30, leeway: .seconds(5))
+        mem.setEventHandler {
+            guard let bytes = MemoryFootprint.currentBytes() else { return }
+            HermexLogger.shared.log(
+                type: "event",
+                screen: "Memory",
+                message: "memory sample",
+                extras: ["memoryMB": Int64(bytes / 1_048_576)]
+            )
+        }
+        mem.resume()
+        memoryTimer = mem
     }
 
     /// Optional context for the next freeze event (e.g. the active screen).
@@ -571,7 +608,7 @@ final class MainThreadWatchdog {
             HermexLogger.shared.log(
                 type: "recovered",
                 durationMs: frozenFor * 1000,
-                message: "main thread recovered after \\(Int(frozenFor))s"
+                message: "main thread recovered after \(Int(frozenFor))s"
             )
         }
     }
@@ -616,8 +653,54 @@ final class FrameTimeMonitor: NSObject {
     func start() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(frameTick(_:)))
+        // 3.9.71: preferredFrameRateRange REVERTED. Asking for 60...120 on a
+        // pipeline that renders at ~60 fps produced uneven pacing instead of
+        // higher rates: stream frames >33 ms went 7.61% (3.9.68) -> 17.37%
+        // (3.9.70) with frameAvg 43-66 ms per commit. Restore the previous
+        // default pacing until the frame budget is actually freed.
         link.add(to: .main, forMode: .common)
         displayLink = link
+        logDeviceContextOnce()
+    }
+
+    /// 3.9.70: one device/thermal record per launch. Freeze severity is not
+    /// comparable across devices or thermal states without it — a 4 s block on a
+    /// hot, low-power device is a different defect from the same block on a cold
+    /// one, and the old schema could not tell them apart. Emitted once, not per
+    /// frame, so the payload cost is negligible.
+    private func logDeviceContextOnce() {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        // 3.9.70 shipped refreshRate = 0: at watchdog start the scene is often
+        // not connected yet, so the value was silently absent. Fall back to the
+        // screen's own maximum so the field is always populated.
+        let refreshRate = scene?.screen.maximumFramesPerSecond
+            ?? UIScreen.main.maximumFramesPerSecond
+        let thermal: String
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = "unknown"
+        }
+        HermexLogger.shared.log(
+            type: "event",
+            screen: "Performance",
+            message: "device context",
+            extras: [
+                "deviceModel": UIDevice.current.model,
+                "systemName": UIDevice.current.systemName,
+                "iosVersion": UIDevice.current.systemVersion,
+                "buildNumber": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
+                "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                "refreshRate": refreshRate,
+                "thermalState": thermal,
+                "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+                "physicalMemoryMB": Int(ProcessInfo.processInfo.physicalMemory / 1_048_576),
+            ]
+        )
     }
 
     @objc private func frameTick(_ link: CADisplayLink) {
@@ -664,18 +747,33 @@ final class FrameTimeMonitor: NSObject {
         guard now.timeIntervalSince(lastReport) >= reportRateLimit else { return }
         lastReport = now
         let ctx = MainThreadWatchdog.snapshotPerformanceContext()
+        // 3.9.70: jank carried no attribution — 0 of 347 events had a heavyOp or
+        // a stack, so the most frequent symptom could not name its cause. Only
+        // capture the (expensive) stack when the frame actually blew the budget.
+        var extras: [String: Any] = [
+            "maxFrameMs": maxMs,
+            "isStreaming": ctx.isStreaming,
+            "messageCount": ctx.messageCount,
+            "isUserInteracting": ctx.isUserInteracting,
+            "isScrolledNearBottom": ctx.isScrolledNearBottom,
+            "scrollOwner": ctx.scrollOwner,
+            "displayedRowCount": ctx.displayedRowCount,
+        ]
+        if maxMs > 100 {
+            let inFlight = HeavyOperationTracker.currentLabelForTesting ?? ""
+            extras["heavyOp"] = ctx.heavyOp.isEmpty ? inFlight : ctx.heavyOp
+            // NOTE: deliberately no stack capture here. `frameTick` runs on the
+            // main thread, and MainThreadStackCapture reads the MAIN thread's
+            // registers via thread_get_state — unsafe from the main thread
+            // itself (it crashed the test host with SIGSEGV). A safe capture
+            // needs a background hop and correlation; deferred until it is
+            // designed, per "no per-frame stack traces".
+        }
         HermexLogger.shared.log(
             type: "jank",
             durationMs: avgMs,
             message: String(format: "UI jank avg %.0fms (%.0f fps) max %.0fms", avgMs, avgFps, maxMs),
-            extras: [
-                "maxFrameMs": maxMs,
-                "isStreaming": ctx.isStreaming,
-                "messageCount": ctx.messageCount,
-                "isUserInteracting": ctx.isUserInteracting,
-                "isScrolledNearBottom": ctx.isScrolledNearBottom,
-                "scrollOwner": ctx.scrollOwner,
-            ]
+            extras: extras
         )
     }
 

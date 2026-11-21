@@ -922,7 +922,7 @@ final class LiveActivityTests: XCTestCase {
                 }
             },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(ended, ["done"])
@@ -938,7 +938,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in endCount += 1; return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(endCount, 0)
@@ -959,7 +959,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(notified, ["s-recent"])
@@ -984,7 +984,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended, ["stale"])
@@ -1006,7 +1006,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in false },   // already final — nothing transitioned here
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertTrue(notified.isEmpty)
@@ -1028,7 +1028,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: false,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended, ["recent"])
@@ -1049,7 +1049,7 @@ final class LiveActivityTests: XCTestCase {
             notifiesOnCompletion: true,
             streamStatus: { _ in self.statusResponse(active: false) },
             endOrphan: { _, _ in true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertTrue(notified.isEmpty)
@@ -1112,7 +1112,7 @@ final class LiveActivityTests: XCTestCase {
                 }
             },
             endOrphan: { orphan, outcome in endedWith[orphan.streamID] = outcome.status; return true },
-            notify: { _ in }
+            notify: { _, _ in }
         )
 
         XCTAssertEqual(endedWith["ok"], .complete)
@@ -1142,7 +1142,7 @@ final class LiveActivityTests: XCTestCase {
                     : self.statusResponse(active: false, terminalState: "completed")
             },
             endOrphan: { orphan, _ in ended.append(orphan.streamID); return true },
-            notify: { notified.append($0.sessionID) }
+            notify: { orphan, _ in notified.append(orphan.sessionID) }
         )
 
         XCTAssertEqual(ended.sorted(), ["done", "failed"])  // both finalized
@@ -1161,7 +1161,7 @@ final class LiveActivityTests: XCTestCase {
         let manager = AgentLiveActivityManager()
 
         // A live SSE connection claims the stream so the reconciler leaves it alone.
-        manager.start(sessionID: "session-1", sessionTitle: "Title", streamID: "stream-abc")
+        manager.start(sessionID: "session-1", server: URL(string: "https://hermes.test")!, sessionTitle: "Title", streamID: "stream-abc")
         XCTAssertEqual(manager.activeConnectedStreamID, "stream-abc")
 
         // Suspension / transport trouble releases the claim — the suspended stream is
@@ -1170,7 +1170,7 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertNil(manager.activeConnectedStreamID)
 
         // Reconnecting the same stream re-claims it.
-        manager.start(sessionID: "session-1", sessionTitle: "Title", streamID: "stream-abc")
+        manager.start(sessionID: "session-1", server: URL(string: "https://hermes.test")!, sessionTitle: "Title", streamID: "stream-abc")
         XCTAssertEqual(manager.activeConnectedStreamID, "stream-abc")
 
         // Finalizing the run releases the claim.
@@ -1189,6 +1189,7 @@ final class LiveActivityTests: XCTestCase {
 
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: discoveredAt
@@ -1197,6 +1198,7 @@ final class LiveActivityTests: XCTestCase {
 
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: serverStart
@@ -1206,6 +1208,7 @@ final class LiveActivityTests: XCTestCase {
         // A later stamp for the same run never pushes the widget timer forward.
         manager.start(
             sessionID: "session-1",
+            server: URL(string: "https://hermes.test")!,
             sessionTitle: "Title",
             streamID: "stream-abc",
             startedAt: discoveredAt.addingTimeInterval(30)
@@ -1233,7 +1236,7 @@ private final class SpyAgentLiveActivityManager: AgentLiveActivityManaging {
     private(set) var didMarkStale = false
     private(set) var ends: [End] = []
 
-    func start(sessionID: String, sessionTitle: String, streamID: String?, startedAt: Date) {
+    func start(sessionID: String, server: URL, sessionTitle: String, streamID: String?, startedAt: Date) {
         starts.append(Start(sessionID: sessionID, sessionTitle: sessionTitle, streamID: streamID))
     }
 

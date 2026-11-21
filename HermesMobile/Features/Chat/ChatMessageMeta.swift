@@ -43,11 +43,26 @@ enum TranscriptMessageMetaPolicy {
 /// User rows read `[time][copy]` against the trailing edge, assistant rows
 /// `[copy][actions][time]` against the leading edge, so Copy always sits at the
 /// outer edge and RTL mirrors both through the semantic alignments.
-struct ChatMessageMetaRow: View {
+struct ChatMessageMetaRow<Accessory: View>: View {
     let isUserMessage: Bool
     let timeText: String?
     let onCopy: (() -> Void)?
     var actionMenu: ChatMessageActionMenu? = nil
+    let accessory: Accessory
+
+    init(
+        isUserMessage: Bool,
+        timeText: String?,
+        onCopy: (() -> Void)?,
+        actionMenu: ChatMessageActionMenu? = nil,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.isUserMessage = isUserMessage
+        self.timeText = timeText
+        self.onCopy = onCopy
+        self.actionMenu = actionMenu
+        self.accessory = accessory()
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -66,6 +81,7 @@ struct ChatMessageMetaRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("More")
                 }
+                accessory
                 time
             }
         }
@@ -88,6 +104,24 @@ struct ChatMessageMetaRow: View {
             ChatCopyButton(action: onCopy)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+extension ChatMessageMetaRow where Accessory == EmptyView {
+    /// The transcript's own row: no accessory, so the generic slot is empty.
+    init(
+        isUserMessage: Bool,
+        timeText: String?,
+        onCopy: (() -> Void)?,
+        actionMenu: ChatMessageActionMenu? = nil
+    ) {
+        self.init(
+            isUserMessage: isUserMessage,
+            timeText: timeText,
+            onCopy: onCopy,
+            actionMenu: actionMenu,
+            accessory: { EmptyView() }
+        )
     }
 }
 
@@ -173,4 +207,97 @@ enum ChatMessageTimestampFormatter {
         guard let timestamp, timestamp.isFinite else { return nil }
         return formatter.string(from: Date(timeIntervalSince1970: timestamp))
     }
+}
+
+/// Where a transcript dates itself. A row opens a new stretch when its
+/// timestamp is at least `gapThreshold` after the previous stamped row; the
+/// first stamped row always does, so the top of a window is dated. Rows
+/// without a usable timestamp never open one and are skipped as "previous".
+/// Pure comparisons, so a view can run it on every body without formatting.
+enum TranscriptTimeline {
+    static let gapThreshold: TimeInterval = 30 * 60
+
+    static func gapStarts<ID: Hashable>(
+        _ rows: some Sequence<(id: ID, timestamp: Double?)>,
+        threshold: TimeInterval = gapThreshold
+    ) -> Set<ID> {
+        var starts = Set<ID>()
+        var previous: Double?
+        for row in rows {
+            guard let timestamp = row.timestamp, timestamp.isFinite, timestamp > 0 else { continue }
+            if previous.map({ timestamp - $0 >= threshold }) ?? true { starts.insert(row.id) }
+            previous = timestamp
+        }
+        return starts
+    }
+}
+
+/// A centered date and time between hairlines, drawn before a row that opens
+/// a new stretch of the transcript. Takes the raw timestamp so SwiftUI skips
+/// the formatting when a streaming snapshot rebuilds the transcript.
+struct TranscriptTimeSeparator: View {
+    let timestamp: Double
+
+    var body: some View {
+        if let text = ChatMessageTimestampFormatter.separator(forUnixTimestamp: timestamp) {
+            HStack(spacing: 8) {
+                hairline
+                Text(text)
+                    .font(AppFont.caption(weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .layoutPriority(1)
+                hairline
+            }
+            .padding(.top, 6)
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(height: 0.5)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Time separators
+
+extension ChatMessageTimestampFormatter {
+    /// The label a separator row draws between messages: today reads as a time,
+    /// yesterday names itself, and anything older carries its date. Upstream's
+    /// version ships a cached formatter set for the same job; this port keeps one
+    /// formatter per calendar day and no locale-dependent relative phrasing, so
+    /// the same transcript always renders the same text.
+    static func separator(forUnixTimestamp timestamp: Double?) -> String? {
+        guard let timestamp, timestamp.isFinite, timestamp > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: timestamp)
+        let calendar = Calendar.current
+        let time = separatorTimeFormatter.string(from: date)
+
+        if calendar.isDateInToday(date) { return time }
+        if calendar.isDateInYesterday(date) {
+            return String(localized: "Yesterday") + " " + time
+        }
+        return separatorDateFormatter.string(from: date) + " " + time
+    }
+
+    private static let separatorTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let separatorDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 }

@@ -1,0 +1,116 @@
+# Dispatch-only runner for a named subset of tests.
+#
+# Why this exists: `pr-ci` runs the whole suite in ~13 minutes, which is too slow
+# to discriminate between two neighbouring test cases, and `build-ipa`'s shards
+# cannot be re-run alone (`--failed` fails on `test-build` before the tests).
+# A subset run answers "does B fail because of A?" in about five minutes without
+# touching either release path. It never runs on push or on a pull request.
+name: Test subset
+
+on:
+  workflow_dispatch:
+    inputs:
+      only_testing:
+        description: "Space-separated targets, e.g. HermesMobileTests/Class/testCase"
+        required: true
+        default: "HermesMobileTests/HermexTelemetryDeliveryTests/testConfirmedCountBelowBatchKeepsTheRemainder"
+  # `workflow_dispatch` resolves the file on the DEFAULT branch, so a workflow that
+  # only exists on a work branch cannot be dispatched from it. A push to
+  # `ci/subset/**` with the targets in `.ci/only-testing.txt` gives the same
+  # on-demand subset run without touching `main`.
+  push:
+    branches:
+      - 'ci/subset/**'
+
+permissions:
+  contents: read
+
+jobs:
+  subset:
+    name: Subset
+    # The only automatic trigger is a push to ci/subset/**; this guard states the
+    # intent in the file, so a future trigger added here cannot reach `main`.
+    if: github.ref != 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PROJECT_PATH: HermesMobile.xcodeproj
+      SCHEME: HermesMobile
+      DERIVED_DATA_PATH: DerivedData
+      RESULT_BUNDLE_PATH: SubsetResults.xcresult
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Select simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          # Take the UDID, not the name: `simctl` pads names with spaces on both
+          # sides, and a destination of `name:   iPhone 17 Pro  ` matches nothing.
+          udid=$(xcrun simctl list devices available \
+            | grep -oE 'iPhone[^()]*\([0-9A-Fa-f-]{36}\)' \
+            | grep -oE '[0-9A-Fa-f-]{36}' \
+            | head -1)
+          if [[ -z "${udid}" ]]; then
+            echo "No available iPhone simulator found:" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Using simulator: ${udid}"
+          echo "udid=${udid}" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        env:
+          SIMULATOR_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          start_seconds=${SECONDS}
+          xcrun simctl bootstatus "${SIMULATOR_UDID}" -b
+          xcodebuild build-for-testing \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Build-for-testing duration: $((SECONDS - start_seconds))s"
+
+      - name: Test the requested subset
+        env:
+          SIMULATOR_UDID: ${{ steps.sim.outputs.udid }}
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: |
+          set -euo pipefail
+          targets="${ONLY_TESTING:-}"
+          if [[ -z "${targets}" && -f .ci/only-testing.txt ]]; then
+            targets=$(grep -vE '^\s*(#|$)' .ci/only-testing.txt | tr '\n' ' ')
+          fi
+          if [[ -z "${targets}" ]]; then
+            echo "No targets: pass only_testing or commit .ci/only-testing.txt" >&2
+            exit 1
+          fi
+          args=()
+          for target in ${targets}; do
+            args+=("-only-testing:${target}")
+          done
+          echo "targets: ${args[*]}"
+          start_seconds=${SECONDS}
+          # One worker and no parallelism: the question this job answers is about
+          # neighbouring cases sharing state, and a cloned simulator changes that.
+          xcodebuild test-without-building "${args[@]}" \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+            -derivedDataPath "${DERIVED_DATA_PATH}" \
+            -resultBundlePath "${RESULT_BUNDLE_PATH}" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO
+          echo "Subset duration: $((SECONDS - start_seconds))s"
+
+      - name: Upload result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: subset-results
+          path: ${{ env.RESULT_BUNDLE_PATH }}
+          if-no-files-found: ignore

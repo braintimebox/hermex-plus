@@ -179,7 +179,10 @@ struct SessionStatusResponse: Decodable, Equatable {
     let error: String?
 }
 
-struct SessionSummary: Decodable, Equatable, Hashable, Identifiable {
+/// HERMEX-FORK: 3.9.65 — `Sendable` so the session cache writer can run on
+/// `CacheStore.sessionWriteQueue` instead of the main thread. Every stored
+/// property is a String/Int/Double/Bool optional, so the conformance is safe.
+struct SessionSummary: Decodable, Equatable, Hashable, Identifiable, Sendable {
     var id: String {
         if let sessionId, !sessionId.isEmpty {
             return sessionId

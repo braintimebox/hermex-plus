@@ -102,6 +102,8 @@ struct ComposerProfileSelectorMenu: View {
 }
 
 struct ComposerModelEffortMenu: View {
+    /// Some bot profiles pin the effort, so the menu opens read-only there.
+    var allowsEffortChanges: Bool = true
     let selection: ComposerModelEffortSelection
     let modelGroups: [ModelCatalogGroup]
     let favoriteModelKeys: [ModelFavoriteKey]

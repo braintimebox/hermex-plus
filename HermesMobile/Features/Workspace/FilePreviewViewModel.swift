@@ -201,6 +201,8 @@ enum FilePreviewContent {
     case text(FileResponse)
     case image(ImageFilePreview)
     case audio(Data)
+    /// A file Quick Look renders natively (PDF, office documents, media).
+    case quickLook(QuickLookTemporaryFile)
     case unavailable(String)
 }
 

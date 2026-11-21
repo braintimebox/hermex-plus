@@ -325,6 +325,10 @@ struct ChatView: View {
     private let transcriptMessageSpacing: CGFloat = 10
     private let transcriptBlockSpacing: CGFloat = 6
     @State private var followScrollGeneration = 0
+    /// 3.9.70: previous logged composer height, so the height event carries
+    /// prev → next and the oscillation (218 ↔ 253) becomes diagnosable instead
+    /// of merely observable. Diagnostics only — nothing reads it for layout.
+    @State private var lastLoggedComposerHeight: CGFloat = 0
     /// While true the transcript's bottom size-change anchor and follow-driven
     /// scrolls are suspended so a disclosure toggle grows or shrinks in place.
     @State private var isDisclosureSettling = false
@@ -527,6 +531,9 @@ struct ChatView: View {
             quotedMessage: viewModel.quotedMessage,
             onDismissQuote: { viewModel.quotedMessage = nil },
             onSchedule: { showingSchedulePicker = true },
+            onSteer: {
+                Task { await viewModel.submitStreamingMessage(draftMessage, behavior: .steer) }
+            },
             // track the action that happens right before the freeze
             onScheduleTapped: {
                 HermexLogger.shared.log(type: "event", screen: "ChatView", message: "schedule button tapped")
@@ -592,8 +599,16 @@ struct ChatView: View {
                 HermexLogger.shared.log(
                     type: "event",
                     screen: "ChatView",
-                    message: "composer height c=\(Int(height)) inset=\(Int(transcriptBottomInsetHeight)) acc=\(Int(composerAccessorySpacerHeight)) focused=\(composerIsFocused)"
+                    message: "composer height c=\(Int(height)) inset=\(Int(transcriptBottomInsetHeight)) acc=\(Int(composerAccessorySpacerHeight)) focused=\(composerIsFocused)",
+                    extras: [
+                        "prevHeight": Int(lastLoggedComposerHeight),
+                        "nextHeight": Int(height),
+                        "deltaHeight": Int(height - lastLoggedComposerHeight),
+                        "hasAccessory": composerAccessorySpacerHeight > 0,
+                        "isFocused": composerIsFocused,
+                    ]
                 )
+                lastLoggedComposerHeight = height
             },
             onPhotoItemSelected: { item in
                 Task { await handlePhotoSelection(item) }
@@ -3777,7 +3792,14 @@ struct ChatView: View {
     }
 
     private func saveScheduledMessage(text: String, at date: Date, target: ScheduledMessageTarget) {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Capture the composer's attachments FIRST: the pending row is the only
+        // thing that survives a restart, so whatever is still in the composer at
+        // schedule time is lost. That is why scheduled messages arrived text-only
+        // even though the model has carried `attachmentsJSON` all along.
+        let capturedAttachments = viewModel.pendingAttachments.map(ScheduledMessageAttachment.init(pending:))
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !capturedAttachments.isEmpty
+        else { return }
 
         let sessionId: String
         let sessionTitle: String?
@@ -3804,7 +3826,8 @@ struct ChatView: View {
             sessionTitle: sessionTitle,
             draftText: text,
             scheduledAt: date,
-            serverURLString: server.absoluteString
+            serverURLString: server.absoluteString,
+            attachments: capturedAttachments
         )
         modelContext.insert(scheduled)
         // Commit immediately — the Scheduled/Tasks lists fetch on a detached
@@ -3812,6 +3835,9 @@ struct ChatView: View {
         // appeared there with a multi-second delay (SwiftData autosave).
         try? modelContext.save()
         draftMessage = ""
+        // The attachments now belong to the pending row. Leaving them in the
+        // composer would send them a second time with the next manual message.
+        viewModel.clearPendingAttachments()
         // Sync to server for autonomous dispatch. Capture SCALAR values only —
         // a @Model object must not cross into a background task.
         let syncKey = scheduled.scheduleKey
@@ -3820,6 +3846,7 @@ struct ChatView: View {
         let syncText = scheduled.draftText
         let syncScheduledAt = scheduled.scheduledAt.timeIntervalSince1970
         let syncServerURL = scheduled.serverURLString
+        let syncAttachments = capturedAttachments
         Task.detached(priority: .background) {
             await syncScheduledMessageToServer(
                 scheduleKey: syncKey,
@@ -3827,7 +3854,8 @@ struct ChatView: View {
                 sessionTitle: syncSessionTitle,
                 text: syncText,
                 scheduledAt: syncScheduledAt,
-                serverURLString: syncServerURL
+                serverURLString: syncServerURL,
+                attachments: syncAttachments
             )
         }
     }
@@ -3841,8 +3869,11 @@ struct ChatView: View {
         let text = msg.draftText
         let serverURLString = msg.serverURLString
         let scheduleKey = msg.scheduleKey
+        let attachments = msg.attachments
 
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        // An attachment-only scheduled message is legitimate: the text may be
+        // empty while the row still carries a file.
+        guard (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty),
               let serverURL = URL(string: serverURLString) else { return }
 
         HermexLogger.shared.log(
@@ -3858,6 +3889,12 @@ struct ChatView: View {
         // Target is THIS chat → send through the existing composer machinery.
         if sessionId == currentSessionId {
             draftMessage = text
+            // The upload happened when the message was scheduled; hand the same
+            // server-side paths back to the composer so the send carries them
+            // instead of going out text-only.
+            if !attachments.isEmpty {
+                viewModel.restorePendingAttachments(attachments.map { $0.toPendingAttachment() })
+            }
             // sendDraftMessage returns whether the send actually STARTED. If it
             // silently failed (viewModel guard / no streamID / cache-first) the
             // optimistic row was already rolled back — so we must NOT delete the
@@ -3901,7 +3938,8 @@ struct ChatView: View {
                     sessionID: targetSessionId,
                     message: text,
                     workspace: nil,
-                    model: nil
+                    model: nil,
+                    attachments: attachments.isEmpty ? nil : attachments.map { $0.toJSONValue() }
                 )
                 deliveredSessionId = targetSessionId
                 didSend = true
@@ -3957,17 +3995,33 @@ struct ChatView: View {
         sessionTitle: String?,
         text: String,
         scheduledAt: TimeInterval,
-        serverURLString: String
+        serverURLString: String,
+        attachments: [ScheduledMessageAttachment] = []
     ) async {
         guard let serverURL = URL(string: serverURLString) else { return }
         let webhookURL = serverURL.appendingPathComponent("webhook/scheduled-messages")
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "scheduleKey": scheduleKey,
             "sessionId": sessionId,
             "sessionTitle": sessionTitle as Any,
             "text": text,
             "scheduledAt": scheduledAt,
         ]
+        // Autonomous dispatch happens server-side, so it can only deliver what it
+        // was told about. Sent even when empty-free: a host that ignores the field
+        // behaves exactly as before, and one that understands it stops dropping
+        // the attachments.
+        if !attachments.isEmpty {
+            body["attachments"] = attachments.map {
+                [
+                    "name": $0.name,
+                    "path": $0.path,
+                    "mime": $0.mime,
+                    "size": $0.size as Any,
+                    "is_image": $0.isImage,
+                ] as [String: Any]
+            }
+        }
         var request = URLRequest(url: webhookURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -272,6 +272,31 @@ final class PhaseTelemetry {
 //
 // Nothing here changes behaviour: values are only written to the log.
 // Aggregation is per 2 s window so the channel stays comparable to `frames`.
+/// HERMEX-FORK: 3.9.65 — what a commit's distance to the previous commit means.
+///
+/// Extracted from `StreamCommitTelemetry.recordCommit` so the background case is
+/// unit-testable without waiting three real seconds or touching the logger.
+/// A pause longer than `gap` ends the stream: its distance is not a commit
+/// interval and must not enter `intervalAvgMs` (3.9.64: 27% of intervals > 5 s,
+/// p95 163 570 ms, max 19.5M ms after the phone slept).
+enum StreamCommitInterval {
+    struct Result: Equatable {
+        /// Interval to add to the per-commit statistics, if any.
+        let intervalMs: Double?
+        /// Distance across a pause that opened a new stream, if any.
+        let gapMs: Double?
+    }
+
+    static func classify(now: Date, last: Date?, gap: TimeInterval) -> Result {
+        guard let last else { return Result(intervalMs: nil, gapMs: nil) }
+        let distanceMs = now.timeIntervalSince(last) * 1000
+        if now.timeIntervalSince(last) > gap {
+            return Result(intervalMs: nil, gapMs: distanceMs)
+        }
+        return Result(intervalMs: distanceMs, gapMs: nil)
+    }
+}
+
 final class StreamCommitTelemetry {
     static let shared = StreamCommitTelemetry()
 
@@ -293,6 +318,12 @@ final class StreamCommitTelemetry {
     private var intervalSumMs = 0.0
     private var intervalMaxMs = 0.0
     private var intervals = 0
+    /// HERMEX-FORK: 3.9.65 — commits that arrived after a pause longer than
+    /// `streamGap` and therefore opened a new stream. Their distance is not a
+    /// commit interval, so it is counted and reported separately instead of
+    /// being folded into `intervalAvgMs`.
+    private var intervalGapCount = 0
+    private var intervalGapMaxMs = 0.0
     private var followActiveCommits = 0
     private var followScrolls = 0
     private var frameSumMs = 0.0
@@ -307,13 +338,20 @@ final class StreamCommitTelemetry {
         let now = Date()
         let frameMs = FrameTimeMonitor.shared.lastFrameMs
         queue.sync {
-            if let last = lastCommitAt, now.timeIntervalSince(last) > streamGap {
-                flushLocked(at: last)
+            // HERMEX-FORK: 3.9.65 — the distance across a pause is classified
+            // before anything is accumulated, and the stamp never survives the
+            // flush: previously the pre-gap stamp was reused, so the interval
+            // across hours of background went into the NEW window's average.
+            let classification = StreamCommitInterval.classify(now: now, last: lastCommitAt, gap: streamGap)
+            if let gapMs = classification.gapMs {
+                intervalGapCount += 1
+                intervalGapMaxMs = max(intervalGapMaxMs, gapMs)
+                if let last = lastCommitAt { flushLocked(at: last) }
                 streamID += 1
                 streamStart = now
+                lastCommitAt = nil
             }
-            if let last = lastCommitAt {
-                let ms = now.timeIntervalSince(last) * 1000
+            if let ms = classification.intervalMs {
                 intervalSumMs += ms
                 intervalMaxMs = max(intervalMaxMs, ms)
                 intervals += 1
@@ -388,6 +426,10 @@ final class StreamCommitTelemetry {
                 "deltaMax": deltaMax,
                 "intervalAvgMs": intervals > 0 ? intervalSumMs / Double(intervals) : 0,
                 "intervalMaxMs": intervalMaxMs,
+                // Additive: pauses that ended a stream, kept observable without
+                // polluting the per-commit interval statistics.
+                "intervalGapCount": intervalGapCount,
+                "intervalGapMaxMs": intervalGapMaxMs,
                 "followActiveCommits": followActiveCommits,
                 "followScrolls": followScrolls,
                 "streamAgeMs": ageMs,
@@ -405,6 +447,8 @@ final class StreamCommitTelemetry {
         intervalSumMs = 0
         intervalMaxMs = 0
         intervals = 0
+        intervalGapCount = 0
+        intervalGapMaxMs = 0
         followActiveCommits = 0
         followScrolls = 0
         frameSumMs = 0

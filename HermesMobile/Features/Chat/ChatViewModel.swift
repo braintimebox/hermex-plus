@@ -3399,7 +3399,10 @@ final class ChatViewModel {
         attachmentCoordinator.removeLocalPreviews(messageID: id)
     }
 
-    private func restorePendingAttachments(_ attachments: [PendingAttachment]) {
+    /// Put already-uploaded attachments back into the composer. Used by scheduled
+    /// delivery: the upload happened when the message was scheduled, so the send
+    /// must carry the same server-side paths instead of uploading again.
+    func restorePendingAttachments(_ attachments: [PendingAttachment]) {
         attachmentCoordinator.restorePendingAttachments(attachments)
     }
 
@@ -4842,10 +4845,21 @@ final class ChatViewModel {
 
             let forkedSession = SessionSummary(from: forkedSessionDetail)
             if let modelContext {
-                do {
-                    try CacheStore.cacheSession(forkedSession, serverURL: server, in: modelContext)
-                } catch {
-                    cacheErrorMessage = error.localizedDescription
+                // HERMEX-FORK: 3.9.65 — the fork's cache write ran on the caller's
+                // (main) context, so a fetch + save blocked the UI right after a
+                // fork. It now runs on the session write queue with its own
+                // context, like every other cache writer.
+                let container = modelContext.container
+                let serverURL = server
+                CacheStore.sessionWriteQueue.async { [weak self] in
+                    let bgContext = ModelContext(container)
+                    do {
+                        try CacheStore.cacheSession(forkedSession, serverURL: serverURL, in: bgContext)
+                    } catch {
+                        let message = error.localizedDescription
+                        HermexLogger.shared.log(type: "error", message: "cache write: \(message)")
+                        Task { @MainActor in self?.cacheErrorMessage = message }
+                    }
                 }
             }
             return forkedSession
@@ -6623,6 +6637,8 @@ extension ChatViewModel: ChatAttachmentCoordinatorDelegate {
 
 extension ChatViewModel: ChatStreamCoordinatorDelegate {
     var streamCoordinatorSessionID: String? { sessionID }
+    /// The host this chat talks to; the coordinator needs it for the Live Activity.
+    var streamCoordinatorServerURL: URL? { server }
     var streamCoordinatorDisplayTitle: String { displayTitle }
     var streamCoordinatorHasRunningLiveToolCall: Bool { hasRunningLiveToolCall }
     var streamCoordinatorHasPendingPrompt: Bool {
@@ -6948,7 +6964,9 @@ private final class ActiveChatStreamSnapshotStore {
     }
 }
 
-private struct QueuedSlashMessage {
+/// Internal rather than file-private: `ChatDraftStore` persists these queued
+/// slash messages, and the draft store lives in its own file.
+struct QueuedSlashMessage {
     let text: String
     let attachments: [PendingAttachment]
 }
@@ -6983,6 +7001,23 @@ struct TranscriptMessage: Identifiable, Equatable {
     /// NEVER positional: `renderID` ("transcript:<absoluteIndex>") stays a
     /// TECHNICAL scroll/compression target only.
     let id: String
+
+    /// Callers that have no separate identity use the render id: the Bots
+    /// transcript builds rows from a stable server id in both places.
+    init(loadedIndex: Int, renderID: String, anchorID: String, message: ChatMessage) {
+        self.init(loadedIndex: loadedIndex, renderID: renderID, anchorID: anchorID,
+                  message: message, id: renderID)
+    }
+
+    /// The transcript builds `id` from stable, position-independent sources and
+    /// passes it in; `renderID` stays the technical scroll target.
+    init(loadedIndex: Int, renderID: String, anchorID: String, message: ChatMessage, id: String) {
+        self.loadedIndex = loadedIndex
+        self.renderID = renderID
+        self.anchorID = anchorID
+        self.message = message
+        self.id = id
+    }
 }
 
 /// Display model for the synthesized "Context compaction · Reference only" card.

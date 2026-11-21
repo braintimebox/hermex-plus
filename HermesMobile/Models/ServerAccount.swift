@@ -386,3 +386,18 @@ final class ServerRegistry: @unchecked Sendable {
         return snapshot
     }
 }
+
+/// Which backend a configured server runs (1.9.0's #899).
+///
+/// A webui server serves sessions; a Hermes host also runs the dashboard the Bots
+/// screens sign in to. This fork's registry predates the distinction: every
+/// account it creates is a webui server, so `kind` answers that and the Bots
+/// screens fall back to the pre-#899 rule — a plain link never opens Bot UI.
+enum ServerKind: String, Codable, Sendable {
+    case webui
+    case hermes
+}
+
+extension ServerAccount {
+    var kind: ServerKind { .webui }
+}

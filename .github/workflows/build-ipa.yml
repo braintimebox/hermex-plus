@@ -38,6 +38,15 @@ on:
   push:
     branches:
       - main
+      # Work branches build on push too. The publish job is gated on
+      # `refs/heads/main`, so a branch run only ever produces the build — and it
+      # is the only way to start one when the Actions REST API is throttled into
+      # answering 404 for the whole repository.
+      - 'bots/**'
+      # Work branches build on push too. Without this the branch only ever built
+      # via workflow_dispatch, so every attempt depended on someone remembering
+      # to start it — the loop could not run on its own.
+      - 'feat/**'
     paths-ignore:
       - 'README.md'
   workflow_dispatch:
@@ -57,6 +66,8 @@ on:
 # plus time spent queued behind the previous run.
 concurrency:
   group: build-ipa-${{ github.ref }}
+  # Serialised, never cancelled: a cancelled run says nothing about the code, and
+  # cancelling in-flight jobs was observed to kill the surviving run's jobs too.
   cancel-in-progress: false
 
 jobs:
@@ -94,6 +105,10 @@ jobs:
     needs: guard
     runs-on: macos-26
     timeout-minutes: 60
+    # The failure step commits the compiler errors back to the branch: the
+    # Actions log API rejects /jobs and /logs for this repository.
+    permissions:
+      contents: write
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
@@ -176,47 +191,49 @@ jobs:
         # Pinned to v2 by SHA per this repo's action-pinning policy.
         uses: chetan/git-restore-mtime-action@6365eabac94ee2b7a747f96998927a6a6e1994c4  # v2
 
-      - name: Select simulator
-        id: sim
-        run: |
-          set -euo pipefail
-          name=$(xcrun simctl list devices available --json | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          phones = [
-              device["name"]
-              for runtime, devices in data["devices"].items()
-              if "iOS" in runtime
-              for device in devices
-              if device.get("isAvailable") and device["name"].startswith("iPhone")
-          ]
-          preferred = "iPhone 17"
-          print(preferred if preferred in phones else phones[0] if phones else "")
-          ')
-          if [[ -z "${name}" ]]; then
-            echo "No available iPhone simulator found:" >&2
-            xcrun simctl list devices available >&2
-            exit 1
-          fi
-          echo "Using simulator: ${name}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-
       - name: Build for testing
-        env:
-          SIMULATOR_NAME: ${{ steps.sim.outputs.name }}
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
-          xcodebuild build-for-testing \
+          # Tee'd so the failure step can report the actual compiler errors.
+          xcodebuild build-for-testing -quiet \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
-            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "${DERIVED_DATA_PATH}" \
             COMPILATION_CACHE_ENABLE_CACHING=YES \
             SWIFT_ENABLE_COMPILE_CACHE=YES \
             CLANG_ENABLE_COMPILE_CACHE=YES \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "${RUNNER_TEMP}/xcodebuild.log"
           echo "Build-for-testing: $((SECONDS - start_seconds))s"
+
+      # The Actions log API rejected /jobs and /logs for this repository, so a
+      # failure could be seen but not read. This writes the compiler errors into
+      # the branch itself, where `git pull` reaches them without any API.
+      - name: Record compile failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          LOG="${RUNNER_TEMP}/xcodebuild.log"
+          {
+            echo "# Compile failure"
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+            echo '```'
+            if [ -f "$LOG" ]; then
+              grep -E "error:" "$LOG" | sort -u | head -n 80 || tail -n 60 "$LOG"
+            else
+              echo "(no build log captured)"
+            fi
+            echo '```'
+          } > ci-failure.md
+          git config user.name "hermes-ci"
+          git config user.email "hermes-ci@users.noreply.github.com"
+          git add ci-failure.md
+          git commit -m "ci: record compile failure [skip ci]" || exit 0
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
 
       # Products + the .xctestrun file. The .xctestrun path is reproducible
       # because every job checks out to the same workspace path, so the absolute
@@ -258,21 +275,29 @@ jobs:
     # The split comes from scripts/test_shards.py: it discovers every XCTestCase
     # in the sources and packs them by case count, so a new test file lands in a
     # shard without anyone updating a list.
-    name: Test (shard ${{ matrix.shard }}/1)
+    name: Test (shard ${{ matrix.shard }}/3)
     needs: [guard, unit-build]
     runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        # ONE shard. Measured on run 40213100922: a shard spends ~280 s on
-        # checkout, artifact download, simulator boot, install and runner
-        # startup, and 16 s running its 380 test cases. Sharding divided the
-        # 16 seconds and multiplied the 280: five shards queued for five macOS
-        # runners and the last one finished six minutes after a single shard
-        # would have. 143 test classes, ~1900 cases, ~90 s total - one shard
-        # holds them comfortably.
-        shard: [1]
+        # THREE shards, on the owner's instruction. What the numbers say, so the
+        # next reader does not have to re-derive it:
+        #
+        # Run 42978624775 (commit 8e960ca) split the Test job into 7m42s of setup
+        # — checkout, 265 MB test-build download, simulator boot (3m44s) and
+        # app/runner install (3m10s) — and 65s of actual execution (1962 cases).
+        # Sharding divides the 65s only: each shard still pays its own ~7m42s, so
+        # three shards land at ~8m04s against 9m45s single, for three runners
+        # instead of one. The earlier measurement that reverted sharding (run
+        # 40213100922: 280s setup, 16s of cases) is the same trade in sharper
+        # form.
+        #
+        # Kept because the owner chose it: it is worth ~1m40s of wall clock and
+        # it splits a red suite across three logs. The real lever is the setup
+        # cost, not the case count.
+        shard: [1, 2, 3]
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
       SCHEME: HermesMobile
@@ -421,8 +446,8 @@ jobs:
           # Осторожно: это ГИПОТЕЗА, а не подтверждённый выигрыш. Ранее замеренный
           # эксперимент с 4 воркерами (4016s против 689s) отвергнут и остаётся
           # отвергнутым — речь только о параллелизме при одном воркере.
-          SHARD_ARGS="$(python3 scripts/test_shards.py --count 1 --shard ${{ matrix.shard }})"
-          echo "shard ${{ matrix.shard }}/1: $(wc -w <<< "${SHARD_ARGS}") classes"
+          SHARD_ARGS="$(python3 scripts/test_shards.py --count 3 --shard ${{ matrix.shard }})"
+          echo "shard ${{ matrix.shard }}/3: $(wc -w <<< "${SHARD_ARGS}") classes"
           xcodebuild test-without-building $SHARD_ARGS \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
@@ -510,7 +535,11 @@ jobs:
     name: Package IPA
     # Runs ALONGSIDE `test`, not after it. The IPA is built either way; whether
     # it is PUBLISHED is decided by the `publish` job, which needs both.
-    needs: guard
+    # Waits for the compile. While the port was failing on the test target, this
+    # job spent five minutes and a macOS runner producing an IPA nobody could
+    # ship, and the wasted runner pushed every later run down the queue. A green
+    # compile is the precondition; publishing still needs both jobs.
+    needs: [guard, unit-build]
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -520,9 +549,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version
+      - name: Read version and identity
         id: version
-        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+        # APP_PRODUCT_NAME decides the IPA file name, so a test line produces
+        # Hermex4-<ver>.ipa instead of borrowing the stable line's name. Both
+        # values come from the single source of truth in Config/.
+        run: |
+          echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+          PRODUCT=$(grep -E '^APP_PRODUCT_NAME[[:space:]]*=' Config/Identity.xcconfig | head -1 | cut -d= -f2 | tr -d ' "' )
+          if [ -z "$PRODUCT" ]; then
+            echo "APP_PRODUCT_NAME missing from Config/Identity.xcconfig" >&2
+            exit 1
+          fi
+          echo "PRODUCT=$PRODUCT" >> $GITHUB_OUTPUT
+          echo "artifact: $PRODUCT-$(cat VERSION).ipa"
 
       # Тот же SPM-кэш загрузки, что и в job `unit-build`, — общий ключ: SourcePackages
       # не зависит от устройства или симулятора, раздельные ключи лишь удваивали
@@ -577,7 +617,7 @@ jobs:
         run: |
           set -euo pipefail
           start_seconds=${SECONDS}
-          xcodebuild \
+          xcodebuild -quiet \
             -project "${PROJECT_PATH}" \
             -scheme "${SCHEME}" \
             -configuration Release \
@@ -596,7 +636,7 @@ jobs:
 
       - name: Package IPA
         run: |
-          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "HermesPlus-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
+          mkdir Payload && cp -R "$APP_PATH" Payload/ && zip -r "${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa" Payload && rm -rf Payload && ls -lh *.ipa
 
       - name: Upload IPA
         # The artifact is what `publish` hands to the Release — and, on a red
@@ -604,7 +644,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ipa
-          path: HermesPlus-${{ steps.version.outputs.VER }}.ipa
+          path: ${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa
           retention-days: 30
 
   publish:
@@ -616,7 +656,11 @@ jobs:
     timeout-minutes: 10
     # Only on a real push. A manual workflow_dispatch run (used to verify the
     # suite without releasing) must not publish a release.
-    if: github.event_name == 'push'
+    #
+    # The ref matters as much as the event: adding a work branch to the push
+    # triggers (to start a build while the Actions API is throttled) would
+    # otherwise satisfy `event_name == 'push'` and publish a release from it.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Scoped to this job, not the workflow: only the Release needs to write.
     # Without it the GITHUB_TOKEN has read-only contents and the step fails with
     # 403 "Resource not accessible by integration" — after everything else has
@@ -627,9 +671,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version
+      - name: Read version and identity
         id: version
-        run: echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+        # APP_PRODUCT_NAME decides the IPA file name, so a test line produces
+        # Hermex4-<ver>.ipa instead of borrowing the stable line's name. Both
+        # values come from the single source of truth in Config/.
+        run: |
+          echo "VER=$(cat VERSION)" >> $GITHUB_OUTPUT
+          PRODUCT=$(grep -E '^APP_PRODUCT_NAME[[:space:]]*=' Config/Identity.xcconfig | head -1 | cut -d= -f2 | tr -d ' "' )
+          if [ -z "$PRODUCT" ]; then
+            echo "APP_PRODUCT_NAME missing from Config/Identity.xcconfig" >&2
+            exit 1
+          fi
+          echo "PRODUCT=$PRODUCT" >> $GITHUB_OUTPUT
+          echo "artifact: $PRODUCT-$(cat VERSION).ipa"
 
       - name: Download IPA
         uses: actions/download-artifact@v4
@@ -715,7 +770,7 @@ jobs:
           tag_name: v${{ steps.version.outputs.VER }}
           name: Hermex Plus ${{ steps.version.outputs.VER }}
           body_path: CHANGELOG.md
-          files: HermesPlus-${{ steps.version.outputs.VER }}.ipa
+          files: ${{ steps.version.outputs.PRODUCT }}-${{ steps.version.outputs.VER }}.ipa
           draft: false
           prerelease: false
         env:

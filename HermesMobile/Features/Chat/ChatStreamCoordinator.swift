@@ -51,6 +51,10 @@ struct ChatRunEnding: Equatable {
 @MainActor
 protocol ChatStreamCoordinatorDelegate: AnyObject {
     var streamCoordinatorSessionID: String? { get }
+    /// The host this run belongs to. A view model always knows it; the registry below is
+    /// only a fallback, and it is empty wherever a coordinator runs outside the app
+    /// (tests), which silently dropped every Live Activity start.
+    var streamCoordinatorServerURL: URL? { get }
     var streamCoordinatorDisplayTitle: String { get }
     var streamCoordinatorHasRunningLiveToolCall: Bool { get }
     var streamCoordinatorHasPendingPrompt: Bool { get }
@@ -97,6 +101,10 @@ protocol ChatStreamCoordinatorDelegate: AnyObject {
     func streamCoordinatorApplyClarificationUpdate(_ update: ClarificationPendingResponse)
     @discardableResult
     func streamCoordinatorEnqueuePendingSteerLeftover(_ text: String) -> Bool
+}
+extension ChatStreamCoordinatorDelegate {
+    /// A delegate that cannot name its host leaves the lookup to the registry.
+    var streamCoordinatorServerURL: URL? { nil }
 }
 
 @MainActor
@@ -1222,10 +1230,17 @@ final class ChatStreamCoordinator {
     /// timer starts from the same instant as the in-app "Working for" label
     /// rather than from the moment this process attached to the stream (#406).
     private func startLiveActivity(streamID: String) {
-        guard let sessionID = delegate?.streamCoordinatorSessionID else { return }
+        // The activity carries the server so a tap can route back to the right
+        // host; the coordinator itself only knows the session, so the active
+        // server comes from the registry.
+        guard let sessionID = delegate?.streamCoordinatorSessionID,
+              let server = delegate?.streamCoordinatorServerURL
+                ?? ServerRegistry.shared.activeServer.flatMap({ URL(string: $0.id) })
+        else { return }
 
         liveActivityManager.start(
             sessionID: sessionID,
+            server: server,
             sessionTitle: delegate?.streamCoordinatorDisplayTitle ?? String(localized: "Untitled Session"),
             streamID: streamID,
             startedAt: activeRunStartedAt ?? Date()

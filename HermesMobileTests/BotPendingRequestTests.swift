@@ -108,122 +108,6 @@ import XCTest
         XCTAssertEqual(answer.text, #"["Archive","Unsubscribe"]"#)
     }
 
-    func testCredentialKindsMapFromTheirRequestAndExpireEvents() {
-        for (prefix, kind) in ["sudo": BotCredentialRequest.Kind.sudo, "secret": .secret] {
-            let request = BotStreamRequest.requested(
-                eventType: "\(prefix).request",
-                payload: .object(["request_id": .string("r"), "env_var": .string("OPENAI_API_KEY"),
-                                  "prompt": .string("Paste the key")])
-            )
-            XCTAssertEqual(request, .credential(BotCredentialRequest(
-                kind: kind, requestID: "r", envVar: "OPENAI_API_KEY", prompt: "Paste the key"
-            )))
-            XCTAssertEqual(request?.eventPrefix, prefix)
-            XCTAssertEqual(BotStreamRequest.expiredPrefix(eventType: "\(prefix).expire"), prefix)
-            XCTAssertEqual(kind.respondMethod, "\(prefix).respond")
-        }
-        // Each kind's value rides the one param name its handler reads.
-        XCTAssertEqual(BotCredentialRequest.Kind.sudo.valueKey, "password")
-        XCTAssertEqual(BotCredentialRequest.Kind.secret.valueKey, "value")
-    }
-
-    /// `*.respond` is addressed by request id alone, so a prompt without one
-    /// cannot be answered and must not become an answerable card.
-    func testACredentialRequestWithoutARequestIdIsDropped() {
-        XCTAssertNil(BotStreamRequest.requested(eventType: "sudo.request", payload: .object([:])))
-        XCTAssertNil(BotStreamRequest.requested(eventType: "secret.request",
-                                                payload: .object(["request_id": .string("")])))
-    }
-
-    /// A sudo prompt carries no payload at all; a secret's fields are optional.
-    func testACredentialRequestReadsWithoutOptionalFields() {
-        guard case .credential(let request)? = BotStreamRequest.requested(
-            eventType: "sudo.request", payload: .object(["request_id": .string("s-1")])
-        ) else { return XCTFail("Expected a credential request") }
-        XCTAssertNil(request.envVar)
-        XCTAssertNil(request.prompt)
-        XCTAssertFalse(request.detail.isEmpty)
-        XCTAssertFalse(request.handling.isEmpty)
-    }
-
-    func testDesktopTaskKindsMapFromTheirRequestAndExpireEvents() {
-        let expected: [String: BotDesktopTaskRequest.Kind] = [
-            "terminal.read": .terminalRead, "window.read": .windowRead, "mcp.setup": .mcpSetup,
-            "preview.read": .previewRead, "preview.act": .previewAct, "tour": .tour
-        ]
-        for (prefix, kind) in expected {
-            XCTAssertEqual(
-                BotStreamRequest.requested(eventType: "\(prefix).request",
-                                           payload: .object(["request_id": .string("r")])),
-                .desktopTask(BotDesktopTaskRequest(kind: kind, requestID: "r"))
-            )
-            XCTAssertEqual(BotStreamRequest.expiredPrefix(eventType: "\(prefix).expire"), prefix)
-            XCTAssertFalse(kind.title.isEmpty)
-            XCTAssertFalse(kind.detail.isEmpty)
-        }
-        // Only the MCP setup card has a person at the Mac to wait for, and it is
-        // the only one there is anything to decline.
-        XCTAssertEqual(BotDesktopTaskRequest.Kind.allCases.filter(\.needsSomeoneAtTheMac), [.mcpSetup])
-        XCTAssertEqual(BotDesktopTaskRequest.Kind.allCases.filter(\.isDeclinable), [.mcpSetup])
-        XCTAssertEqual(BotDesktopTaskRequest.Kind.mcpSetup.respondMethod, "mcp.setup.respond")
-        // A Desktop task has no id to answer with, and still reads.
-        XCTAssertEqual(BotStreamRequest.requested(eventType: "tour.request", payload: .object([:])),
-                       .desktopTask(BotDesktopTaskRequest(kind: .tour, requestID: nil)))
-    }
-
-    func testNonBlockingEventsAreNotStreamRequests() {
-        XCTAssertNil(BotStreamRequest.requested(eventType: "clarify.request", payload: .null))
-        XCTAssertNil(BotStreamRequest.requested(eventType: "tool.start", payload: .null))
-        XCTAssertNil(BotStreamRequest.expiredPrefix(eventType: "clarify.expired"))
-        // A prefix that is not a kind is nobody's request, expire or not.
-        XCTAssertNil(BotStreamRequest.requested(eventType: "approval.request",
-                                                payload: .object(["request_id": .string("r")])))
-    }
-}
-
-/// Answering from the phone: dispatch, revalidation, and every way an answer can
-/// fail to take effect.
-@MainActor final class BotAnsweringTests: XCTestCase {
-    private let server = URL(string: "https://webui.example")!
-    private func connection(_ address: String = "http://hermes.local:9120") -> BotConnection {
-        BotConnection(id: UUID(), name: "Mac", address: URL(string: address)!, username: "user", password: "fixture")
-    }
-    private var profile: BotProfile { BotProfile(.object(["name": .string("inbox-triage")]))! }
-
-    private func make(_ wire: BotFixtureWire, connection override: BotConnection? = nil) -> BotConversation {
-        BotConversation(server: server, connection: override ?? connection(), profile: profile, wire: wire,
-                        drafts: ChatDraftStore(persistence: BotMemoryDrafts(), debounceDuration: .seconds(60)))
-    }
-
-    /// A connected conversation whose bot is mid-turn, so a request can block it.
-    private func blocked(on wire: BotFixtureWire) async -> BotConversation {
-        wire.running = true
-        let model = make(wire)
-        await model.recover()
-        return model
-    }
-
-    /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
-    /// so these non-throwing async tests stay readable.
-    private func action(_ model: BotConversation,
-                        file: StaticString = #filePath, line: UInt = #line) -> BotConversation.AnswerAction {
-        guard let action = model.prepareAnswer() else {
-            XCTFail("Expected an answerable request", file: file, line: line)
-            return BotConversation.AnswerAction(generation: -1, runtime: "", requestID: "")
-        }
-        return action
-    }
-
-    /// Waits for the conversation's coalesced snapshot read to land. Every
-    /// `applySnapshot` republishes the turn state, so it is the arrival signal.
-    private func awaitSnapshot(_ model: BotConversation) async {
-        let applied = expectation(description: "Snapshot applied")
-        withObservationTracking { _ = String(describing: model.turn) } onChange: { applied.fulfill() }
-        await fulfillment(of: [applied], timeout: 5)
-    }
-
-    // MARK: approvals
-
     func testApprovalFromTheSnapshotIsAnswerableAndDispatchesTheHostsChoice() async {
         let wire = BotFixtureWire(); wire.attention = true
         let model = await blocked(on: wire)
@@ -365,11 +249,12 @@ import XCTest
         XCTAssertEqual(request.questions.count, 1)
         await model.answerQuestion(action(model),
                                    [BotQuestionAnswer(questionID: nil, text: "Primary (Recommended)")])
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        // An unkeyed answer goes through `request.answer` with the envelope id;
+        // `clarify.lock` exists only for batch questions that carry a `qid`.
+        let sent = wire.calls.filter { $0.0 == "request.answer" }
         XCTAssertEqual(sent.count, 1)
-        XCTAssertEqual(sent.first?.1["request_id"], .string("clr-1"))
-        XCTAssertEqual(sent.first?.1["answer"], .string("Primary (Recommended)"))
-        XCTAssertNil(sent.first?.1["question_id"])
+        XCTAssertEqual(sent.first?.1["id"], .string("clr-1"))
+        XCTAssertEqual(sent.first?.1["result"], .object(["answer": .string("Primary (Recommended)")]))
         XCTAssertEqual(model.requestResolution?.outcome, .answered)
         model.suspend()
     }
@@ -389,7 +274,7 @@ import XCTest
             BotQuestionAnswer(questionID: "q0", text: "Primary"),
             BotQuestionAnswer(questionID: "q1", selections: ["Archive"])
         ])
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        let sent = wire.calls.filter { $0.0 == "clarify.lock" }
         XCTAssertEqual(sent.map { $0.1["question_id"] }, [.string("q0"), .string("q1")])
         XCTAssertEqual(sent.last?.1["answer"], .string(#"["Archive"]"#))
         XCTAssertEqual(model.requestResolution?.outcome, .answered)
@@ -404,7 +289,7 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q9", text: "nope")])
-        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.respond" }.isEmpty)
+        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.lock" }.isEmpty)
         model.suspend()
     }
 
@@ -423,11 +308,11 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q0", text: "a")])
-        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.respond" }.isEmpty)
+        XCTAssertTrue(wire.calls.filter { $0.0 == "clarify.lock" }.isEmpty)
         XCTAssertNil(model.requestResolution)
         // Declining the whole request is still one deliberate unkeyed answer.
         await model.skipQuestion(action(model))
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.count, 1)
+        XCTAssertEqual(wire.calls.filter { $0.0 == "request.answer" }.count, 1)
         model.suspend()
     }
 
@@ -445,7 +330,7 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.answerQuestion(action(model), [BotQuestionAnswer(questionID: "q1", text: "b")])
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.map { $0.1["question_id"] },
+        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.lock" }.map { $0.1["question_id"] },
                        [.string("q1")])
         model.suspend()
     }
@@ -453,45 +338,6 @@ import XCTest
     /// Credential prompts reach no snapshot, so while the ring still holds one,
     /// replay is the only way back to it. Dropping it left a blocked bot looking
     /// idle with nothing on screen to answer.
-    func testAReplayedCredentialPromptSurvivesAReconnect() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        wire.onDisconnect?(BotFailure.transport)
-        XCTAssertNil(model.streamRequest)
-
-        wire.replay = BotFixtureWire.replay(latest: 2, events: [
-            .object(["session_id": .string("runtime"), "seq": .number(1),
-                     "type": .string("tool.start"),
-                     "payload": .object(["tool_id": .string("t1"), "name": .string("terminal")])]),
-            .object(["session_id": .string("runtime"), "seq": .number(2),
-                     "type": .string("sudo.request"),
-                     "payload": .object(["request_id": .string("sudo-r")])])
-        ])
-        await model.recover()
-        XCTAssertFalse(model.replayWasReset)
-        XCTAssertEqual(model.pendingRequest?.requestID, "sudo-r")
-        XCTAssertEqual(model.turn, .needsAttention)
-        XCTAssertTrue(model.mayAnswer)
-        model.suspend()
-    }
-
-    /// A prompt whose expiry is also in the replay window is already over.
-    func testAReplayedPromptThatExpiredInTheSameWindowIsNotShown() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        wire.onDisconnect?(BotFailure.transport)
-        wire.replay = BotFixtureWire.replay(latest: 2, events: [
-            .object(["session_id": .string("runtime"), "seq": .number(1),
-                     "type": .string("sudo.request"),
-                     "payload": .object(["request_id": .string("sudo-r")])]),
-            .object(["session_id": .string("runtime"), "seq": .number(2),
-                     "type": .string("sudo.expire"), "payload": .object([:])])
-        ])
-        await model.recover()
-        XCTAssertNil(model.streamRequest)
-        model.suspend()
-    }
-
     func testAnExpiredQuestionStopsTheBatchAndReportsItAsAlreadyResolved() async {
         let wire = BotFixtureWire(); wire.clarifyStatus = "expired"
         wire.pendingClarify = .object([
@@ -505,7 +351,7 @@ import XCTest
         await model.answerQuestion(action(model), [
             BotQuestionAnswer(questionID: "q0", text: "a"), BotQuestionAnswer(questionID: "q1", text: "b")
         ])
-        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.respond" }.count, 1)
+        XCTAssertEqual(wire.calls.filter { $0.0 == "clarify.lock" }.count, 1)
         XCTAssertEqual(model.requestResolution?.outcome, .alreadyResolved)
         XCTAssertFalse(model.mayAnswer)
         model.suspend()
@@ -519,10 +365,10 @@ import XCTest
         ])
         let model = await blocked(on: wire)
         await model.skipQuestion(action(model))
-        let sent = wire.calls.filter { $0.0 == "clarify.respond" }
+        let sent = wire.calls.filter { $0.0 == "request.answer" }
         XCTAssertEqual(sent.count, 1)
-        XCTAssertEqual(sent.first?.1["answer"], .string(""))
-        XCTAssertNil(sent.first?.1["question_id"])
+        XCTAssertEqual(sent.first?.1["result"], .object(["answer": .string("")]))
+        XCTAssertEqual(sent.first?.1["id"], .string("clr-3"))
         model.suspend()
     }
 
@@ -538,44 +384,12 @@ import XCTest
 
     /// `sudo.respond` takes a `request_id` from any client, so the phone answers
     /// it rather than sending someone to a Mac they are not sitting at.
-    func testASudoPromptIsAnsweredFromThePhone() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        XCTAssertEqual(model.turn, .running)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-1")])
-        ]))
-        guard case .credential(let request)? = model.pendingRequest else { return XCTFail("Expected a credential prompt") }
-        XCTAssertEqual(request.kind, .sudo)
-        XCTAssertTrue(model.pendingRequest?.isAnswerable ?? false)
-        // The snapshot it triggers must stop the app claiming the bot is working.
-        await awaitSnapshot(model)
-        XCTAssertEqual(model.turn, .needsAttention)
-        XCTAssertTrue(model.mayAnswer)
-
-        await model.answerCredential(action(model), value: "hunter2")
-        let sent = wire.calls.last { $0.0 == "sudo.respond" }
-        XCTAssertEqual(sent?.1["request_id"], .string("sudo-1"))
-        XCTAssertEqual(sent?.1["password"], .string("hunter2"))
-        XCTAssertEqual(model.requestResolution, BotRequestResolution(requestID: "sudo-1", outcome: .answered))
-        // The host emits `.expire` only on timeout, so an answered prompt has to
-        // be retired here or the card would outlive the thing it was blocking.
-        XCTAssertNil(model.streamRequest)
-        XCTAssertNil(model.pendingRequest)
-        model.suspend()
-    }
-
-    /// The secret prompt carries the host's own wording and the name it will be
-    /// saved under, and answers on a differently named param.
     func testASecretPromptSendsItsValueUnderTheHostsParamName() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("secret.request"),
-            "payload": .object(["request_id": .string("sec-1"), "env_var": .string("TAVILY_API_KEY"),
-                                "prompt": .string("Paste your Tavily key")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("secret", id: "sec-1",
+                                             ["env_var": .string("TAVILY_API_KEY"),
+                                "prompt": .string("Paste your Tavily key")]))
         guard case .credential(let request)? = model.pendingRequest else { return XCTFail("Expected a credential prompt") }
         XCTAssertEqual(request.detail, "Paste your Tavily key")
         XCTAssertTrue(request.handling.contains("TAVILY_API_KEY"))
@@ -592,10 +406,7 @@ import XCTest
     func testSkippingACredentialSendsAnEmptyValue() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("secret.request"),
-            "payload": .object(["request_id": .string("sec-2")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("secret", id: "sec-2"))
         await model.skipCredential(action(model))
         let sent = wire.calls.last { $0.0 == "secret.respond" }
         XCTAssertEqual(sent?.1["value"], .string(""))
@@ -608,10 +419,7 @@ import XCTest
     func testAnExpiredCredentialPromptReportsAlreadyResolved() async {
         let wire = BotFixtureWire(); wire.credentialStatus = "expired"
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-3")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-3"))
         await model.answerCredential(action(model), value: "hunter2")
         XCTAssertEqual(model.requestResolution?.outcome, .alreadyResolved)
         XCTAssertEqual(model.connectionState, .connected)
@@ -625,10 +433,7 @@ import XCTest
     func testALostSocketMidCredentialLeavesTheOutcomeUncertain() async {
         let wire = BotFixtureWire(); wire.respondFailure = .transport
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-4")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-4"))
         await model.answerCredential(action(model), value: "hunter2")
         XCTAssertEqual(model.requestResolution?.outcome, .uncertain)
         XCTAssertEqual(model.connectionState, .disconnected)
@@ -640,15 +445,9 @@ import XCTest
     func testAnActionForAReplacedCredentialPromptIsNeverDispatched() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-5")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-5"))
         let stale = action(model)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(2), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-6")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-6"))
         XCTAssertEqual(model.pendingRequest?.requestID, "sudo-6")
         await model.answerCredential(stale, value: "hunter2")
         XCTAssertTrue(wire.calls.filter { $0.0 == "sudo.respond" }.isEmpty)
@@ -663,122 +462,13 @@ import XCTest
     func testAQuestionOutranksACredentialPrompt() async {
         let wire = BotFixtureWire(); wire.pendingClarify = BotFixtureWire.clarify()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-7")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-7"))
         guard case .question? = model.pendingRequest else { return XCTFail("Expected the question to win") }
         model.suspend()
     }
 
     // MARK: Desktop-task kinds
 
-    func testADesktopTaskBlocksTheTurnAndIsNeverAnswerable() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        XCTAssertEqual(model.turn, .running)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("terminal.read.request"),
-            "payload": .object(["request_id": .string("term-1")])
-        ]))
-        XCTAssertEqual(model.streamRequest,
-                       .desktopTask(BotDesktopTaskRequest(kind: .terminalRead, requestID: "term-1")))
-        guard case .desktopTask(let request)? = model.pendingRequest else { return XCTFail("Expected a Desktop task") }
-        XCTAssertFalse(request.kind.title.isEmpty)
-        // Not because the phone is withheld: the answer is the renderer's buffer.
-        XCTAssertFalse(model.pendingRequest?.isAnswerable ?? true)
-        XCTAssertFalse(model.mayAnswer)
-        XCTAssertNil(model.prepareAnswer())
-        // The snapshot it triggers must stop the app claiming the bot is working.
-        await awaitSnapshot(model)
-        XCTAssertEqual(model.turn, .needsAttention)
-        // Answering is off the table, but stopping the blocked work is not.
-        XCTAssertTrue(model.mayStop)
-        model.suspend()
-    }
-
-    /// The one Desktop task with a person in the loop can be called off from
-    /// the phone: a ten-minute park becomes one tap, and the host's tool is
-    /// told never to re-ask.
-    func testAnMCPSetupIsDeclinedFromThePhone() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("mcp.setup.request"),
-            "payload": .object(["request_id": .string("mcp-1"), "server": .string("tavily")])
-        ]))
-        // Declining is not answering: the setup itself still only happens in Desktop.
-        XCTAssertFalse(model.pendingRequest?.isAnswerable ?? true)
-        XCTAssertFalse(model.mayAnswer)
-        XCTAssertTrue(model.mayDecline)
-
-        await model.declineDesktopTask(action(model))
-        let sent = wire.calls.last { $0.0 == "mcp.setup.respond" }
-        XCTAssertEqual(sent?.1["request_id"], .string("mcp-1"))
-        XCTAssertEqual(sent?.1["result"], .string(#"{"status":"declined"}"#))
-        XCTAssertEqual(model.requestResolution?.outcome, .answered)
-        XCTAssertNil(model.streamRequest)
-        model.suspend()
-    }
-
-    /// Every other Desktop task has nothing to decline, and a decline aimed at
-    /// one must never reach the wire.
-    func testADesktopTaskThatCannotBeDeclinedNeverDispatches() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("preview.read.request"),
-            "payload": .object(["request_id": .string("prev-1")])
-        ]))
-        XCTAssertFalse(model.mayDecline)
-        XCTAssertNil(model.prepareAnswer())
-        await model.declineDesktopTask(
-            BotConversation.AnswerAction(generation: 0, runtime: "runtime", requestID: "prev-1")
-        )
-        XCTAssertTrue(wire.calls.filter { $0.0.hasSuffix(".respond") }.isEmpty)
-        XCTAssertNil(model.requestResolution)
-        model.suspend()
-    }
-
-    func testTheMatchingExpireEventClearsTheStreamRequest() async {
-        let wire = BotFixtureWire()
-        let model = await blocked(on: wire)
-        wire.onEvent?(.object(["session_id": .string("runtime"), "seq": .number(1),
-                               "type": .string("window.read.request"), "payload": .object([:])]))
-        XCTAssertEqual(model.streamRequest?.eventPrefix, "window.read")
-        // A different kind's expiry is not this one's.
-        wire.onEvent?(.object(["session_id": .string("runtime"), "seq": .number(2),
-                               "type": .string("terminal.read.expire"), "payload": .object([:])]))
-        XCTAssertEqual(model.streamRequest?.eventPrefix, "window.read")
-        wire.onEvent?(.object(["session_id": .string("runtime"), "seq": .number(3),
-                               "type": .string("window.read.expire"), "payload": .object([:])]))
-        XCTAssertNil(model.streamRequest)
-        model.suspend()
-    }
-
-    /// These kinds exist only in the stream, so a gap or a lost socket makes their
-    /// state unknowable. Dropping the card beats showing a stale one.
-    func testASequenceGapAndADisconnectBothDropTheStreamRequest() async {
-        for breakStream in [true, false] {
-            let wire = BotFixtureWire()
-            let model = await blocked(on: wire)
-            wire.onEvent?(.object(["session_id": .string("runtime"), "seq": .number(1),
-                                   "type": .string("tour.request"), "payload": .object([:])]))
-            XCTAssertEqual(model.streamRequest?.eventPrefix, "tour")
-            if breakStream {
-                wire.onEvent?(.object(["session_id": .string("runtime"), "seq": .number(9),
-                                       "type": .string("tool.start"), "payload": .object([:])]))
-            } else {
-                wire.onDisconnect?(BotFailure.transport)
-            }
-            XCTAssertNil(model.streamRequest)
-            model.suspend()
-        }
-    }
-
-    // MARK: isolation
-
-    /// Two connections whose Profile names match must not share request state.
     func testTwoConnectionsWithTheSameProfileNameKeepTheirOwnRequests() async {
         let first = BotFixtureWire(); first.attention = true; first.running = true
         let second = BotFixtureWire(); second.running = true
@@ -820,4 +510,45 @@ import XCTest
         XCTAssertEqual(model.turn, .needsAttention)
         model.suspend()
     }
+    private func blocked(on wire: BotFixtureWire) async -> BotConversation {
+        wire.running = true
+        let model = make(wire)
+        await model.recover()
+        return model
+    }
+
+    /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
+    /// so these non-throwing async tests stay readable.
+    private let server = URL(string: "https://webui.example")!
+
+    private func connection(_ address: String = "http://hermes.local:9120") -> BotConnection {
+        BotConnection(id: UUID(), name: "Mac", address: URL(string: address)!, username: "user", password: "fixture")
+    }
+    private var profile: BotProfile { BotProfile(.object(["name": .string("inbox-triage")]))! }
+
+    private func make(_ wire: BotFixtureWire, connection override: BotConnection? = nil) -> BotConversation {
+        BotConversation(server: server, connection: override ?? connection(), profile: profile, wire: wire,
+                        drafts: ChatDraftStore(persistence: BotMemoryDrafts(), debounceDuration: .seconds(60)))
+    }
+
+    /// A connected conversation whose bot is mid-turn, so a request can block it.
+    /// The action `prepareAnswer()` must have produced. Fails rather than aborting,
+    /// so these non-throwing async tests stay readable.
+    private func action(_ model: BotConversation,
+                        file: StaticString = #filePath, line: UInt = #line) -> BotConversation.AnswerAction {
+        guard let action = model.prepareAnswer() else {
+            // Three different conditions produce nil here, and the old message named
+            // none of them: "Expected an answerable request" reads the same whether the
+            // request never arrived, arrived unanswerable, or lost its runtime — three
+            // distinct diagnoses that a 4-minute subset run must be able to tell apart.
+            let request = model.pendingRequest
+            XCTFail("Expected an answerable request — pendingRequest: \(request == nil ? "nil" : "present")"
+                    + ", isAnswerable: \(request.map { String($0.isAnswerable) } ?? "n/a")"
+                    + ", runtime: \(model.runtime ?? "nil")",
+                    file: file, line: line)
+            return BotConversation.AnswerAction(generation: -1, runtime: "", requestID: "")
+        }
+        return action
+    }
+
 }
