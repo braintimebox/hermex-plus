@@ -28,6 +28,9 @@ permissions:
 jobs:
   subset:
     name: Subset
+    # The only automatic trigger is a push to ci/subset/**; this guard states the
+    # intent in the file, so a future trigger added here cannot reach `main`.
+    if: github.ref != 'refs/heads/main'
     runs-on: macos-26
     timeout-minutes: 45
     env:

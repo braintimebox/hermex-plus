@@ -146,14 +146,19 @@ def _scan(test_dir: Path) -> tuple[dict[str, str | None], dict[str, list[tuple[s
         raise SystemExit(f"BLOCKER: test directory not found: {test_dir}")
     declarations: dict[str, str | None] = {}
     per_file: dict[str, list[tuple[str, str | None, str]]] = {}
-    for path in sorted(test_dir.glob("*.swift")):
+    # Recursive on purpose: a nested test file is still a test file, and a
+    # non-recursive glob would leave it outside both the shards and the coverage
+    # check that is supposed to notice exactly this. Nothing lives in a
+    # subdirectory today; the check is written so that adding one cannot hide.
+    for path in sorted(test_dir.rglob("*.swift")):
+        key = path.relative_to(test_dir).as_posix()
         bodies = _class_bodies(path.read_text(errors="replace"))
         for name, superclass, _body in bodies:
             # Only real declarations carry the superclass; an extension's `None`
             # must not shadow it when the two live in different files.
             if superclass is not None:
                 declarations.setdefault(name, superclass)
-        per_file[path.name] = bodies
+        per_file[key] = bodies
     return declarations, per_file
 
 
@@ -200,15 +205,20 @@ def coverage_problems(test_dir: Path = TESTS_DIR) -> list[str]:
     declarations, per_file = _scan(test_dir)
     classes = test_classes(declarations)
     problems: list[str] = []
-    for path in sorted(test_dir.glob("*.swift")):
+    scanned = len(per_file)
+    present = sum(1 for _ in test_dir.rglob("*.swift"))
+    if scanned != present:
+        problems.append(f"scanned {scanned} file(s) but found {present} under {test_dir}")
+    for path in sorted(test_dir.rglob("*.swift")):
+        key = path.relative_to(test_dir).as_posix()
         text = TEST_METHOD_PATTERN.findall(path.read_text(errors="replace"))
         attributed = sum(
             len(TEST_METHOD_PATTERN.findall(body))
-            for name, _superclass, body in per_file.get(path.name, [])
+            for name, _superclass, body in per_file.get(key, [])
             if name in classes
         )
         if len(text) != attributed:
-            problems.append(f"{path.name}: {len(text)} test methods, {attributed} inside discovered classes")
+            problems.append(f"{key}: {len(text)} test methods, {attributed} inside discovered classes")
     return problems
 
 
