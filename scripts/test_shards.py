@@ -7,9 +7,12 @@ hold them keeps passing while the new tests never run. Here a class with no
 entry in the list simply does not exist: every class is re-discovered from the
 sources on each run, so a new test file lands in a shard automatically.
 
-The assignment is a hash of the class name, so it is stable across runs and
-across machines. A test that fails in shard 2 today fails in shard 2 tomorrow;
-nothing moves between shards when unrelated classes are added.
+The assignment is greedy longest-processing-time packing over the classes sorted
+by name. It is deterministic for a given set of classes and widths, but it is
+NOT a hash of the name: adding one class changes the loads and can move many
+others (measured: one 40-test class moved 60 of 147 classes). Shard membership
+is therefore not comparable between runs — say "the suite ran red" rather than
+"shard 2 was red", and never diff shard contents across two runs.
 
 Usage:
     python3 scripts/test_shards.py --count 3 --shard 1 --format args
@@ -57,10 +60,11 @@ def discover(test_dir: Path = TESTS_DIR) -> dict[str, int]:
 
 
 def assign(weights: dict[str, int], count: int) -> list[list[str]]:
-    """Greedy longest-processing-time packing over deterministically ordered names.
+    """Greedy longest-processing-time packing over name-sorted classes.
 
-    Ordering by name (not by weight) keeps the assignment stable: adding a class
-    can move only classes that sort after it, and only when the loads tie.
+    Deterministic for one set of classes, but not stable against additions: a new
+    class shifts the loads and every later name may land in a different shard.
+    Name order is what makes two runs on the SAME tree agree, nothing more.
     """
     buckets: list[list[str]] = [[] for _ in range(count)]
     loads = [0] * count
