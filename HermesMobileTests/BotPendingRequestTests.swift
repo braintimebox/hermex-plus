@@ -261,6 +261,10 @@ import XCTest
 
     func testBatchSendsOneRespondPerQuestionIDInOrder() async {
         let wire = BotFixtureWire()
+        // Two answers, so the host must report two locks left: the client ends the
+        // batch as soon as `remaining` is empty, and the default single token would
+        // empty after the first lock and never send q1.
+        wire.clarifyRemaining = ["q0", "q1"]
         wire.pendingClarify = .object([
             "request_id": .string("clr-3"),
             "questions": .array([
