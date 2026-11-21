@@ -706,7 +706,7 @@ actor BotMemoryDrafts: ChatDraftPersisting {
                 "session_id": .string(runtimeID), "session_key": .string(tip), "running": .bool(running),
                 "messages": .array(history), "inflight": inflight, "queued": queued,
                 "pending_approval": pendingApproval ?? (attention ? BotFixtureWire.approval() : .null),
-                "pending_clarify": pendingClarify,
+                "open_requests": openRequests,
                 "todo_state": todoState,
                 "info": .object(["profile_name": .string("inbox-triage")])
             ])
@@ -733,6 +733,24 @@ actor BotMemoryDrafts: ChatDraftPersisting {
         default: throw BotFailure.unsupported
         }
     }
+    /// The gateway's `open_requests` envelope for a request payload.
+    private func envelope(_ payload: BotJSON, method: String) -> BotJSON {
+        guard var fields = payload.fields else { return .null }
+        fields["session_id"] = .string(runtimeID)
+        let id = payload["request_id"].text ?? "\(method)-1"
+        return .object(["id": .string(id), "method": .string(method), "params": .object(fields)])
+    }
+
+    /// Questions reach the client inside the one `open_requests` list; the
+    /// separate `pending_clarify` field no longer exists in the client at all.
+    /// A fixture that keeps writing the old field makes the model report "no
+    /// request" while the test waits for one — which is exactly what the whole
+    /// `BotPendingRequestParsingTests` suite did once it started running again.
+    private var openRequests: BotJSON {
+        guard pendingClarify.fields != nil else { return .array([]) }
+        return .array([envelope(pendingClarify, method: "clarify")])
+    }
+
     /// The gateway's `_approval_request_payload` shape, as it reaches both the
     /// `approval.request` event and the resume snapshot.
     static func approval(id: String = "req-1", command: String = "rm -rf build",
