@@ -59,3 +59,10 @@ struct ChatComposerActionAppearance {
         return colorScheme == .dark ? .black : .white
     }
 }
+
+/// A row the send-choice card can list. Bots list `BotPromptMode`; Sessions
+/// list `StreamingSendBehavior`.
+protocol SendChoice: Hashable {
+    var title: String { get }
+    var systemImage: String { get }
+}

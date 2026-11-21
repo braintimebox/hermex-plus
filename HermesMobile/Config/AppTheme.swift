@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 import UserNotifications
@@ -544,6 +545,74 @@ struct ResponseCompletionNotificationRequest: Equatable {
         guard let sessionID, !sessionID.isEmpty else { return [:] }
         return ["session_id": sessionID]
     }
+
+    /// Lowercase hex SHA-256 of the server's URL. The alert keeps the hash rather
+    /// than the URL: iOS retains delivered notifications, and a server URL is
+    /// credential-like enough not to sit in plain text there.
+    static func serverHash(_ server: URL) -> String {
+        SHA256.hash(data: Data(server.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    /// The chat a tapped alert names, on a server that is still configured.
+    ///
+    /// Three payload shapes reach this: a relay push carrying `server_hash`, an
+    /// alert carrying the server URL outright, and this fork's own minimal
+    /// `session_id`-only alert. The last one is unambiguous exactly when a single
+    /// server is configured, so it resolves then and stays nil otherwise rather
+    /// than guessing the wrong host.
+    static func destination(userInfo: [AnyHashable: Any], servers: [URL]) -> WebuiPushDestination? {
+        guard let rawSession = (userInfo["session_id"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawSession.isEmpty
+        else { return nil }
+
+        if let hash = userInfo["server_hash"] as? String,
+           let server = servers.first(where: { serverHash($0) == hash }) {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        if let rawServer = userInfo["server"] as? String,
+           let server = servers.first(where: { $0.absoluteString == rawServer }) {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        if servers.count == 1, let server = servers.first {
+            return WebuiPushDestination(server: server, sessionID: rawSession)
+        }
+        return nil
+    }
+}
+
+/// How a run ended, in the two shapes the app reports: a finalized Live
+/// Activity's status, or a transcript turn's recorded ending. Cancelled runs
+/// have no outcome — they do not get an alert.
+enum ResponseCompletionOutcome: Equatable {
+    case completed
+    case failed
+
+    init?(_ status: AgentRunActivityStatus) {
+        switch status {
+        case .complete: self = .completed
+        case .failed: self = .failed
+        default: return nil
+        }
+    }
+
+    init?(ending: TranscriptTurnRunOutcome.Ending) {
+        switch ending {
+        case .completed: self = .completed
+        case .failed: self = .failed
+        case .cancelled: return nil
+        }
+    }
+
+    /// The Live Activity's own end line, so the alert matches the Lock Screen.
+    var body: String {
+        switch self {
+        case .completed: String(localized: "Response complete")
+        case .failed: String(localized: "Response failed")
+        }
+    }
 }
 
 struct ResponseCompletionNotificationCompletionContext: Equatable {
@@ -789,5 +858,41 @@ enum ComposerSTTProviderPolicy {
         candidates.compactMap { provider, isAvailable in
             isAvailable ? provider : nil
         }
+    }
+}
+
+extension ResponseCompletionNotificationService {
+    /// Schedules the local "response ended" alert for a run this process was no
+    /// longer driving (an orphaned Live Activity it just finalized).
+    ///
+    /// The 1.9.0 signature also takes a current-ness check and a push-pairing
+    /// probe, and hands the scheduler a request carrying the server, the chat
+    /// title and the outcome. This fork's request carries the session alone and
+    /// its policy takes `completedNormally` instead of an outcome, so the alert is
+    /// scheduled from what exists here: a completed run alerts, a failed one does
+    /// not, and the policy still decides from the preference, the permission and
+    /// the scene state.
+    static func scheduleRunEndedIfAllowed(
+        _ outcome: ResponseCompletionOutcome,
+        sessionID: String?,
+        title: String,
+        server: URL,
+        preferenceEnabled: Bool,
+        sceneIsActive: Bool
+    ) async -> Bool {
+        let status = await authorizationStatus()
+        guard ResponseCompletionNotificationPolicy.shouldSchedule(
+            preferenceEnabled: preferenceEnabled,
+            authorizationStatus: status,
+            completedNormally: outcome == .completed,
+            sceneIsActive: sceneIsActive
+        ) else {
+            return false
+        }
+
+        await UserNotificationResponseCompletionScheduler().schedule(
+            ResponseCompletionNotificationRequest(sessionID: sessionID)
+        )
+        return true
     }
 }

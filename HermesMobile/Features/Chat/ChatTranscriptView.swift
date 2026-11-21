@@ -1147,7 +1147,7 @@ private struct ChatTranscriptMessageRow: View {
     }
 }
 
-private struct ChatScrollToBottomButton: View {
+struct ChatScrollToBottomButton: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let bottomPadding: CGFloat
@@ -1184,7 +1184,8 @@ private struct ChatScrollToBottomButton: View {
     }
 }
 
-private struct LoadOlderMessagesButton: View {
+/// Shared with the Bots transcript, which pages the same way.
+struct LoadOlderMessagesButton: View {
     let isLoading: Bool
     let onTap: () -> Void
 
@@ -1235,5 +1236,24 @@ enum ChatTranscriptRowFreshness {
     static func isFresh(timestamp: Double?, now: Date) -> Bool {
         guard let timestamp, timestamp.isFinite else { return false }
         return abs(now.timeIntervalSince1970 - timestamp) < window
+    }
+}
+
+/// The readable column for chat screens (Sessions chat, Bot Chat, Bot rooms).
+/// A phone fills it edge to edge less its padding; iPad and iPhone landscape
+/// stop at `maximum` and centre it, so lines stay short enough to read. The
+/// composer caps at the same column so their edges line up.
+enum ChatReadingWidth {
+    static let maximum: CGFloat = 768
+
+    /// Width of the transcript column inside `horizontalPadding` on each side.
+    static func contentWidth(viewportWidth: CGFloat, horizontalPadding: CGFloat) -> CGFloat {
+        min(max(0, viewportWidth - 2 * horizontalPadding), maximum)
+    }
+
+    /// `maxWidth` for a view that carries `horizontalPadding` on each side of
+    /// its own, so what sits inside that padding lines up with the column.
+    static func maximumWidth(horizontalPadding: CGFloat) -> CGFloat {
+        maximum + 2 * horizontalPadding
     }
 }

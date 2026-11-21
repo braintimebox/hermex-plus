@@ -18,7 +18,9 @@ struct SelectableTextPresentation: Identifiable, Equatable {
 /// One entry of the message action menu. The SwiftUI menu and the UIKit
 /// context-menu interaction both build from this list so they never drift.
 struct ChatMessageActionItem: Identifiable {
-    enum Kind: String {
+    /// No raw value: a Tapback carries its emoji, so the kind is Hashable rather
+    /// than a String case list. Both menus switch on it by pattern.
+    enum Kind: Hashable {
         case listen
         case regenerate
         case edit
@@ -29,6 +31,9 @@ struct ChatMessageActionItem: Identifiable {
         case forward
         case save
         case pin
+        /// One Tapback; consecutive ones form the menu's inline emoji row.
+        case react(String)
+        case removeReaction
     }
 
     let kind: Kind
@@ -36,6 +41,9 @@ struct ChatMessageActionItem: Identifiable {
     let systemImage: String
     let isEnabled: Bool
     let perform: () -> Void
+    /// True for the reaction this message already carries, so the menu can mark
+    /// it instead of offering it again.
+    var isSelected: Bool = false
 
     var id: Kind { kind }
 }
@@ -280,5 +288,65 @@ struct EditMessageSheet: View {
         }
         .presentationDetents([.medium, .large])
         .adaptiveFormPresentation()
+    }
+}
+
+// MARK: - UIKit menu (ported from 1.9.0)
+
+
+extension ChatMessageActionItem {
+    /// Rendered once per emoji: the menu rebuilds its icons on every long press.
+    @MainActor private static var emojiImages: [String: UIImage] = [:]
+
+    @MainActor
+    static func emojiImage(_ emoji: String) -> UIImage {
+        if let image = emojiImages[emoji] { return image }
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 22)]
+        let text = emoji as NSString
+        let image = UIGraphicsImageRenderer(size: text.size(withAttributes: attributes)).image { _ in
+            text.draw(at: .zero, withAttributes: attributes)
+        }.withRenderingMode(.alwaysOriginal)
+        emojiImages[emoji] = image
+        return image
+    }
+}
+
+// MARK: - UIKit menu for the item list
+
+extension Array where Element == ChatMessageActionItem {
+    @MainActor
+    func uiMenu() -> UIMenu {
+        var children: [UIMenuElement] = []
+        var tapbacks: [UIAction] = []
+        func closeTapbackRow() {
+            guard !tapbacks.isEmpty else { return }
+            children.append(UIMenu(options: .displayInline, preferredElementSize: .small, children: tapbacks))
+            tapbacks = []
+        }
+        for item in self {
+            let image: UIImage?
+            if case .react(let emoji) = item.kind {
+                image = ChatMessageActionItem.emojiImage(emoji)
+            } else {
+                image = UIImage(systemName: item.systemImage)
+            }
+            let action = UIAction(title: item.title, image: image) { _ in
+                item.perform()
+            }
+            if !item.isEnabled {
+                action.attributes = .disabled
+            }
+            if item.isSelected {
+                action.state = .on
+            }
+            if case .react = item.kind {
+                tapbacks.append(action)
+            } else {
+                closeTapbackRow()
+                children.append(action)
+            }
+        }
+        closeTapbackRow()
+        return UIMenu(children: children)
     }
 }

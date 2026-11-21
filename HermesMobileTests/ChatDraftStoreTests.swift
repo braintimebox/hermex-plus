@@ -4,6 +4,15 @@ import XCTest
 
 @MainActor
 final class ChatDraftStoreTests: XCTestCase {
+
+    /// The store stamps `lastUsedAt` on every write, so a raw draft never equals the
+    /// freshly built one a test compares against. These tests are about content; the
+    /// stamp is dropped on both sides instead of pinning a date that races the clock.
+    private func withoutStamp(_ draft: ChatDraft?) -> ChatDraft? {
+        guard var draft else { return nil }
+        draft.lastUsedAt = nil
+        return draft
+    }
     func testQuotesAreOrderedAndIsolatedByServerAndSession() async throws {
         let persistence = RecordingChatDraftPersistence()
         let store = ChatDraftStore(persistence: persistence, debounceDuration: .seconds(10))
@@ -110,7 +119,7 @@ final class ChatDraftStoreTests: XCTestCase {
 
         XCTAssertEqual(resolved, .empty)
         let stored = await store.draft(for: key)
-        XCTAssertEqual(stored, ChatDraft(settings: settings))
+        XCTAssertEqual(withoutStamp(stored), ChatDraft(settings: settings))
     }
 
     func testActiveStreamConsumptionClearsQuoteSnapshotUnlessComposerRevisionChanged() async {
@@ -137,7 +146,7 @@ final class ChatDraftStoreTests: XCTestCase {
         )
         XCTAssertEqual(consumed, .empty)
         var stored = await store.draft(for: key)
-        XCTAssertEqual(stored, ChatDraft(attachments: [attachment], settings: settings))
+        XCTAssertEqual(withoutStamp(stored), ChatDraft(attachments: [attachment], settings: settings))
 
         store.setContent(submitted, for: key)
         let revised = ComposerDraftContent(
@@ -509,7 +518,7 @@ final class ChatDraftStoreTests: XCTestCase {
 
         XCTAssertEqual(result, "")
         let draft = await store.draft(for: key)
-        XCTAssertEqual(draft, ChatDraft(text: "", attachments: [], settings: settings))
+        XCTAssertEqual(withoutStamp(draft), ChatDraft(text: "", attachments: [], settings: settings))
     }
 
     func testTextEnteredDuringSendIsNeverClearedOrReplaced() async {
@@ -659,15 +668,15 @@ final class ChatDraftStoreTests: XCTestCase {
         store.setSettings(settings, for: key)
 
         var draft = await store.draft(for: key)
-        XCTAssertEqual(draft, ChatDraft(text: "Keep me", attachments: [attachment], settings: settings))
+        XCTAssertEqual(withoutStamp(draft), ChatDraft(text: "Keep me", attachments: [attachment], settings: settings))
 
         store.setDraft("Keep me edited", for: key)
         draft = await store.draft(for: key)
-        XCTAssertEqual(draft, ChatDraft(text: "Keep me edited", attachments: [attachment], settings: settings))
+        XCTAssertEqual(withoutStamp(draft), ChatDraft(text: "Keep me edited", attachments: [attachment], settings: settings))
 
         store.setAttachments([], for: key)
         draft = await store.draft(for: key)
-        XCTAssertEqual(draft, ChatDraft(text: "Keep me edited", attachments: [], settings: settings))
+        XCTAssertEqual(withoutStamp(draft), ChatDraft(text: "Keep me edited", attachments: [], settings: settings))
     }
 
     func testSettingsOnlyDraftPersists() async throws {

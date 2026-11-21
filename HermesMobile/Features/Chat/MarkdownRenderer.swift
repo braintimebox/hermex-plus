@@ -1513,3 +1513,33 @@ private struct SelectableMarkdownHeading: View {
             }
     }
 }
+
+// MARK: - Streamed text animation
+
+/// Whether streamed text may animate as it arrives. Bots render snapshots that
+/// must appear whole, so they switch this off; everything else keeps the
+/// animation. Defined here because the renderer is the only reader.
+struct AllowsStreamedTextAnimationKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var allowsStreamedTextAnimation: Bool {
+        get { self[AllowsStreamedTextAnimationKey.self] }
+        set { self[AllowsStreamedTextAnimationKey.self] = newValue }
+    }
+}
+
+/// The colour a markdown table fades its cut-off edge into. Defined beside the
+/// renderer that reads it; the default matches the transcript background so a
+/// table never fades into a different colour than the surface behind it.
+struct MarkdownTableEdgeFadeColorKey: EnvironmentKey {
+    static let defaultValue: SwiftUI.Color? = SwiftUI.Color(.systemBackground)
+}
+
+extension EnvironmentValues {
+    var markdownTableEdgeFadeColor: SwiftUI.Color? {
+        get { self[MarkdownTableEdgeFadeColorKey.self] }
+        set { self[MarkdownTableEdgeFadeColorKey.self] = newValue }
+    }
+}

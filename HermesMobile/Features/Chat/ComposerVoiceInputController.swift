@@ -65,6 +65,14 @@ final class ComposerVoiceInputController {
         }
     }
 
+    /// Starts or stops listening from a synchronous call site. The composer's
+    /// buttons are not async; the work still lands on the main actor.
+    func scheduleToggle(currentDraft: String, updateDraft: @escaping (String) -> Void) {
+        Task { @MainActor in
+            await toggle(currentDraft: currentDraft, updateDraft: updateDraft)
+        }
+    }
+
     func stopKeepingTranscript() {
         suppressNextRecognitionError = true
         switch state {

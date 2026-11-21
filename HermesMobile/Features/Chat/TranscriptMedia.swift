@@ -132,17 +132,97 @@ enum TranscriptMediaSegment: Equatable {
     case media(TranscriptMediaReference)
 }
 
+/// Memoizes `TranscriptMediaParser.segments` for settled transcript rows.
+///
+/// Every assistant bubble parses its text on each body evaluation, and a
+/// transcript-wide flag flip (Send, a reply finishing) re-evaluates every row.
+/// The parse is pure over its content and workspace root, so a settled row pays
+/// it once. The result is a function of the key alone, so entries cannot carry
+/// anything from one server to another. `NSCache` evicts under memory pressure
+/// and is thread-safe.
+enum TranscriptMediaSegmentCache {
+    private static let storage: NSCache<Key, Box> = {
+        let cache = NSCache<Key, Box>()
+        cache.countLimit = 240
+        return cache
+    }()
+
+    private final class Key: NSObject {
+        let markdown: String
+        let workspaceRoot: String?
+
+        init(markdown: String, workspaceRoot: String?) {
+            self.markdown = markdown
+            self.workspaceRoot = workspaceRoot
+        }
+
+        override var hash: Int {
+            var hasher = Hasher()
+            hasher.combine(markdown)
+            hasher.combine(workspaceRoot)
+            return hasher.finalize()
+        }
+
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? Key else { return false }
+            return markdown == other.markdown && workspaceRoot == other.workspaceRoot
+        }
+    }
+
+    private final class Box {
+        let segments: [TranscriptMediaSegment]
+        init(_ segments: [TranscriptMediaSegment]) { self.segments = segments }
+    }
+
+    /// The transcript row's segments. Streaming text changes on nearly every
+    /// token, so it is parsed without touching the cache; storing it would
+    /// only evict the settled rows the cache exists for.
+    static func segments(in markdown: String, workspaceRoot: String?, isStreaming: Bool) -> [TranscriptMediaSegment] {
+        guard !isStreaming else {
+            return TranscriptMediaParser.segments(in: markdown, workspaceRoot: workspaceRoot)
+        }
+
+        let key = Key(markdown: markdown, workspaceRoot: workspaceRoot)
+        if let cached = storage.object(forKey: key) {
+            return cached.segments
+        }
+
+        let segments = TranscriptMediaParser.segments(in: markdown, workspaceRoot: workspaceRoot)
+        storage.setObject(Box(segments), forKey: key)
+        return segments
+    }
+
+    /// Test seam: drop memoized segments so a test can observe a cold pass.
+    static func removeAll() {
+        storage.removeAllObjects()
+    }
+
+    /// Test seam: whether this content and root currently have a memoized entry.
+    static func hasCachedSegments(in markdown: String, workspaceRoot: String?) -> Bool {
+        storage.object(forKey: Key(markdown: markdown, workspaceRoot: workspaceRoot)) != nil
+    }
+}
+
 enum TranscriptMediaParser {
     /// Splits an assistant message into text and media. `workspaceRoot` only resolves the
     /// relative forms of `![alt](path)`; an absolute path or a `file:` URL needs no root,
     /// and the server's `/api/media` allow-list decides what is actually served.
+    /// Bots opt into local file links, preserving relative destinations for the
+    /// originating host to resolve instead of applying a webui workspace root.
     static func segments(
         in markdown: String,
-        workspaceRoot: String? = nil
+        workspaceRoot: String? = nil,
+        includesLocalFileLinks: Bool = false
     ) -> [TranscriptMediaSegment] {
         guard !markdown.isEmpty else { return [] }
+        // Most replies name no media at all, and most lines of those that do
+        // name none either; a byte scan settles that before the
+        // per-character parse.
+        guard mayContainMedia(markdown, includesLocalFileLinks: includesLocalFileLinks) else {
+            return [.text(markdown)]
+        }
 
-        var segments: [TranscriptMediaSegment] = []
+        var segments = SegmentBuilder()
         var index = markdown.startIndex
         var isInFence = false
         var fenceCharacter: Character?
@@ -152,41 +232,44 @@ enum TranscriptMediaParser {
             let line = String(markdown[lineRange])
 
             if isInFence {
-                appendText(line, to: &segments)
+                segments.appendText(line)
                 if fenceMarker(in: line) == fenceCharacter {
                     isInFence = false
                     fenceCharacter = nil
                 }
             } else if let marker = fenceMarker(in: line) {
-                appendText(line, to: &segments)
+                segments.appendText(line)
                 isInFence = true
                 fenceCharacter = marker
+            } else if mayContainMedia(line, includesLocalFileLinks: includesLocalFileLinks) {
+                appendMediaSegments(in: line, to: &segments, workspaceRoot: workspaceRoot, includesLocalFileLinks: includesLocalFileLinks)
             } else {
-                appendMediaSegments(in: line, to: &segments, workspaceRoot: workspaceRoot)
+                segments.appendText(line)
             }
 
             index = lineRange.upperBound
         }
 
-        return segments
+        return segments.finish()
     }
 
     private static func appendMediaSegments(
         in line: String,
-        to segments: inout [TranscriptMediaSegment],
-        workspaceRoot: String?
+        to segments: inout SegmentBuilder,
+        workspaceRoot: String?,
+        includesLocalFileLinks: Bool
     ) {
         var cursor = line.startIndex
         var textStart = cursor
         let inlineCodeRanges = inlineCodeRanges(in: line)
 
         while cursor < line.endIndex {
-            if line[cursor...].hasPrefix(markdownImageMarker),
+            if (line[cursor...].hasPrefix(markdownImageMarker) || (includesLocalFileLinks && line[cursor] == "[")),
                !inlineCodeRanges.contains(where: { $0.contains(cursor) }),
                let image = markdownImage(in: line, from: cursor),
-               let reference = markdownImageReference(for: image, workspaceRoot: workspaceRoot) {
-                appendText(String(line[textStart..<cursor]), to: &segments)
-                segments.append(.media(reference))
+               let reference = markdownImageReference(for: image, workspaceRoot: workspaceRoot, includesLocalFileLinks: includesLocalFileLinks) {
+                segments.appendText(line[textStart..<cursor])
+                segments.appendMedia(reference)
 
                 cursor = image.end
                 textStart = cursor
@@ -200,10 +283,10 @@ enum TranscriptMediaParser {
                    from: line.index(cursor, offsetBy: 6),
                    syntax: .mediaToken
                ) {
-                appendText(String(line[textStart..<cursor]), to: &segments)
+                segments.appendText(line[textStart..<cursor])
 
                 let reference = TranscriptMediaReference(rawReference: String(line[referenceRange]))
-                segments.append(.media(reference))
+                segments.appendMedia(reference)
 
                 cursor = referenceRange.upperBound
                 textStart = cursor
@@ -219,13 +302,13 @@ enum TranscriptMediaParser {
                    from: line.index(cursor, offsetBy: fileURLMarker.count),
                    syntax: .fileURL
                ) {
-                appendText(String(line[textStart..<cursor]), to: &segments)
+                segments.appendText(line[textStart..<cursor])
 
                 let rawURL = String(line[cursor..<pathRange.upperBound])
                 let reference = TranscriptMediaReference(
                     rawReference: normalizedLocalPath(fromFileURL: rawURL)
                 )
-                segments.append(.media(reference))
+                segments.appendMedia(reference)
 
                 cursor = pathRange.upperBound
                 textStart = cursor
@@ -235,22 +318,22 @@ enum TranscriptMediaParser {
             cursor = line.index(after: cursor)
         }
 
-        appendText(String(line[textStart..<line.endIndex]), to: &segments)
+        segments.appendText(line[textStart..<line.endIndex])
     }
 
-    /// One `![alt](destination "title")` occurrence, already split apart.
+    /// One inline Markdown image or file link, already split apart.
     private struct MarkdownImage {
         let alt: String
         let destination: String
         let end: String.Index
     }
 
-    /// Reads a Markdown image starting at `![`. Brackets and parentheses nest and can be
+    /// Reads an image starting at `![`, or an opted-in link at `[`. Delimiters nest and can be
     /// backslash-escaped, so `![Build (1)](/tmp/build(1)/shot.png)` reads as one image
     /// rather than being cut at the first `)`. A reference-style image, which has no
     /// destination at all, stays ordinary Markdown.
     private static func markdownImage(in line: String, from start: String.Index) -> MarkdownImage? {
-        guard let altOpen = line.index(start, offsetBy: 1, limitedBy: line.endIndex),
+        guard let altOpen = line.index(start, offsetBy: line[start] == "!" ? 1 : 0, limitedBy: line.endIndex),
               altOpen < line.endIndex,
               let altEnd = balancedEnd(in: line, after: altOpen, open: "[", close: "]")
         else { return nil }
@@ -357,8 +440,18 @@ enum TranscriptMediaParser {
     /// already does with them.
     private static func markdownImageReference(
         for image: MarkdownImage,
-        workspaceRoot: String?
+        workspaceRoot: String?,
+        includesLocalFileLinks: Bool
     ) -> TranscriptMediaReference? {
+        // Bot downloads resolve relative paths on the originating host. Do not
+        // turn a phone-local base URL into a server filesystem location.
+        if includesLocalFileLinks {
+            let destination = image.destination
+            guard !destination.isEmpty, !destination.hasPrefix("#"), !destination.hasPrefix("//"),
+                  URL(string: destination)?.scheme == nil || URL(string: destination)?.scheme == "file"
+            else { return nil }
+            return TranscriptMediaReference(rawReference: destination, altText: image.alt)
+        }
         guard let path = FileReference.absoluteMediaPath(
             image.destination,
             workspaceRoot: workspaceRoot
@@ -371,13 +464,64 @@ enum TranscriptMediaParser {
         return reference.isRasterImageCandidate ? reference : nil
     }
 
-    private static func appendText(_ text: String, to segments: inout [TranscriptMediaSegment]) {
-        guard !text.isEmpty else { return }
+    /// Collects parsed segments. Adjacent text accumulates in one pending run
+    /// that grows in place and is flushed only when media interrupts it, so a
+    /// long reply parses in linear time instead of recopying the text so far
+    /// on every line.
+    private struct SegmentBuilder {
+        private var segments: [TranscriptMediaSegment] = []
+        private var pendingText = ""
 
-        if case let .text(existing) = segments.last {
-            segments[segments.count - 1] = .text(existing + text)
-        } else {
-            segments.append(.text(text))
+        mutating func appendText(_ text: some StringProtocol) {
+            pendingText.append(contentsOf: text)
+        }
+
+        mutating func appendMedia(_ reference: TranscriptMediaReference) {
+            flushText()
+            segments.append(.media(reference))
+        }
+
+        mutating func finish() -> [TranscriptMediaSegment] {
+            flushText()
+            return segments
+        }
+
+        private mutating func flushText() {
+            guard !pendingText.isEmpty else { return }
+            segments.append(.text(pendingText))
+            pendingText = ""
+        }
+    }
+
+    /// False when `markdown` holds none of the markers a media segment starts
+    /// with (`![`, `MEDIA:`, `file://`, or any `[` for opted-in file links),
+    /// so the whole reply is one text segment. One pass over the UTF-8 bytes.
+    private static func mayContainMedia(_ markdown: String, includesLocalFileLinks: Bool) -> Bool {
+        var markdown = markdown
+        return markdown.withUTF8 { bytes in
+            let mediaToken = Array("MEDIA:".utf8)
+            let fileURL = Array(fileURLMarker.utf8)
+
+            func hasPrefix(_ marker: [UInt8], at offset: Int) -> Bool {
+                guard bytes.count - offset >= marker.count else { return false }
+                return marker.indices.allSatisfy { bytes[offset + $0] == marker[$0] }
+            }
+
+            for offset in bytes.indices {
+                switch bytes[offset] {
+                case UInt8(ascii: "["):
+                    if includesLocalFileLinks || (offset > 0 && bytes[offset - 1] == UInt8(ascii: "!")) {
+                        return true
+                    }
+                case UInt8(ascii: "M"):
+                    if hasPrefix(mediaToken, at: offset) { return true }
+                case UInt8(ascii: "f"):
+                    if hasPrefix(fileURL, at: offset) { return true }
+                default:
+                    break
+                }
+            }
+            return false
         }
     }
 

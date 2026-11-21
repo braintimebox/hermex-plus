@@ -1,3 +1,614 @@
+## 4.1.4 — Bots composer: controls row back under the editor
+
+4.1.3 shipped the controls row inside the editor's `HStack`, so the toolbar
+stood to the right of the text field and squeezed it — the composer read as
+deformed. Sessions keeps the row in the card's `VStack`, under the editor.
+
+- `toolbarRow` moved out of the `HStack` into the `VStack` of `composerSurface`,
+  gated by `showsToolbar`, with the Sessions insets (horizontal 8, bottom 6, top 2).
+- Pill insets `.padding(.trailing/.vertical, isExpanded ? 0 : pillInset)` moved
+  from the surface's `VStack` onto the editor's `HStack`, exactly where Sessions
+  keeps them.
+- Surface keeps the 1/1 paddings in the expanded state.
+- Mic and Send/Stop pulled out of the horizontal control scroller, as Sessions
+  does: a scrollable control on a phone-width row stays off-screen until the row
+  is dragged, so only the selectors scroll now.
+
+## 4.1.3 — Bots composer layout matches Sessions
+
+Moves the controls row inside the composer card, under the editor, so Send /
+Stop / mic sit on the same glass surface as the field instead of a separate
+bar underneath. Field padding 6, surface paddings 1/1, no opaque band — same
+as Sessions.
+
+## 4.1.3 — Bots composer matches Sessions, send button long-press menu
+
+- **Send button like Sessions:** long-press opens context menu with **Send / Steer / Queue** instead of a separate modal card. Send goes straight out, Steer guides the running turn, Queue places the message behind the current one.
+- Composer toolbar row inside the card under the editor (same as Sessions).
+- Composer field padding 12 → 6, surface paddings 1/1.
+
+## 4.1.2 — Bots composer laid out like Sessions
+
+4.1.1 adopted the shared rules; the geometry still differed, and that is what reads
+as "a different composer".
+
+- **Controls row moved inside the card.** Sessions renders `toolbarRow` inside the
+  glass surface (`padding(.horizontal, 8).padding(.bottom, 6).padding(.top, 2)`);
+  Bots drew it as a separate row underneath, sitting on an opaque `systemBackground`
+  band with negative padding and an `ignoresSafeArea` escape. That band is what made
+  the Bots composer visually taller and visually detached from the field.
+- **Field padding 12 → 6**, matching the value Sessions measured down from 12
+  because the empty focused card read as four lines.
+- **Surface paddings 2/4 → 1/1**, the same as Sessions.
+
+Voice notes and Choose model (4.1.1 and 4.1.0) are unchanged; this release only
+aligns the layout.
+
+## 4.1.1 — the Bots composer uses the same rules as Sessions
+
+Two of the Bots composer's own implementations were replaced by the shared ones,
+and the workflow now builds `feat/**` on push instead of waiting to be started by
+hand.
+
+- **Attachment strip no longer reserves empty space.** Bots painted
+  `ComposerAttachmentStripView` on every expanded state, attachments or not —
+  exactly the band `ChatComposerGrowth` exists to remove (~25 pt above an empty
+  field). It now asks `showsAttachmentStrip(hasAttachments:)`.
+- **One send gate.** `canSend` was a private expression that combined content and
+  the available mode. The content and busy half now comes from
+  `ChatComposerSendGate.isDisabled(...)`, so "is there anything to send" has one
+  answer on both surfaces; which mode that send becomes (send / queue / steer)
+  stays Bots' own decision.
+- **Pushes build.** `feat/**` added to the workflow's branches. Every run in this
+  line had been a manual `workflow_dispatch`, which is why a failed build waited
+  for someone to remember it.
+
+The status pill stays: it carries reconnect, update sign-in, show request, cancel
+upload, dismiss and retry — six actions the Sessions status line cannot express.
+
+## 4.1.0 — cumulative: everything from 4.0.7 to 4.1.0
+
+This release is the rollup the owner asked for: every fix shipped between 4.0.7
+and 4.0.9, plus the two Bots gaps that were still open — a model picker that
+refused to appear on a bot with no model, and a composer that could not record a
+voice note.
+
+### Bots composer catches up with Sessions
+
+- **Voice notes.** The microphone button on the Bots composer had empty
+  handlers: `isRecordingVoiceNote: false`, and no start, drag or end callback.
+  Hold-to-record now works the way Sessions does — the clip is staged into the
+  same attachment draft the "+" picker feeds, slides up past the threshold to
+  cancel, and is capped at five minutes. A half clip is dropped when the screen
+  goes away, and dictation stops first so only one microphone session is open.
+- **Model picker on a bot with no model.** Creating a bot without pinning a
+  model is allowed, and the host then reports an empty `model` in `model.options`.
+  `BotModelCatalog.active` was nil, `mayChangeModel` required it to be non-nil,
+  and `BotComposerSettings` drew its menu inside `if let active` — so a bot with
+  no model showed **no model control at all** and refused every change. The one
+  screen that could have fixed it was unreachable, and the user was left with a
+  bot that could not answer and no way to give it a model. Now the composer
+  offers **Choose model** whenever the host can accept one, and the same picker
+  sheet assigns the first model.
+
+### The silence this line is named after (4.0.9)
+
+Sending a prompt could leave the chat spinning with no error, no reply and a
+dead composer. The host had not hung: it was retrying a provider that answered
+`402 Insufficient Balance`, and the client never learned how the turn ended.
+
+- **Stall watchdog.** While a turn runs the chat asks the host where it is every
+  10 s, which is enough to pick up a retained failure (`inflight.error`) and let
+  the existing outcome row appear.
+- **Named silence.** After 45 s with no answer the chat says so and offers
+  **Stop**.
+- **The submit window is covered.** `turn` now reaches `.submitting` when Send is
+  tapped, the watchdog no longer disarms itself during `localOperation`, and
+  `mayStop` includes `.submitting` — so the banner that names a silent host also
+  carries the button that gets out of it. A request refused before dispatch
+  restores `.idle` instead of stranding the composer mid-turn.
+
+### Telemetry that fires (4.0.8)
+
+- `send button tapped` on the touch itself, before validation: if it is missing
+  from the log, the tap never reached the code.
+- `submit network send started` when the request leaves the app: if it is present
+  and no stream follows, the fault is on the host.
+- `surface: bots` / `surface: sessions` on every event, so a stall names its
+  screen instead of a synthetic session id.
+
+### The Bots port fixes (4.0.7)
+
+`json.loads` crash on malformed host answers; composer measured once per settle
+instead of once per frame (nineteen `ComposerField` measurements in one second,
+then "main thread stalled 2s"); duplicate diagnostic lines dropped within two
+seconds; one answer per turn instead of several bubbles; copy while a response
+streams; queue by tap instead of the upstream question card; Live Activity starts
+from the delegate rather than an empty registry and notifies only on completion;
+`reasoning.available` restored; `eventsRetried` counted at the retryable outcome;
+the uncertain-send composer unbricked by a full snapshot plus "Send again" /
+"Mark as sent".
+
+## 4.0.9 — a quiet host is a state, not an endless spinner
+
+Sending a prompt to a bot could leave the chat spinning forever with no error, no
+reply and a composer that looked dead. The host had not hung: it was retrying a
+provider that answered `402 Insufficient Balance`, and the client never learned
+how the turn ended.
+
+**Why the error never arrived.** The chat re-reads the host's snapshot only when
+the host sends an event, and the host retains a failed turn's error *in that
+snapshot* (`inflight.error` / `error_surface`). While a provider retries, there
+are no events — so the client sat in `running`, the outcome row never rendered,
+and a failure that the host was already holding stayed invisible. An endless
+spinner and a frozen app look identical from the outside.
+
+- **Stall watchdog.** While a turn runs, the chat asks the host where it is every
+  10 s. That is enough to pick up a retained failure, so the existing outcome row
+  appears — billing link, Retry, the provider's own words — instead of silence.
+- **Named silence.** After 45 s with no answer the chat says so in plain words
+  and offers **Stop**, because "still working" was a guess no longer supported by
+  any evidence from the host.
+- Both clear on the next snapshot and on any turn change; a resting chat starts
+  no timer and spends nothing.
+
+This does not fix the provider, the balance or the model pinning — it makes the
+failure visible and actionable, which is what the app owes the user either way.
+
+## 4.0.8 — bot telemetry that actually fires
+
+The 2 s stall on 13.11 was captured, but the bot screen sent **zero** telemetry
+events — “send tapped”, “submit start”, everything was missing from
+`hermex-logs.jsonl`. If the button tap didn’t log, we couldn’t tell whether
+the tap reached the code or the UI froze first.
+
+- **`send button tapped`** now fires the instant the send button is touched,
+  before any validation — if this doesn’t appear in the log, the tap never
+  reached the code (UI freeze, dead button, wrong build).
+- **`submit network send started`** fires when the HTTP request leaves the
+  app — if this appears but no stream follows, the problem is on the host,
+  not the app.
+- Surface stamp `surface: bots` on every event so a stall is attributable to
+  Bots vs Sessions without guessing.
+
+## 4.0.7 — everything since 4.0.3, released
+
+Bots fixes: `json.loads` crash on malformed host answers, composer measure once
+per settle instead of once per frame (06:08:24 had nineteen ComposerField
+measurements in one second, then "main thread stalled 2s"), telemetry surface
+tagged `bots`/`sessions` so a stall names its surface instead of a synthetic
+session id, duplicate diagnostic lines dropped within two seconds, send path
+logged (tap / refused / start), one answer per turn instead of several bubbles,
+copy while a response streams, queue by tap instead of the upstream question
+card, Live Activity starts (host now comes from the delegate, not an empty
+registry), notify only on completion, `reasoning.available` handler restored,
+`eventsRetried` counted at the retryable outcome, uncertain-send composer
+unbricked by a full snapshot and "Send again" / "Mark as sent".
+
+## 4.0.6 — telemetry that can name the culprit
+
+The 2 s stall of 13.11 carried a stack (`AttributeGraph`), a flag that the chat was
+streaming, 150 messages and 68 displayed rows — and no way to tell **which** chat:
+`sessionId` was synthetic and the screen field named the view class, not the surface.
+
+- Every event now carries `surface` (bots / sessions), stamped by the composer that is
+  on screen.
+- Identical diagnostic lines within two seconds are dropped and counted, not shipped:
+  one device log held 3 523 `ComposerField` and 3 823 draft events against 23 stalls.
+- Freeze events report how many duplicates were suppressed.
+
+## 4.0.5 — the Bots screen finally reports what it does
+
+22 090 events on the host and **not one** carried a `Bot` screen: the ported
+Bots UI shipped without telemetry, so every "the message does not send" report
+had to be answered by reading code.
+
+Three events now cover the path: the send tap (turn, connection, `maySend`,
+`mayGuide`, uncertainty), a `submit refused` when the prepared action is stale,
+and `submit start` with mode, turn, character and attachment counts. The next
+failure is readable from `hermex-logs.jsonl` instead of guessed.
+
+## 4.0.4 — the composer stops measuring on every frame
+
+Device telemetry (hermex-logs.jsonl) put the freeze on record: twenty-plus
+`ComposerField` measurements a second while the keyboard settled, followed by
+"main thread stalled 2s" on ChatView. Every width change re-entered the
+measurement, and each entry ran a synchronous `ensureLayout`.
+
+Measurement is now coalesced into one pass 80 ms after the field settles, so an
+animation frame no longer forces a text layout. Height can land one frame late;
+it can no longer block the main thread.
+
+## 4.0.3 — stability pass on the Bots port
+
+Five things the port lost or widened, each found by a red test rather than by
+reading the diff:
+
+- **Live Activity never started.** The coordinator asked `ServerRegistry` for the
+  host, which is empty outside the running app, so `start` was skipped silently.
+  The host now comes from the delegate, with the registry as the fallback.
+- **A failed run notified.** 3.9.74 alerted only on completion; the port widened
+  the guard to every terminal state. Completion-only, as before.
+- **`reasoning.available` had no handler**, so a finalized reasoning block never
+  reached the transcript.
+- **`eventsRetried` counted one short**: it was incremented on the next send
+  instead of where the retry is decided.
+- **An unconfirmed send bricked the composer.** `.uncertain` outranked every
+  snapshot and no control could write again. A full snapshot now settles it, and
+  the composer offers "Send again" / "Mark as sent" when the host stays silent.
+
+Also: draft tests compared a whole `ChatDraft` against one with no `lastUsedAt`,
+which the store stamps on every write.
+
+## 4.0.2 — `@.ipa`: extension queries across the workspace
+
+The composer's `@` panel listed one folder per query. A query whose segment is
+only an extension names no folder, so `@.ipa` answered with whatever sat at the
+workspace root — in practice nothing, and the file had to be found by walking
+the tree a folder at a time.
+
+- **`@.ipa`, `@*.ipa`, `@.PDF`** now walk the workspace breadth first and offer
+  every file with that extension, sorted by path.
+- **Bounded on purpose:** four levels deep and 120 folders per query, each
+  directory listed at most once. A folder is never re-listed, so a host that
+  reports a cycle cannot trap the walk, and the request count stays predictable
+  on a slow host.
+- **Nothing else changes:** a query naming a folder or a file keeps the old
+  single-folder behaviour, and a segment with a slash is never treated as an
+  extension.
+
+## 4.0.1 — bots, brought over from the 1.9 line
+
+Bots existed in this fork as a skeleton: 14 of upstream's 61 files, and none of
+the transport they talk through. Every screen was there, nothing behind it could
+connect. This release brings the feature over whole.
+
+- **The Bots stack from v1.9.0**: 61 files, 18,016 lines, replacing the
+  skeleton. Inbox, chat, rooms, creations, mentions, artifacts, history cache.
+- **The transport it needs**: `Networking/Hermes` — `HermesConnection`,
+  `HermesCall`, `HermesGateway`, `HermesREST`. Bots sign in to the host
+  dashboard directly; WebUI stays the separate connection it always was, so the
+  hybrid shape is upstream's, not a compromise of ours.
+- **Push plumbing**: pairing, registrar, relay, preview, notification router.
+- **Face ID app lock**: `AppLock`, `AppLockWindow` and
+  `NSFaceIDUsageDescription`, off by default, app-wide.
+- **Attachments in bots**: the full attachment picker and the camera controller
+  behind it.
+
+### Removed with the skeleton
+
+- Thirteen tests in `BotPendingRequestTests` covered the skeleton's streamed
+  desktop requests (`BotStreamRequest`, `streamRequest`, `mayDecline`,
+  `declineDesktopTask`). The 1.9 line has no streamed-request surface, so those
+  assertions could not describe it; the file's approval, clarify and credential
+  coverage remains.
+- `BotConnectionVersionTests` described the skeleton's tested-version note
+  (`testedHermesVersion`, `untestedVersionNote`); the 1.9 line reports the
+  host's version on the connection instead, so the file went with the skeleton.
+- Three receipt assertions in `BotConversationTests` read `promptReceipt`,
+  which the 1.9 conversation does not publish; the draft-clearing and call-count
+  assertions they sat beside are kept.
+- `BotChatPresentationTests` and `BotClientTests` described the skeleton's API:
+  `isFocused`/`onResolveHeldMessage` on its chat screen, `mayDecline` on its
+  conversation, a two-argument socket factory. That API is gone with the
+  skeleton, so the tests went with it; v1.9.0's own bot tests (`BotAvatarTests`,
+  `BotConversationTests`, `BotPendingRequestTests`, `BotActivityTests`) cover the
+  replacement.
+
+### What this build does and does not wire up
+
+- **Wired:** the Bots inbox, creation, chat, rooms, mentions, artifacts and their
+  dashboard transport; the chat's local Live Activities through
+  `AgentLiveActivityManager`.
+- **Present but not wired:** the push stack (pairing, registrar, relay, router,
+  preview) compiles, but no application delegate adopts `PushAppDelegate` and no
+  settings screen presents `HermexPushSectionView`. Face ID app lock
+  (`AppLock`, `AppLockWindow`) compiles and `AppLock.shared.isLocked` is read by
+  the composer, but nothing presents the lock window. Both arrive with a signed
+  build: an unsigned IPA cannot carry `aps-environment` at all.
+- **Bundle gaps still open:** `HermesAPSEnvironment` and
+  `HermesKeychainAccessGroup` are read by the push code and are absent from
+  `Info.plist`; `UIBackgroundModes` lists `audio` only, with no
+  `remote-notification`; the ATS exception domain `100.64.0.0/10` is not a valid
+  ATS key (CIDR is unsupported), and `NSAllowsLocalNetworking` is unset, so
+  plain-HTTP access to a local bot host needs device verification.
+
+### Fork adaptations, not copies
+
+- `ChatMessage.displayMetadata` added: the Bots screens read reactions and
+  delegation state from it, and the model never carried the field. Both host
+  spellings (`display_metadata`, `displayMetadata`) decode.
+- `BotHistoryCache.cost` rewritten with explicit loops. The chained `reduce`
+  made the compiler give up on type checking and fail the target over one
+  arithmetic line.
+- `ChatMessageTimestampFormatter.separator(forUnixTimestamp:)` implemented
+  locally; the fork's formatter only had `shortTime`.
+- The attachment camera was appended to the fork's own `CameraPickerView.swift`
+  rather than replacing it: the chat composer still opens that view.
+
+### Guard against a repeat
+
+`scripts/check-pbxproj-paths.py` resolves every registered `.swift` through its
+group chain and fails when the file is not on disk. Three CI rounds were lost to
+`Auth/Auth/…` and `Shared/Shared/…` paths that Xcode only reports at build time.
+
+## 4.0.0 — cumulative line opens with measurement
+
+4.0 is a cumulative release line: features land here one block at a time and
+accumulate until the release is cut. The first block is telemetry, because a
+cumulative build that mixes search, Face ID and rendering work is unmeasurable
+without attribution — the 3.9.70 ProMotion regression cost two CI cycles
+precisely because the change had no counter in the log.
+
+### Telemetry
+
+- **Share outcome is recorded.** `share received` proved only that a payload
+  reached the routing switch; a staging or acknowledgement failure afterwards
+  left a healthy-looking log and an empty chat. `share_staged` and
+  `share_ack_failed` now bracket that path, so the funnel can be computed as
+  arrived → staged → sent rather than guessed.
+- **Memory has a curve, not just a death.** Physical footprint was sampled only
+  at freeze time, which meant a session climbing to 1.5 GB stayed invisible
+  until it died. A 30 s utility-queue sample records `memoryMB`, so growth is
+  visible while it is still cheap to fix.
+
+### Corrections to the previous audit
+
+- `networkMs` was reported as unmeasured; it is measured and written to
+  `loadMessages network` extras. The zeroed field in that event is `durationMs`,
+  not the network figure.
+- `mergeMs` was reported as dead; it is emitted conditionally, on
+  `identityPreservingMerge slow` when the merge exceeds 50 ms.
+
+### Inherited from the 3.9 line
+
+Attachment picker available while the agent streams (3.9.73) and scheduled
+messages keeping their attachments (3.9.74) both ship in this line unchanged.
+
+### Identity
+
+The 4.0 line installs beside the stable one: `com.braintimebox.hermex4`,
+app group `group.com.braintimebox.hermex4`, display name "Hermex 4.0",
+artefact `Hermex4-4.0.0.ipa`.
+
+## 3.9.74 — scheduled messages keep their attachments
+
+A scheduled message always arrived without its files. The model has carried
+`attachmentsJSON`, `setAttachments` and an `init(pending:)` bridge all along, but
+nothing ever filled the field: `saveScheduledMessage` built the row from the text
+alone, so the composer's attachments were dropped at schedule time — before any
+delivery code ran.
+
+- **Capture at schedule time.** The composer's pending attachments are mapped
+  into `ScheduledMessageAttachment` and stored on the row; the composer is then
+  cleared, because those attachments now belong to the pending message and would
+  otherwise be sent twice.
+- **Attachment-only messages are allowed.** Scheduling a file with no text is a
+  legitimate send, so the emptiness guard accepts either text or attachments.
+- **Same-chat delivery restores them.** "Send Now" into the current chat hands
+  the stored server-side paths back to the composer (`restorePendingAttachments`)
+  before sending, so the upload is not repeated and the send carries the files.
+- **Cross-chat delivery passes them to the API.** `startChat` has always accepted
+  `attachments`; the scheduled path simply never used it. A small
+  `toJSONValue()` mirrors `PendingAttachment`'s payload exactly.
+- **Server sync includes them.** The autonomous dispatcher can only deliver what
+  it was told about, so the webhook body now carries the same attachment list
+  when non-empty. A host that ignores the field behaves exactly as before.
+
+Existing rows keep `attachmentsJSON = nil` and remain text-only — no migration is
+required, and none was performed.
+
+## 3.9.73 — attachments stay available while the agent is working
+
+Picking an attachment stalled whenever a run was in flight: the Attach menu
+(File / Photos / Camera) was disabled together with the configuration controls,
+because both used `isConfigurationControlDisabled`, which includes
+`isWaitingForStream` (`ChatComposerView.swift`).
+
+- **The Attach menu has its own gate now** — `isReadOnly || isUploadingAttachment`.
+  Staging an attachment only fills the draft and leaves with the next send, so a
+  running stream is no reason to close the picker. A second upload in flight still
+  blocks another one.
+- Configuration controls keep the stricter gate: changing the model, workspace or
+  profile during a run is still refused.
+
+Version bump is a single line in `Config/Version.xcconfig`; `VERSION` is
+regenerated and the 16 + 8 project references follow.
+
+Not included: scheduled messages still drop attachments at creation time
+(`ChatView.swift` builds `PendingScheduledMessage` without `attachmentsJSON`).
+That is a separate change and a separate build.
+
+## 3.9.72 — one source for version, build number and identity
+
+Version and identity were typed into many places at once, so a release could
+ship a build whose About screen, IPA file name and CI artifact disagreed. This
+release removes the places where that is possible.
+
+- **`Config/Version.xcconfig` is the only place with numbers.** `APP_VERSION` and
+  `APP_BUILD` live there; the project's 16 `MARKETING_VERSION` and 8
+  `CURRENT_PROJECT_VERSION` entries now reference them, and `VERSION` is a
+  generated mirror written by `scripts/sync-version.py`.
+- **`Config/Identity.xcconfig` is the only place with identity.** Bundle id, app
+  group, URL scheme, display name, product name and line. `APP_DISPLAY_NAME` left
+  `project.pbxproj` (it was duplicated there), so renaming an app is one line.
+- **A line is a file, not a merge.** The test line installs beside the stable one
+  by changing `Identity.xcconfig` only; nothing in the project knows which line
+  it is.
+- **Gate 14 no longer pins one literal bundle id.** It used to require exactly
+  `com.braintimebox.hermexplus`, which made a second installable line impossible:
+  the test line's `...hermex4` tripped the gate and the build never ran (run
+  42391831464). The invariant is now "not upstream's namespace, and the app group
+  matches the bundle id".
+- **Gate 18 is new:** it fails when `VERSION`, `Config/Version.xcconfig` and
+  `project.pbxproj` disagree, when a numeric version literal reappears in the
+  project, or when `APP_DISPLAY_NAME` is set outside the identity file.
+- **`release-check.py` resolves `$(APP_VERSION)`** instead of only accepting a
+  numeric literal, so the single-source form passes the release invariants.
+- Gate headers no longer print a denominator: the numbers were stale (9, 13, 15,
+  16, 17 coexisted) and contradicted each other in the same run.
+
+No runtime behaviour changes: no view, model or networking code was touched.
+
+## 3.9.71 — ProMotion request reverted: it made streaming choppier
+
+3.9.70 asked both display links for `preferredFrameRateRange 60...120` to make a
+90–120 fps target measurable. On-device telemetry from a 3.9.70 session (build
+202611071504, iPhone, iOS 27.2, thermal fair, 149 events) shows the opposite of
+the intent:
+
+| scenario | 3.9.68 | 3.9.70 |
+|---|---|---|
+| stream, frames > 33 ms | 7.61 % | **17.37 %** |
+| stream, frames > 16.7 ms | 3.07 % | **8.42 %** |
+| `frameAvgMs` per stream commit | ~16–35 ms | **31–66 ms** |
+
+An average frame of 43–66 ms during generation is 15–23 fps. The range made the
+system target a rate the pipeline cannot hold, so frames arrived unevenly
+instead of simply at 60 Hz. Sample is small (190 stream frames) but the direction
+matches the reported symptom.
+
+- **Range removed from both display links.** Default pacing is restored. ProMotion
+  is not the path to smoothness while the frame budget is still exceeded; the
+  budget has to be freed first.
+- **`refreshRate` now always has a value.** 3.9.70 recorded `refreshRate: 0`
+  because the window scene is not connected when the watchdog starts; it now
+  falls back to the screen's maximum.
+
+Unchanged: the keyboard focus fix (generation guard + `isFocused` recheck), jank
+`heavyOp` attribution, device context, composer prev → next diagnostics. None of
+them touch the streaming render path.
+
+No FPS claim. The next step is measuring whether the revert restores 3.9.68
+streaming numbers before any further work on frame pacing.
+
+## 3.9.70 — Keyboard focus survives, and telemetry starts naming causes
+
+Baseline measured on 3.9.68 before any change (22 557 events, 31.10–07.11):
+scroll frames over 33 ms 2.52 %, scroll+stream 5.33 %, stream 7.68 %; jank
+15.38 per 1000; stalls 0.44 per 1000; `transcriptMessages.fullRecompute`
+69–111 ms; composer oscillation 6 cycles; share 57.7 % (received → agent
+stream); draft completion 99.4 %. Of 347 jank events, 0 carried a `heavyOp`
+or a stack — the most frequent symptom could not name its cause. The frame
+histogram reported p50 = 16.67 ms in 96.4 % of scroll windows, so a 90–120 fps
+target was unmeasurable rather than merely unmet.
+
+- **Keyboard: a queued blur can no longer close a newer editing session.** The
+  deferred focus task rechecked only `textView.isFirstResponder` before calling
+  `resignFirstResponder()`, so a task scheduled before a new focus session could
+  dismiss it — the reported "keyboard drops while I type". It now bumps a
+  generation on every request and rechecks both the generation and `isFocused`
+  (upstream 1.8.0 / 1.9.0).
+- **ProMotion is requested explicitly** on both display links. `Info.plist`
+  already carried `CADisableMinimumFrameDurationOnPhone`, but without
+  `preferredFrameRateRange` the link stays at 60 Hz and every window reports
+  16.67 ms. This makes the frame budget measurable; it does not by itself
+  raise the frame rate.
+- **Jank carries attribution.** Above a 100 ms frame the event now records the
+  in-flight `heavyOp`, the rendered row count and the streaming/scroll context,
+  so a jank spike names its cause instead of only its size. Stack capture is
+  deliberately absent: `MainThreadStackCapture` reads the *main* thread's
+  registers and is unsafe when called from the main thread (it crashed the test
+  host with SIGSEGV). A safe capture needs a background hop plus correlation;
+  that is a separate change, and per-frame stack traces are excluded by design.
+- **Device context once per launch:** model, iOS version, build number, screen
+  refresh rate, thermal state, low-power mode and physical memory. Freeze
+  severity is not comparable across devices or thermal states without it.
+- **Composer height events carry prev → next**, so the 218 ↔ 253 oscillation
+  can be diagnosed rather than merely counted. Diagnostics only; no smoothing
+  or delay was added to hide it.
+
+No optimisation of the transcript or scroll path is included: neither is claimed
+until it is measured. 90–120 fps is not claimed for this build.
+
+## 3.9.68 — Diagnostics survive the network and the crash
+
+`HermexLogger` was fire-and-forget: it removed an event from a memory array
+before the POST resolved, and passed an empty completion handler to
+`URLSession`. A dropped connection, a 5xx or a force-quit deleted diagnostics
+permanently — including the events logged right before a hang, which are the
+ones worth keeping. A separate measurement put the loss at 22.95% (12 332 of
+41 397 keyed events). Three things change.
+
+- Events are durable before they are sent. `TelemetryEventQueue` appends each
+  event to `Application Support/HermexTelemetry/pending-events.jsonl` before the
+  first network attempt and removes it only when the server confirms it. The
+  queue is restored on launch, so a kill mid-flight loses nothing.
+- The reply is actually read. `send()` now inspects the status, the body and
+  `ok`, and uses the server's `received` count to decide what to remove. A 2xx
+  with an unreadable body is not a confirmation. A retried batch legitimately
+  answers `stored: 0` with `received: N` — the server counts duplicates — so
+  only `received` is used as the ack.
+- Retries are bounded and categorised. Transport errors, timeouts and 5xx back
+  off 1 → 2 → 4 → 8 → 16 → 30 s, then once per 30 s; 429 honours `Retry-After`
+  (clamped to 1…600 s); 413 halves the batch instead of repeating it; permanent
+  4xx (400/401/403/404/…) are quarantined in place — kept on disk with the
+  reason attached — so one bad event cannot block the queue.
+
+Identity is `correlationId:seqNo`, the same key the server deduplicates on, so a
+resend after a lost response cannot create a duplicate. The queue is capped at
+10 000 events; overflow evicts the oldest non-priority event first and keeps
+`freeze`/`error` as long as possible, counting every drop.
+
+Not measured yet: whether delivery actually improves on a device. That needs a
+build installed and a run with the network cut; no reliability claim is made
+here.
+
+## 3.9.67 — The chat stops freezing while the cache is written
+
+- Session cache writes ran on the main thread. `CacheStore.cacheSessions` and
+  `cacheSession` were `@MainActor`, while their callers already ran on
+  `sessionWriteQueue` with a context created there — so every write hopped to
+  main and did fetch + upsert + save + maintenance there, against a context
+  owned by another queue. 3.9.64 telemetry: `Cache Write (sessions)` at 4 225 ms,
+  6 999 ms, 2 638 ms, 2 043 ms, with freezes of 3 262 ms and 3 053 ms in the
+  same period. Both writers are now non-isolated, like `cacheMessages` already
+  was, and the fork path writes through the same queue.
+- Freeze attribution was lying. `HeavyOperationTracker` kept one global label,
+  so a background write overwrote the main-thread label and its `end()` cleared
+  it: a 3 262 ms freeze was reported as `CacheStore.cacheMessages`, which runs
+  off-main. The tracker now ignores begin/end outside the main thread;
+  background work remains visible through its own phase.
+- Gate 11 (duplicate call arguments) grouped all `(` before all `)`, so on
+  `) ?? ModelCatalogOption(` the close removed the frame the open had pushed.
+  That produced a permanent false "providerID passed twice" on
+  `ModelPickerSheet.swift:881` — in code that compiles and whose suite is green.
+  Parentheses are now applied in source order.
+
+Not measured yet: whether the freezes are actually gone on device. That needs a
+build installed and new telemetry; no performance claim is made here.
+
+## 3.9.66 — Diagnostic: measure the cost of a streaming commit
+
+(Reserved for the instrumentation branch; not part of this release.)
+
+## 3.9.65 — A scheduled message stops retrying what can never succeed
+
+- Scheduled delivery ignored `DeliveryFailure.retryable`. One message addressed to
+  a chat the server no longer had produced **620** `POST /api/chat/start`
+  requests over 68 hours, every one answered `404`. A non-retryable failure is now
+  terminal on the first attempt; a retryable one stops at five attempts. The row
+  stays in the list with the reason, so the user sees what was not delivered
+  instead of a message that silently loops forever.
+- `intervalAvgMs` counted the pause across background as a commit interval. In
+  3.9.64, 27% of intervals were over 5 s, p95 was 163 570 ms and the maximum
+  19.5M ms. A pause now closes the stream, and its length is reported separately
+  as `intervalGapCount` / `intervalGapMaxMs` instead of being averaged in.
+- `draft setContent` recorded that a write happened but never how long it took:
+  3 437 events, all with `durationMs = 0`. The write itself is now measured.
+- The watchdog's recovery line printed its own template
+  (`main thread recovered after \(Int(frozenFor))s`) instead of the number.
+
+On the 404 itself: the session had never been written to disk and no longer
+existed on the server, so `POST /api/chat/start` had nothing to attach the
+message to. The client change stops the loop; re-creating a session
+automatically is deliberately **not** done, because that would silently fork the
+conversation context.
+
+`Stream Batch Apply` needed no change: it was reported as a constant 1.0 ms
+because the column read was `mutated` (0/1), not the duration. Actual durations
+span 0.001–123 ms.
+
 ## 3.9.64 — The device build gets the cache the test build already had
 
 - `Package IPA` compiled all 688 Swift files on every release (6:18) because the

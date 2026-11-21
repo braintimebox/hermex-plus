@@ -6,6 +6,7 @@ import SwiftUI
 enum ComposerChipKind: Equatable {
     case skill
     case file
+    case bot(ComposerBotReference)
 }
 
 /// The picture inside a chip.
@@ -16,6 +17,7 @@ enum ComposerChipKind: Equatable {
 enum ComposerChipIcon: Equatable {
     case symbol(String)
     case asset(String)
+    case bot(ComposerBotReference)
 
     /// Stable text for the renderer's image cache key.
     var cacheKey: String {
@@ -24,8 +26,17 @@ enum ComposerChipIcon: Equatable {
             return "symbol:\(name)"
         case let .asset(name):
             return "asset:\(name)"
+        case let .bot(reference):
+            let look = BotProfileAppearance(profile: reference.profile)
+            return "bot:\(reference.profile.id):\(look.shape ?? ""):\(look.color ?? ""):\(look.custom):\(look.expression ?? "")"
         }
     }
+}
+
+/// A connection-local bot identity and its already-decoded inbox thumbnail.
+struct ComposerBotReference: Equatable {
+    let profile: BotProfile
+    let avatar: UIImage?
 }
 
 /// A skill or workspace-file reference in the draft that the composer draws as
@@ -56,10 +67,12 @@ struct ComposerChipToken: Equatable {
             return .symbol(Self.skillSymbol)
         case .file:
             return .asset(FileIcon.resolve(label).assetName)
+        case let .bot(reference):
+            return .bot(reference)
         }
     }
 
-    /// The workspace-relative path a file chip names, or `nil` for a skill.
+    /// The workspace-relative path a file chip names, or `nil` for a skill or bot.
     var filePath: String? {
         guard kind == .file else { return nil }
         return String(source.dropFirst())

@@ -168,6 +168,9 @@ struct MessageComposerView: View {
     let quotedMessage: (messageId: String, author: String, text: String)?
     let onDismissQuote: () -> Void
     let onSchedule: () -> Void
+    /// Steer the current streaming response — sends the draft as a steer hint
+    /// to modify the agent's in-progress answer.
+    let onSteer: () -> Void
     /// Extra hook fired when the Schedule menu item is tapped — used by the
     /// diagnostics logger to capture context right before a potential freeze.
     let onScheduleTapped: (() -> Void)?
@@ -464,6 +467,7 @@ struct MessageComposerView: View {
                     .background(GeometryReader { proxy in
                         Color.clear
                             .onAppear { logComposerPart("surface", proxy.size.height) }
+                            .onAppear { HermexLogger.shared.setSurface("sessions") }
                             .onChange(of: proxy.size.height) { _, h in logComposerPart("surface", h) }
                     })
             }
@@ -914,6 +918,11 @@ struct MessageComposerView: View {
                     Label("Send", systemImage: "arrow.up.circle.fill")
                 }
                 Button {
+                    onSteer()
+                } label: {
+                    Label("Steer", systemImage: "arrow.turn.up.right")
+                }
+                Button {
                     onScheduleTapped?()
                     onSchedule()
                 } label: {
@@ -995,7 +1004,7 @@ struct MessageComposerView: View {
             composerOptionsMenu()
         }
         .tint(metaControlColor)
-        .disabled(isConfigurationControlDisabled)
+        .disabled(isAttachMenuDisabled)
         .accessibilityLabel("Composer options")
     }
 
@@ -1255,6 +1264,19 @@ struct MessageComposerView: View {
 
     private var isConfigurationControlDisabled: Bool {
         isReadOnly || isSending || isCompressingSession || isWaitingForStream || isUpdatingConfiguration
+    }
+
+    /// Whether the Attach menu (File / Photos / Camera) is disabled.
+    ///
+    /// Deliberately NOT gated on `isWaitingForStream`. Picking an attachment only
+    /// stages it in the draft; it leaves with the next send, so a running stream
+    /// is no reason to close the picker. It used to share
+    /// `isConfigurationControlDisabled`, which meant that while the agent was
+    /// thinking the attach menu was greyed out — reported as "не могу прикрепить
+    /// фото, пока агент думает". Configuration controls keep their stricter gate
+    /// above; an upload already in flight still blocks a second one.
+    private var isAttachMenuDisabled: Bool {
+        isReadOnly || isUploadingAttachment
     }
 
     private var isVoiceInputDisabled: Bool {

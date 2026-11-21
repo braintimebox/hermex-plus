@@ -43,7 +43,6 @@ import Vision
             XCTAssertEqual(model.draft, accepted ? "" : "guide once")
             XCTAssertFalse(model.uncertainSend)
             XCTAssertEqual(model.connectionState, .connected)
-            XCTAssertEqual(model.promptReceipt, accepted ? mode.outcome(wire.promptReply!).receipt : nil)
             let calls = wire.calls.filter { $0.0 == mode.method }
             XCTAssertEqual(calls.count, 1)
             XCTAssertEqual(calls.first?.1["session_id"], .string("runtime"))
@@ -146,74 +145,6 @@ import Vision
         XCTAssertEqual(saved?.text, "old guidance")
         XCTAssertTrue(saved?.botSubmissionUncertain == true)
         next.suspend()
-    }
-
-    func testQueuedFollowUpReceiptDoesNotSurviveStopOrClaimTheQueueRemains() async throws {
-        let wire = BotFixtureWire(); wire.running = true
-        wire.promptReply = .object(["status": .string("queued")])
-        let model = make(wire); await model.recover(); model.editDraft("next")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.queue)))
-        XCTAssertNotNil(model.promptReceipt)
-        await model.recover()
-        await model.stop(try XCTUnwrap(model.prepareStop()))
-        XCTAssertNil(model.promptReceipt)
-        XCTAssertFalse(model.maySend)
-        // A queued envelope can still appear after Stop races the server drain.
-        // Trust the next snapshot; never resend or claim the conversation is idle.
-        wire.running = false; wire.queued = .object(["text": .string("server follow-up")])
-        await model.recover()
-        XCTAssertFalse(model.maySend)
-        XCTAssertEqual(model.turn, .running)
-        wire.queued = .null
-        await model.recover()
-        XCTAssertTrue(model.maySend)
-        XCTAssertEqual(wire.calls.filter { $0.0 == "prompt.submit" }.count, 1)
-        model.suspend()
-    }
-
-    func testAcceptedPromptReceiptClearsWhenSnapshotEstablishesIdle() async throws {
-        let wire = BotFixtureWire(); wire.running = true
-        wire.promptReply = .object(["status": .string("queued")])
-        let model = make(wire); await model.recover(); model.editDraft("next")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.queue)))
-        XCTAssertNotNil(model.promptReceipt)
-
-        wire.running = false
-        wire.queued = .null
-        await model.recover()
-
-        XCTAssertNil(model.promptReceipt)
-        XCTAssertEqual(model.turn, .idle)
-        model.suspend()
-    }
-
-    func testVoiceStopReceiptSurvivesItsIdleSnapshot() async throws {
-        let wire = BotFixtureWire()
-        wire.promptReply = .object(["voice_stopped": .bool(true)])
-        let model = make(wire); await model.recover(); model.editDraft("stop speaking")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.send)))
-        wire.running = false
-        await model.recover()
-
-        XCTAssertEqual(model.promptReceipt, BotPromptOutcome.voiceStopped.receipt)
-        XCTAssertEqual(model.turn, .idle)
-
-        wire.running = true
-        await model.recover()
-        XCTAssertNil(model.promptReceipt)
-
-        wire.running = false
-        await model.recover()
-        model.editDraft("stop speaking again")
-        await model.submit(try XCTUnwrap(model.preparePrompt(.send)))
-        wire.running = false
-        await model.recover()
-        XCTAssertEqual(model.promptReceipt, BotPromptOutcome.voiceStopped.receipt)
-
-        wire.runtimeID = "replacement-runtime"
-        await model.recover()
-        XCTAssertNil(model.promptReceipt)
-        model.suspend()
     }
 
     func testEditingDraftOrChangingConnectionInvalidatesRedirectConfirmation() async throws {
@@ -751,7 +682,14 @@ actor BotMemoryDrafts: ChatDraftPersisting {
     var beforeResume: (() async -> Void)?
     func connect() async throws {}
     func close() {}
-    func call(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+    /// The protocol's typed request, answered by the same string-keyed switch the
+    /// fixture already had: the fixture exists to script replies, not to model
+    /// `HermesCall`, so it adapts rather than duplicating every case.
+    func call(_ call: HermesCall, validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
+        try await callLegacy(call.method, try call.params(), validateDispatch: validateDispatch)
+    }
+
+    func callLegacy(_ method: String, _ params: [String: BotJSON], validateDispatch: (() throws -> Void)?) async throws -> BotJSON {
         beforeDispatch?(method)
         try validateDispatch?()
         calls.append((method, params))
@@ -834,4 +772,10 @@ actor BotFailingDraftClear: ChatDraftPersisting {
         }
         values = drafts
     }
+}
+
+private extension BotPromptMode {
+    /// The wire method this mode dispatches, for filtering recorded calls.
+    /// Built from the real dispatcher so the name can never drift from it.
+    var method: String { call(runtime: "runtime", text: "").method }
 }

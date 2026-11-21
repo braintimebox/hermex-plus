@@ -37,6 +37,19 @@ enum ChatScrollPolicy {
         shouldFollowLatestMessage && !isDisclosureSettling ? .bottom : nil
     }
 
+    /// Whether the transcript should offer the scroll-to-bottom button.
+    ///
+    /// Following the latest message already means the reader is at the end, and a
+    /// near-bottom position keeps the button out of the way while idle.
+    static func showsScrollToBottomButton(
+        isNearBottom: Bool,
+        isStreaming: Bool,
+        isFollowing: Bool
+    ) -> Bool {
+        if isFollowing { return false }
+        return !isNearBottom
+    }
+
     /// Distance (pt) from the bottom within which the scroll-to-bottom button
     /// stays hidden while idle.
     static let bottomDetectionThreshold: CGFloat = 80

@@ -46,6 +46,7 @@ struct ScheduledMessagesView: View {
                             scheduleKey: msg.scheduleKey,
                             serverURLString: msg.serverURLString,
                             scheduledAt: msg.scheduledAt,
+                            failureReason: msg.terminalFailureReason,
                             isSending: isSending,
                             onSendNow: {
                                 guard !isSending else { return }
@@ -278,6 +279,10 @@ private struct ScheduledMessageRow: View {
     let scheduleKey: String
     let serverURLString: String
     let scheduledAt: Date
+    /// Non-nil once automatic delivery was given up for this message (3.9.65).
+    /// The row keeps showing the message, with the reason, instead of retrying
+    /// forever and silently.
+    let failureReason: String?
     let isSending: Bool
     let onSendNow: () -> Void
     let onDelete: () -> Void
@@ -329,6 +334,14 @@ private struct ScheduledMessageRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+
+                if let failureReason {
+                    // The user's answer to "did it send?": it did not, and why.
+                    Text("Not sent — \(Self.failureLabel(failureReason))")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
             }
 
             Spacer(minLength: 4)
@@ -348,6 +361,20 @@ private struct ScheduledMessageRow: View {
             .accessibilityLabel("Scheduled message actions")
         }
         .padding(.vertical, 2)
+    }
+
+    /// Maps the stored reason onto a short human phrase. Unknown reasons are
+    /// shown verbatim rather than swallowed, so a new failure type is visible
+    /// instead of appearing as a generic error.
+    static func failureLabel(_ reason: String) -> String {
+        switch reason {
+        case "badRequest": return "the chat no longer exists on the server"
+        case "retryLimit": return "too many attempts"
+        case "unreachable": return "server unreachable"
+        case "offline": return "you were offline"
+        case "timeout": return "server did not respond in time"
+        default: return reason
+        }
     }
 
     /// `destination · time` on one line: the date is only shown when it is not

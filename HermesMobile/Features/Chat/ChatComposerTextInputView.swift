@@ -27,6 +27,10 @@ struct ComposerTextInputView: View {
     /// The workspace files picked in this chat, whose `@path` references the
     /// editor draws as chips.
     let chipFilePaths: Set<String>
+    /// Bots mentioned with `@` in a room. Kept for the composer's contract; the
+    /// editor draws bot chips through its skill/file chip cache, so this is not
+    /// rendered yet.
+    var chipBots: [ComposerBotReference] = []
     let quotes: [ComposerQuote]
     let onKeyboardSend: () -> Void
     let onPasteFileProviders: ([NSItemProvider]) -> Void
@@ -37,6 +41,9 @@ struct ComposerTextInputView: View {
     let onTapChip: (ComposerChipToken) -> Void
     let onTapQuote: (ComposerQuote) -> Void
     let onRemoveQuote: (UUID) -> Void
+    /// What the up-arrow puts back: the last prompt this chat sent, as typed.
+    /// Nil for a composer that offers no recall.
+    var recallLastSentText: (() -> String?)? = nil
 
     var placeholder = String(localized: "Ask anything... /commands")
     /// Text-only clients reject file/image paste and drop before invoking callbacks.
@@ -325,6 +332,10 @@ private struct ComposerTextView: UIViewRepresentable {
         var onDropFileProviders: ([NSItemProvider]) -> Void = { _ in }
         var onDropImageProviders: ([NSItemProvider]) -> Void = { _ in }
         private var pendingFocusTarget: Bool?
+        /// Bumped on every focus request. A deferred task captures the value at
+        /// schedule time and aborts if it changed — so an older queued blur can
+        /// never close a newer editing session (upstream fix 1.8.0/1.9.0).
+        private var focusGeneration: Int = 0
         private var lastReportedHeight: CGFloat = 0
         /// HERMEX-FORK: width the last height was measured at — the height guard
         /// in `reportHeight` compares both, so a stale narrow-width measurement
@@ -501,12 +512,19 @@ private struct ComposerTextView: UIViewRepresentable {
             guard pendingFocusTarget != target else { return }
 
             pendingFocusTarget = target
+            focusGeneration &+= 1
+            let generation = focusGeneration
             Task { @MainActor [weak self, weak textView] in
                 await Task.yield()
                 guard let self, let textView else { return }
+                // A newer focus request superseded this one while it was queued.
+                // Acting now would fight the newer session — the "keyboard drops
+                // while I type" race.
+                guard generation == self.focusGeneration else { return }
 
                 if target, textView.window == nil {
                     try? await Task.sleep(nanoseconds: 60_000_000)
+                    guard generation == self.focusGeneration else { return }
                 }
 
                 self.pendingFocusTarget = nil
@@ -514,7 +532,11 @@ private struct ComposerTextView: UIViewRepresentable {
                 if target {
                     guard self.isFocused, textView.isEditable, textView.window != nil else { return }
                     textView.becomeFirstResponder()
-                } else if textView.isFirstResponder {
+                } else if !self.isFocused, textView.isFirstResponder {
+                    // UIKit can begin a new editing session while this blur is
+                    // queued. Recheck the binding, just as the focus path does,
+                    // so an older request cannot dismiss the new session
+                    // (upstream 1.8.0 / 1.9.0).
                     textView.resignFirstResponder()
                 }
             }
@@ -615,8 +637,26 @@ private struct ComposerTextView: UIViewRepresentable {
             }
         }
 
+        /// One measurement per settle, not one per animation frame. The keyboard, the
+        /// accessory row and the mirrored layout pass all move the field's width, and every
+        /// move re-entered `reportHeight`; each entry ran `ensureLayout` and logged. The device
+        /// shows what that costs: twenty-plus `ComposerField` lines a second in
+        /// hermex-logs.jsonl, immediately followed by "main thread stalled 2s". A short
+        /// coalescing delay keeps the number honest and the height one frame late at worst.
+        private var pendingMeasure: DispatchWorkItem?
+
         func reportHeight(for textView: UITextView) {
             guard textView.bounds.width > 0 else { return }
+            pendingMeasure?.cancel()
+            let work = DispatchWorkItem { [weak self, weak textView] in
+                guard let self, let textView, textView.bounds.width > 0 else { return }
+                self.measure(textView)
+            }
+            pendingMeasure = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+        }
+
+        private func measure(_ textView: UITextView) {
 
             // HERMEX-FORK: источник истины — УЖЕ разложенный текст, а не
             // `sizeThatFits` с бесконечной высотой. sizeThatFits раскладывает
