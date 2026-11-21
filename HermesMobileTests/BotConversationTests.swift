@@ -751,6 +751,18 @@ actor BotMemoryDrafts: ChatDraftPersisting {
         return .array([envelope(pendingClarify, method: "clarify")])
     }
 
+    /// A live server request in the shape the client actually reads: a JSON-RPC
+    /// frame with top-level id/method/params. Typed `<kind>.request` events have no
+    /// reader — `BotConversation.observe` first tries `BotServerRequest(event)` and
+    /// only then falls through to typed handling, which has no branch for them, so
+    /// the card never appeared and every credential case failed on "no request".
+    static func request(_ method: String, id: String, _ params: [String: BotJSON] = [:],
+                        session: String = "runtime") -> BotJSON {
+        var fields = params
+        fields["session_id"] = .string(session)
+        return .object(["id": .string(id), "method": .string(method), "params": .object(fields)])
+    }
+
     /// The gateway's `_approval_request_payload` shape, as it reaches both the
     /// `approval.request` event and the resume snapshot.
     static func approval(id: String = "req-1", command: String = "rm -rf build",

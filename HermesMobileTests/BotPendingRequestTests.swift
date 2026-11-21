@@ -386,11 +386,9 @@ import XCTest
     func testASecretPromptSendsItsValueUnderTheHostsParamName() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("secret.request"),
-            "payload": .object(["request_id": .string("sec-1"), "env_var": .string("TAVILY_API_KEY"),
-                                "prompt": .string("Paste your Tavily key")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("secret", id: "sec-1",
+                                             ["env_var": .string("TAVILY_API_KEY"),
+                                "prompt": .string("Paste your Tavily key")]))
         guard case .credential(let request)? = model.pendingRequest else { return XCTFail("Expected a credential prompt") }
         XCTAssertEqual(request.detail, "Paste your Tavily key")
         XCTAssertTrue(request.handling.contains("TAVILY_API_KEY"))
@@ -407,10 +405,7 @@ import XCTest
     func testSkippingACredentialSendsAnEmptyValue() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("secret.request"),
-            "payload": .object(["request_id": .string("sec-2")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("secret", id: "sec-2"))
         await model.skipCredential(action(model))
         let sent = wire.calls.last { $0.0 == "secret.respond" }
         XCTAssertEqual(sent?.1["value"], .string(""))
@@ -423,10 +418,7 @@ import XCTest
     func testAnExpiredCredentialPromptReportsAlreadyResolved() async {
         let wire = BotFixtureWire(); wire.credentialStatus = "expired"
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-3")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-3"))
         await model.answerCredential(action(model), value: "hunter2")
         XCTAssertEqual(model.requestResolution?.outcome, .alreadyResolved)
         XCTAssertEqual(model.connectionState, .connected)
@@ -440,10 +432,7 @@ import XCTest
     func testALostSocketMidCredentialLeavesTheOutcomeUncertain() async {
         let wire = BotFixtureWire(); wire.respondFailure = .transport
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-4")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-4"))
         await model.answerCredential(action(model), value: "hunter2")
         XCTAssertEqual(model.requestResolution?.outcome, .uncertain)
         XCTAssertEqual(model.connectionState, .disconnected)
@@ -455,15 +444,9 @@ import XCTest
     func testAnActionForAReplacedCredentialPromptIsNeverDispatched() async {
         let wire = BotFixtureWire()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-5")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-5"))
         let stale = action(model)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(2), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-6")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-6"))
         XCTAssertEqual(model.pendingRequest?.requestID, "sudo-6")
         await model.answerCredential(stale, value: "hunter2")
         XCTAssertTrue(wire.calls.filter { $0.0 == "sudo.respond" }.isEmpty)
@@ -478,10 +461,7 @@ import XCTest
     func testAQuestionOutranksACredentialPrompt() async {
         let wire = BotFixtureWire(); wire.pendingClarify = BotFixtureWire.clarify()
         let model = await blocked(on: wire)
-        wire.onEvent?(.object([
-            "session_id": .string("runtime"), "seq": .number(1), "type": .string("sudo.request"),
-            "payload": .object(["request_id": .string("sudo-7")])
-        ]))
+        wire.onEvent?(BotFixtureWire.request("sudo", id: "sudo-7"))
         guard case .question? = model.pendingRequest else { return XCTFail("Expected the question to win") }
         model.suspend()
     }
