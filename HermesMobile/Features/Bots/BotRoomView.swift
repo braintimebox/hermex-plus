@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor struct BotRoomView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @State private var reader: BotRoomReader
     @State private var revision = UUID()
@@ -208,28 +209,47 @@ ScrollView {
             Button { showingProfile = true } label: {
                 HStack(spacing: 8) {
                     BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 30)
-                    VStack(alignment: .leading, spacing: 0) {
-                        if threadID != nil { Text("Thread").font(.headline) }
-                        Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
+                    // At accessibility sizes the name is dropped rather than allowed to
+                    // squeeze the controls: the pill keeps its tappable face, and
+                    // VoiceOver still reads the room's name from the button's label.
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if threadID != nil { Text("Thread").font(.headline) }
+                            Text(reader.room.name)
+                                .font(threadID == nil ? .headline : .caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
                 }
                 .modifier(BotChatTitlePillFallback())
             }
             .buttonStyle(.plain)
+            .layoutPriority(0)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(reader.room.name)
             .accessibilityHint("Opens this room’s profile.")
+            .accessibilityAddTraits(.isButton)
 
             Spacer(minLength: 8)
 
-            Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
-                .accessibilityLabel(Text("Search this room"))
-            Button { Task { await reader.stop() } } label: { roomStopLabel }
-                .tint(.red)
-                .disabled(!reader.mayStop)
-                .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
+            // The controls never shrink: the name truncates instead, so a long room
+            // title and a large type size cannot push Stop off the row.
+            HStack(spacing: 12) {
+                Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
+                    .accessibilityLabel(Text("Search this room"))
+                Button { Task { await reader.stop() } } label: { roomStopLabel }
+                    .tint(.red)
+                    .disabled(!reader.mayStop)
+                    .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
+        // Without a background the transcript shows through while scrolling, which is
+        // the same "ugly strip" the composer had.
         .background(.bar)
     }
 
