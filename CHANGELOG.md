@@ -6,11 +6,21 @@ attempts at rearranging toolbar items changed nothing on the device, because the
 collapse is the system's decision, not ours.
 
 - **The room header is drawn by the app now**: the room's name and face on the
-  left, then search, schedule and the red Stop on the right. A row we lay out
-  cannot be folded away, so the controls stay where they are drawn.
+  left, then search and the red Stop on the right. A row we lay out cannot be
+  folded away, so the controls stay where they are drawn.
 - Stop stays in the header and is disabled when there is nothing to stop; it
   never disappears, so its position is predictable.
-- Scheduled sends and attachments in rooms follow in this release.
+- **The app is called Hermex Plus again**, and installs under the same bundle
+  identifier the 3.x line used.
+
+### Known limitations
+
+- **Schedule and attachments in rooms are not in this build.** Their storage,
+  size limits and queue are in place, but nothing in the interface uses them
+  yet, so a room composer still offers neither. They follow in the next release.
+- **Changing the bundle identifier makes this a separate install.** The 4.2.x
+  builds stay on the phone under their own icon, and drafts, cached history,
+  favourites and keychain entries do not move across.
 
 ## 4.2.1 — room icons
 
@@ -21,15 +31,15 @@ collapse is the system's decision, not ours.
   exactly as it did: the faces of its first three members.
 - Icons are drawn by shape alone — monochrome over a neutral container, no
   colour coding — so light and dark appearance both work without a second set.
-- **An open room suppresses its own notification.** The room registers a
-  `room:<id>` presence, so a reply that arrives while you are reading the room
-  does not also arrive as a banner.
 
 ### Known limitations
 
 - **Room icons are local to the device.** There is no icon field in the room
   model yet, so a second device keeps showing the default faces; a synced icon
   needs a new room field and a protocol change.
+- **An open room does not suppress its own notification.** The room-level
+  presence that would do it is not in this build; a reply can still arrive as a
+  banner while you are reading the room.
 
 ## 4.2.0 — group control leaves the composer
 
