@@ -27,6 +27,7 @@ import Observation
     init(server: URL, focusesPassword: Bool = false, isRoot: Bool = false, error: String? = nil,
          onSaved: @escaping () -> Void = {}) {
         _setup = State(initialValue: BotConnectionSetup(server: server, error: error))
+        _passwordFocused = FocusState()
         self.focusesPassword = focusesPassword; self.isRoot = isRoot; self.onSaved = onSaved
     }
 
@@ -53,10 +54,17 @@ import Observation
                 TextField("Username", text: $setup.username).textContentType(.username)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("Password", text: $setup.password).textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .focused($passwordFocused)
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     // Under the password, so the focused field's keyboard never covers it.
+                    if let warning = setup.passwordWarning, setup.errorMessage == nil {
+                        Label { Text(warning) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
+                            .foregroundStyle(.orange)
+                            .accessibilityIdentifier("hermes-connection-password-warning")
+                    }
                     if let error = setup.errorMessage {
                         Label {
                             Text(error)
@@ -298,6 +306,37 @@ extension BotHostStatus {
 
 /// Owns one sign-in attempt. Parsing failures and late transport replies obey the
 /// same lifetime, including attempts cancelled before a client was constructed.
+/// What the password field actually hands to the host.
+///
+/// A password arrives from a password manager, a note, or the clipboard, and those
+/// routinely append a newline. `Basic` auth encodes the value verbatim, so a trailing
+/// newline makes the host answer `invalid_credentials` — the same answer as a wrong
+/// password — and the user is told their password is wrong when it is not. The server
+/// log cannot tell the two apart either.
+///
+/// Only newlines are removed: a space can be a real part of a password, a newline
+/// never is. A space at either end is therefore kept but reported, so it can be
+/// seen instead of silently failing.
+enum BotPasswordInput {
+    static func normalized(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .newlines)
+    }
+
+    /// A sentence naming an invisible character, or nil when the value is clean.
+    static func warning(_ raw: String) -> String? {
+        if raw.contains("\n") || raw.contains("\r") {
+            return String(localized: "The password contained a line break; it was removed before sending.")
+        }
+        if raw.hasPrefix(" ") || raw.hasSuffix(" ") {
+            return String(localized: "The password starts or ends with a space. That is sent as typed.")
+        }
+        if raw.hasPrefix("\t") || raw.hasSuffix("\t") {
+            return String(localized: "The password starts or ends with a tab. That is sent as typed.")
+        }
+        return nil
+    }
+}
+
 @MainActor @Observable final class BotConnectionSetup {
     let server: URL
     /// True when `server` is a Hermes server and this record is its own sign-in (#899): the
@@ -366,9 +405,14 @@ extension BotHostStatus {
 
     var canConnect: Bool {
         !isConnecting && !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
+            && !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !BotPasswordInput.normalized(password).isEmpty
             && headerRejection == nil
     }
+
+    /// Shown under the password while it holds a character the host reads literally, so
+    /// an invisible newline is visible before it becomes "wrong password".
+    var passwordWarning: String? { BotPasswordInput.warning(password) }
 
     /// Why the edited headers can't be sent to Hermes (`HermesHeaders`), shown under the
     /// Connection Headers row; Connect stays off until it is fixed. Nil when they can.
@@ -442,8 +486,11 @@ extension BotHostStatus {
             let account = username.trimmingCharacters(in: .whitespacesAndNewlines)
             let label = name.isEmpty ? (url.host ?? "Hermes") : name
             let expected = replacingHost || saved?.address != url ? nil : saved?.installID
+            // Newlines never belong to a password; they arrive from the clipboard and
+            // make the host answer "wrong password".
+            let secret = BotPasswordInput.normalized(password)
             let wire = makeWire(BotConnection(id: UUID(), name: label, address: url, username: account,
-                                              password: password, installID: expected, headers: sent))
+                                              password: secret, installID: expected, headers: sent))
             client = wire
             defer { wire.close() }
             try await wire.connect()
@@ -453,7 +500,7 @@ extension BotHostStatus {
             let sameAccount = saved?.address == url && saved?.username == account
             let kept = replacingHost ? nil : (sameInstall || sameAccount ? saved : nil)
             let candidate = BotConnection(id: kept?.id ?? UUID(), name: label, address: url, username: account,
-                password: password, hermesVersion: wire.serverVersion, installID: live ?? kept?.installID, headers: sent)
+                password: secret, hermesVersion: wire.serverVersion, installID: live ?? kept?.installID, headers: sent)
             let result = try await wire.call(.profilesList(includeSessions: true))
             guard attempt == id, !Task.isCancelled else { return false }
             guard result["profiles"].list != nil else { throw BotFailure.unsupported }
