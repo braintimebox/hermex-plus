@@ -4118,22 +4118,42 @@ struct ChatToolbarTitleLabel: View {
 
     let title: String
     let subtitle: String?
+    /// Something that identifies the subject beside the title — a room's faces, where a
+    /// chat has a workspace name the user chose. Optional and last, so every existing call
+    /// site keeps the exact rendering it had: a chat simply does not pass it.
+    let accessory: (() -> AnyView)?
+
+    init(title: String, subtitle: String?, accessory: (() -> AnyView)? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            if showsSubtitle, let subtitle {
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        HStack(spacing: 8) {
+            if let accessory {
+                // The accessory gives way first: a long name must never be pushed out by
+                // a picture, so it keeps its room and the picture shrinks out of the row.
+                accessory()
+                    .fixedSize()
+                    .layoutPriority(0)
             }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if showsSubtitle, let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)

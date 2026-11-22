@@ -272,7 +272,10 @@ ScrollView {
             // `ToolbarItemGroup` is what iOS folded into "…" on a long room name.
             ToolbarItem(placement: .principal) {
                 Button { showingProfile = true } label: {
-                    ChatToolbarTitleLabel(title: reader.room.name, subtitle: roomSubtitle)
+                    ChatToolbarTitleLabel(title: reader.room.name, subtitle: roomSubtitle, accessory: {
+                        AnyView(BotRoomBadge(key: reader.key, room: reader.room, roster: roster,
+                                             avatars: avatars, size: 24))
+                    })
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(reader.room.name)
