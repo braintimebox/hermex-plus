@@ -63,7 +63,10 @@ import Observation
     @ObservationIgnored private var viewOwner: UUID?
     @ObservationIgnored private var commandID: UUID?
     @ObservationIgnored private var dispatched = false
-    @ObservationIgnored private var sending: Send?
+    /// The message in flight, exposed so the transcript can draw it before the room
+    /// confirms it. Echoing the send is what makes the app feel like a messenger:
+    /// without it the text appears only after a poll round trip.
+    @ObservationIgnored private(set) var sending: Send?
     @ObservationIgnored private var stateRevision = 0
     @ObservationIgnored private var log = BotRoomLog()
     @ObservationIgnored private var recentOwner: UUID?
