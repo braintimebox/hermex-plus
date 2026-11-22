@@ -37,8 +37,11 @@ final class RoomScheduledSendTests: XCTestCase {
         return budget
     }
 
-    func testAScheduledMessageKeepsReferencesNotBytes() throws {
-        let ready = try budget(files: [("photo.jpg", 12_000)])
+    func testAScheduledMessageCopiesTheFileIntoOurContainer() throws {
+        let source = try file("photo.jpg", bytes: 12_000)
+        var ready = RoomAttachmentBudget()
+        try ready.add(contentsOf: source)
+
         let item = try store.enqueue(
             room: room,
             roomName: "Build",
@@ -48,15 +51,15 @@ final class RoomScheduledSendTests: XCTestCase {
             dueAt: Date().addingTimeInterval(3_600)
         )
 
-        // The point of the design: an upload expires in an hour, so nothing is uploaded
-        // at enqueue time and the file is remembered by path.
         XCTAssertEqual(item.attachments.count, 1)
         XCTAssertEqual(item.attachments[0].name, "photo.jpg")
         XCTAssertEqual(item.attachments[0].byteCount, 12_000)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: item.attachments[0].path))
         XCTAssertEqual(item.byteCount, 12_000)
-        XCTAssertEqual(item.attempts, 0)
-        XCTAssertNil(item.lastFailure)
+
+        let copy = store.url(for: item.attachments[0])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path), "the copy must live in our container")
+        XCTAssertEqual(try Data(contentsOf: copy).count, 12_000)
+        XCTAssertFalse(item.attachments[0].relativePath.hasPrefix("/"), "stored relative, not absolute")
     }
 
     func testEmptyMessageAndPastTimeAreRefusedBeforeAnythingIsStored() throws {
@@ -113,15 +116,40 @@ final class RoomScheduledSendTests: XCTestCase {
         XCTAssertTrue(store.items.isEmpty)
     }
 
-    func testAQueueSurvivesTheAppBeingKilled() throws {
+    func testAQueueSurvivesTheAppBeingKilledAfterTheSourceIsGone() throws {
+        let source = try file("holiday.heic", bytes: 40_000)
+        var ready = RoomAttachmentBudget()
+        try ready.add(contentsOf: source)
         try store.enqueue(room: room, roomName: "A", threadID: "t1", text: "survive",
-                          budget: RoomAttachmentBudget(), dueAt: Date().addingTimeInterval(600))
+                          budget: ready, dueAt: Date().addingTimeInterval(600))
+
+        // The point of copying: the file the picker handed us is deleted, exactly as iOS
+        // would after the session, and the scheduled message still has its bytes.
+        try FileManager.default.removeItem(at: source)
 
         let reopened = RoomScheduledStore(directory: directory)
         XCTAssertEqual(reopened.items.count, 1)
         XCTAssertEqual(reopened.items.first?.text, "survive")
         XCTAssertEqual(reopened.items.first?.threadID, "t1")
         XCTAssertEqual(reopened.count(for: room), 1)
+
+        let attachment = try XCTUnwrap(reopened.items.first?.attachments.first)
+        let copy = reopened.url(for: attachment)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path))
+        XCTAssertEqual(try Data(contentsOf: copy).count, 40_000)
+    }
+
+    func testTheCopyGoesAwayWithTheMessage() throws {
+        let source = try file("a.bin", bytes: 1_000)
+        var ready = RoomAttachmentBudget()
+        try ready.add(contentsOf: source)
+        let item = try store.enqueue(room: room, roomName: "A", threadID: nil, text: "x",
+                                     budget: ready, dueAt: Date().addingTimeInterval(60))
+        let copy = store.url(for: item.attachments[0])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path))
+
+        store.complete(item.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path), "delivered copies must not accumulate")
     }
 
     func testClearingOneRoomLeavesOtherRoomsAlone() throws {

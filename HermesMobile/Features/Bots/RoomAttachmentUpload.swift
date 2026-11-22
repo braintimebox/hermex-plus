@@ -79,10 +79,12 @@ struct RoomAttachmentUpload: Equatable {
     let dataBase64: String
     /// What this upload costs against the message budget.
     let byteCount: Int
+    /// The bytes themselves. Kept because scheduling copies the file into our own
+    /// container — the picker's URL is not ours and does not survive a relaunch.
+    let data: Data
 
-    /// The file this upload was built from, when it came from one. Scheduling keeps
-    /// the reference, not the bytes: an uncommitted upload expires in an hour, so a
-    /// message for tomorrow has to upload at send time.
+    /// Where the file came from, for showing its name and origin in the picker. Never
+    /// persisted: a picker URL belongs to another app and does not survive a relaunch.
     var sourceURL: URL?
 
     /// The upload call's parameters, without `room_id`, which the connection adds.
@@ -107,6 +109,7 @@ struct RoomAttachmentUpload: Equatable {
         self.mime = mime
         self.dataBase64 = data.base64EncodedString()
         self.byteCount = data.count
+        self.data = data
     }
 
     /// Reads a file the user picked, refusing it by size before the bytes are encoded.
