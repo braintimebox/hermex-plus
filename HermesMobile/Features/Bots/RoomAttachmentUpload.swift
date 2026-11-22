@@ -80,6 +80,11 @@ struct RoomAttachmentUpload: Equatable {
     /// What this upload costs against the message budget.
     let byteCount: Int
 
+    /// The file this upload was built from, when it came from one. Scheduling keeps
+    /// the reference, not the bytes: an uncommitted upload expires in an hour, so a
+    /// message for tomorrow has to upload at send time.
+    var sourceURL: URL?
+
     /// The upload call's parameters, without `room_id`, which the connection adds.
     var params: [String: String] {
         [
@@ -118,6 +123,7 @@ struct RoomAttachmentUpload: Equatable {
             throw RoomAttachmentFailure.unreadable(name: name)
         }
         try self.init(data: data, name: name, mime: Self.mime(for: url))
+        self.sourceURL = url
     }
 
     static func kind(forMIME mime: String) -> String {
@@ -162,6 +168,16 @@ struct RoomAttachmentBudget: Equatable {
     var remainingBytes: Int { max(0, RoomAttachmentLimit.messageBytes - byteCount) }
     var remainingFiles: Int { max(0, RoomAttachmentLimit.filesPerMessage - uploads.count) }
     var isEmpty: Bool { uploads.isEmpty }
+
+    /// The line the picker shows under the selection: what is left, in the same
+    /// units the refusal uses, so the number in the message is never a surprise.
+    var remainingSummary: String {
+        String(
+            localized: "\(Self.describe(byteCount)) of \(Self.describe(RoomAttachmentLimit.messageBytes)) used · \(remainingFiles) file(s) left"
+        )
+    }
+
+    static func describe(_ bytes: Int) -> String { RoomAttachmentFailure.describe(bytes) }
 
     /// The refusal this file would earn, or nil when it fits whole.
     func refusal(adding name: String, bytes: Int) -> RoomAttachmentFailure? {
