@@ -363,7 +363,11 @@ enum Endpoint {
         case .cronRecent:
             return "/api/crons/recent"
         case .kanbanConfig:
-            return "/api/kanban/config"
+            // Mounted at `/api/plugins/<name>` by the dashboard
+            // (`hermes_cli/web_server_dashboard.py:1258-1262`), and relative on purpose:
+            // the base address carries the proxy prefix (`…/dash`), so an absolute path
+            // would drop it and 404 at the door.
+            return "api/plugins/kanban/config"
         case .kanbanBoards, .kanbanCreateBoard:
             return "/api/kanban/boards"
         case let .kanbanEditBoard(request):
