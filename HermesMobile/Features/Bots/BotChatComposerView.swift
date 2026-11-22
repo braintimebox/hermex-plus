@@ -427,7 +427,12 @@ struct BotChatComposerView: View {
                     ComposerAttachmentPillPreview(attachments: model.attachments.items, onPreview: { preview = $0 })
                     if !showsToolbar {
                         voiceControlButton
-                        if showsStop { stopButton } else { actionButton }
+                        // Stop gets its own slot and never takes Send's. The button
+                        // under the thumb used to change meaning when a turn started,
+                        // which is how a tap meant to add an instruction stopped the
+                        // bot instead — the same defect the room composer had.
+                        if showsStop { stopButton }
+                        actionButton
                     }
                 }
             }
