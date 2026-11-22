@@ -227,7 +227,14 @@ import SwiftUI
 
     private func roomMessageResult(_ hit: BotHistoryCache.Hit, room: BotGroupRoom) -> some View {
         HStack(spacing: 14) {
-            BotRoomAvatars(room: room, roster: inbox.profiles, avatars: inbox.avatars, size: 32).frame(width: 44)
+            Group {
+                if let key = inbox.roomKey(room) {
+                    BotRoomBadge(key: key, room: room, roster: inbox.profiles, avatars: inbox.avatars, size: 32)
+                } else {
+                    BotRoomAvatars(room: room, roster: inbox.profiles, avatars: inbox.avatars, size: 32)
+                }
+            }
+            .frame(width: 44)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(verbatim: [room.name, hit.message.sender].compactMap { $0 }.joined(separator: " · "))
