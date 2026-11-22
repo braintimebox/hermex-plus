@@ -546,6 +546,8 @@
 		AF0BCC433DE9B4A7A7A680BB /* UserBubbleFoldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */; };
 		1E03AE190706493EB33B1C49 /* TranscriptImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */; };
 		EDCC36EF9A18A386E481D7B2 /* TranscriptLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309359316C851605012FD5FC /* TranscriptLinks.swift */; };
+		27E646C4882847C344822646 /* RoomAttachmentUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */; };
+		AA83C5AD66A2AA2CBDDD2C27 /* RoomAttachmentUploadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1123,6 +1125,8 @@
 		1F67774BBB9F46C2AE300F7C /* UserBubbleFoldPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/UserBubbleFoldPolicy.swift"; sourceTree = "<group>"; };
 		FB1F0CD97EB2B9B8D10C01A8 /* TranscriptImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptImageCache.swift"; sourceTree = "<group>"; };
 		309359316C851605012FD5FC /* TranscriptLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptLinks.swift"; sourceTree = "<group>"; };
+		24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomAttachmentUpload.swift"; sourceTree = "<group>"; };
+		99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomAttachmentUploadTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1228,6 +1232,7 @@
 			isa = PBXGroup;
 			children = (
 				EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */,
+				99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */,
 				D1C0DE000000000000000004 /* RoomIconStoreTests.swift */,
 				A496B07E0000000000000002 /* BotModeGateTests.swift */,
 				A4730000000000000000A004 /* BotAvatarTests.swift */,
@@ -1532,6 +1537,7 @@
 				D75F0CF6B0F833F382377FB5 /* BotRoomProfileView.swift */,
 				2ECB8C16F87FE47562BDC022 /* BotRoomReader.swift */,
 				7F7546E0B84641762CE6F25A /* BotRoomView.swift */,
+				24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */,
 				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				2151C61191916592AFD8B5C1 /* BotSearchView.swift */,
 				383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */,
@@ -2157,6 +2163,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				27E646C4882847C344822646 /* RoomAttachmentUpload.swift in Sources */,
 				D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */,
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
 				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,
@@ -2531,6 +2538,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA83C5AD66A2AA2CBDDD2C27 /* RoomAttachmentUploadTests.swift in Sources */,
 				D1C0DE000000000000000003 /* RoomIconStoreTests.swift in Sources */,
 				142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */,
 				A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */,
