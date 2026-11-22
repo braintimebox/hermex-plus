@@ -417,11 +417,14 @@ final class SharedDraftStoreTests: XCTestCase {
             "hermes-agent",
             "the share scheme must not be the one upstream's App Store build claims"
         )
-        // The 4.0 line ships under its own identity (`hermex4`), so the scheme is
-        // fork-owned per line rather than fixed to the 2.x `hermesplus` string.
+        // The scheme is fork-owned per line, and the line has already renamed itself
+        // once (4.x `hermex4`, then back to `hermesplus`), so the check is "ours, not
+        // upstream's" rather than one pinned string — a pinned string is what turned
+        // an identity change into a red suite.
+        let scheme = HermesShareDraft.urlScheme
         XCTAssertTrue(
-            HermesShareDraft.urlScheme.hasPrefix("hermex"),
-            "expected a fork-owned share scheme, got \(HermesShareDraft.urlScheme)"
+            scheme.hasPrefix("hermes"),
+            "expected a fork-owned share scheme, got \(scheme)"
         )
     }
 
