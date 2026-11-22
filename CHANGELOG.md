@@ -1,3 +1,18 @@
+## 4.2.3 — a password is not rejected because of a newline
+
+The sign-in form sent the password field verbatim, and a password pasted from a
+manager or a note arrives with a trailing newline. `Basic` auth encodes it as
+given, so the host answered `invalid_credentials` — indistinguishable from a wrong
+password, in the app and in the server log. 277 such refusals were recorded on the
+host before anyone suspected the field rather than the memory of the password.
+
+- Line breaks are removed from the password before it is sent; spaces are kept,
+  because a space can genuinely be part of a password.
+- A space or tab at either end is now reported under the field instead of failing
+  silently, and the password field no longer offers autocapitalisation or
+  autocorrection.
+- `Connect` stays disabled when the value is only a line break.
+
 ## 4.2.2 — room header you can actually use
 
 The room put its controls in the system navigation bar, and on a phone with a
