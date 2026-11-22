@@ -157,7 +157,7 @@ struct BotsInboxHome {
                                 .buttonStyle(.plain)
                             case .room(let room):
                                 Menu { roomOrganizeMenu(room) } label: {
-                                    BotRoomHeroTile(room: room, roster: inbox.profiles, avatars: inbox.avatars)
+                                    BotRoomHeroTile(room: room, key: inbox.roomKey(room), roster: inbox.profiles, avatars: inbox.avatars)
                                 } primaryAction: { openRoom(room) }
                                 .buttonStyle(.plain)
                             }
@@ -733,11 +733,21 @@ private struct BotHeroTile: View {
 /// A pinned room: the member avatars stacked large, the name beneath.
 private struct BotRoomHeroTile: View {
     let room: BotGroupRoom
+    /// Nil when the inbox has no live connection yet: the tile then draws faces,
+    /// which is what a room without a choice looks like anyway.
+    let key: BotRoomKey?
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     var body: some View {
         VStack(spacing: 14) {
-            BotRoomAvatars(room: room, roster: roster, avatars: avatars, size: 60).frame(height: 84)
+            Group {
+                if let key {
+                    BotRoomBadge(key: key, room: room, roster: roster, avatars: avatars, size: 60)
+                } else {
+                    BotRoomAvatars(room: room, roster: roster, avatars: avatars, size: 60)
+                }
+            }
+            .frame(height: 84)
             Text(room.name).font(.body).foregroundStyle(.secondary).lineLimit(1)
         }
         .frame(maxWidth: 132)

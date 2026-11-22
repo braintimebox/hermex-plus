@@ -203,7 +203,7 @@ ScrollView {
 ToolbarItem(placement: .topBarLeading) {
     Button { showingProfile = true } label: {
         HStack(spacing: 8) {
-            BotRoomAvatars(room: reader.room, roster: roster, avatars: avatars, size: 30)
+            BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 30)
             VStack(alignment: .leading, spacing: 0) {
                 if threadID != nil { Text("Thread").font(.headline) }
                 Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)

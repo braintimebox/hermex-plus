@@ -103,7 +103,12 @@ final class RoomIconStore {
             icons.removeValue(forKey: storage)
         }
         persist()
+        NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
+
+    /// Posted after any change, so a badge already on screen re-reads its glyph
+    /// instead of waiting for the room to be reopened.
+    static let didChange = Notification.Name("RoomIconStoreDoChange")
 
     /// The picker's "restore default": the entry goes away, the room draws faces.
     func clearIcon(for key: BotRoomKey) { setIcon(nil, for: key) }
@@ -159,5 +164,82 @@ struct RoomIconGlyph: View {
             .frame(width: size, height: size)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+/// A room's face: the chosen glyph, or the faces of its first members.
+///
+/// Every place that used to draw `BotRoomAvatars` for a room goes through this,
+/// so a room with no choice looks exactly as it always did, and a room that has
+/// one shows it in the list, the header and the profile without three copies of
+/// the lookup.
+struct BotRoomBadge: View {
+    let key: BotRoomKey
+    let room: BotGroupRoom
+    let roster: [BotProfile]
+    let avatars: [String: UIImage]
+    let size: CGFloat
+
+    @State private var glyph: String?
+
+    var body: some View {
+        Group {
+            if let glyph {
+                RoomIconGlyph(glyph: glyph, size: size)
+            } else {
+                BotRoomAvatars(room: room, roster: roster, avatars: avatars, size: size)
+            }
+        }
+        .task(id: key) { glyph = RoomIconStore.shared.icon(for: key) }
+        .onReceive(NotificationCenter.default.publisher(for: RoomIconStore.didChange)) { _ in
+            glyph = RoomIconStore.shared.icon(for: key)
+        }
+    }
+}
+
+/// The picker: six labelled rows of five glyphs plus the restore action.
+///
+/// Lives in the room profile rather than the chat header: changing a room's face
+/// is a settings action, and the header is the place the owner taps to open this
+/// screen, not a place to edit.
+struct RoomIconPickerSection: View {
+    let roomKey: BotRoomKey
+
+    @State private var selected: String?
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
+
+    var body: some View {
+        Section("Room icon") {
+            ForEach(RoomIconLibrary.categories) { category in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(category.title).font(.caption).foregroundStyle(.secondary)
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(category.glyphs, id: \.self) { glyph in
+                            Button { choose(glyph) } label: { RoomIconGlyph(glyph: glyph, size: 44) }
+                                .buttonStyle(.plain)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(Color.accentColor, lineWidth: selected == glyph ? 2 : 0)
+                                )
+                                .accessibilityLabel(Text(glyph))
+                                .accessibilityAddTraits(selected == glyph ? [.isSelected] : [])
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            Button("Restore default") { choose(nil) }
+                .disabled(selected == nil)
+        }
+        .task { selected = RoomIconStore.shared.icon(for: roomKey) }
+        .onReceive(NotificationCenter.default.publisher(for: RoomIconStore.didChange)) { _ in
+            selected = RoomIconStore.shared.icon(for: roomKey)
+        }
+    }
+
+    private func choose(_ glyph: String?) {
+        RoomIconStore.shared.setIcon(glyph, for: roomKey)
+        selected = glyph
     }
 }

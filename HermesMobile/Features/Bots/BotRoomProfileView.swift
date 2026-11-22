@@ -18,7 +18,7 @@ import SwiftUI
         List {
             Section {
                 VStack(spacing: 24) {
-                    BotRoomAvatars(room: reader.room, roster: roster, avatars: avatars, size: 84)
+                    BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 84)
                     if reader.showsRename {
                         TextField("Group name", text: $name)
                             .font(.title2.bold()).multilineTextAlignment(.center)
@@ -36,6 +36,7 @@ import SwiftUI
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 24)
             }
+            RoomIconPickerSection(roomKey: reader.key)
             Section {
                 ForEach(reader.room.members) { member in
                     if let profile = roster.first(where: { $0.id == member.profile }) {
