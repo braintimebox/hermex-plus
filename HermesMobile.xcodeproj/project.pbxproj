@@ -803,7 +803,7 @@
 		1A2B3C4D5E6F7000000000F3 /* CacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStore.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F7000000000F4 /* CacheStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStoreTests.swift; sourceTree = "<group>"; };
 		C28702000000000000000002 /* ChatDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStore.swift; sourceTree = "<group>"; };
-		D1C0DE000000000000000002 /* RoomIconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomIconStore.swift; sourceTree = "<group>"; };
+		D1C0DE000000000000000002 /* RoomIconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomIconStore.swift"; sourceTree = "<group>"; };
 		D1C0DE000000000000000004 /* RoomIconStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomIconStoreTests.swift; sourceTree = "<group>"; };
 		0B0C0D0E0F000000000002 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000004 /* ChatDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStoreTests.swift; sourceTree = "<group>"; };
@@ -1532,6 +1532,7 @@
 				D75F0CF6B0F833F382377FB5 /* BotRoomProfileView.swift */,
 				2ECB8C16F87FE47562BDC022 /* BotRoomReader.swift */,
 				7F7546E0B84641762CE6F25A /* BotRoomView.swift */,
+				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				2151C61191916592AFD8B5C1 /* BotSearchView.swift */,
 				383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */,
 				C089C6211F1F34412D5D2542 /* BotSlashCommands.swift */,
@@ -1773,7 +1774,6 @@
 			isa = PBXGroup;
 			children = (
 				C28702000000000000000002 /* ChatDraftStore.swift */,
-				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				0B0C0D0E0F000000000002 /* OutboxStore.swift */,
 				C28702000000000000000006 /* ChatDraftAttachmentStore.swift */,
 				1A2B3C4D5E6F7000000000F3 /* CacheStore.swift */,

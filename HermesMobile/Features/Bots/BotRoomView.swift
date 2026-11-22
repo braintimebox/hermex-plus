@@ -22,12 +22,15 @@ import SwiftUI
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     /// The room's own search reuses `BotSearchView` narrowed to this room, so the
-    /// inbox is passed down instead of duplicating the index query here.
-    let inbox: BotInbox?
+    /// inbox is passed down instead of duplicating the index query here. Not
+    /// optional: there is exactly one place that opens a room (the inbox), and an
+    /// optional inbox made the search button silently disabled when it was nil —
+    /// a tap that does nothing and no explanation.
+    let inbox: BotInbox
     /// Leaves the room for the inbox's sign-in form, after the host refused the password.
     let onUpdateSignIn: () -> Void
 
-    init(reader: BotRoomReader, roster: [BotProfile], avatars: [String: UIImage], inbox: BotInbox? = nil, threadID: String? = nil, sequence: Int? = nil, onUpdateSignIn: @escaping () -> Void = {}) {
+    init(reader: BotRoomReader, roster: [BotProfile], avatars: [String: UIImage], inbox: BotInbox, threadID: String? = nil, sequence: Int? = nil, onUpdateSignIn: @escaping () -> Void = {}) {
         _reader = State(initialValue: reader); self.roster = roster; self.avatars = avatars
         self.inbox = inbox
         self.onUpdateSignIn = onUpdateSignIn; self.threadID = threadID
@@ -204,6 +207,9 @@ ToolbarItem(placement: .topBarLeading) {
             VStack(alignment: .leading, spacing: 0) {
                 if threadID != nil { Text("Thread").font(.headline) }
                 Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
+                    // Without a cap a long room name widens the leading pill until the
+                    // trailing controls no longer fit and the system folds them away.
+                    .frame(maxWidth: 200, alignment: .leading)
             }
         }
         .modifier(BotChatTitlePillFallback())
@@ -211,27 +217,21 @@ ToolbarItem(placement: .topBarLeading) {
     .accessibilityLabel(reader.room.name)
     .accessibilityHint("Opens this room’s profile.")
 }
-        ToolbarItem(placement: .topBarTrailing) {
+        // One group on purpose. Two separate trailing ToolbarItems let the system
+        // collapse them into its own "…" overflow when the title pill is wide, and
+        // an overflow that holds only one item reads as a control that does nothing.
+        ToolbarItemGroup(placement: .topBarTrailing) {
             Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
                 .accessibilityLabel(Text("Search this room"))
-                .disabled(inbox == nil)
+            // Always present, disabled when there is nothing to stop: the design
+            // asked for a dedicated Stop, and a control that appears only under load
+            // is one the user has to hunt for.
+            Button { Task { await reader.stop() } } label: { roomStopLabel }
+                .buttonStyle(.plain)
+                .tint(.red)
+                .disabled(!reader.mayStop)
+                .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
         }
-        if showsRoomStop {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { Task { await reader.stop() } } label: { roomStopLabel }
-                    .buttonStyle(.plain)
-                    .tint(.red)
-                    .disabled(!reader.mayStop)
-                    .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
-            }
-        }
-    }
-
-    /// The room-level Stop is visible whenever the group is doing something — working,
-    /// blocked, stoppable, or already stopping — and disabled by `mayStop`, so the
-    /// control itself says whether stopping is possible instead of disappearing.
-    private var showsRoomStop: Bool {
-        reader.status.working || reader.status.blocked || reader.status.stoppable > 0 || reader.finishingStop
     }
 
     @ViewBuilder private var roomStopLabel: some View {
@@ -292,14 +292,12 @@ ToolbarItem(placement: .topBarLeading) {
         }
         .transcriptLinks()
         .sheet(isPresented: $showingSearch) {
-            if let inbox {
-                BotSearchView(inbox: inbox, roomIDs: [reader.room.id],
-                              onSelectRoom: { room, sequence in
-                                  guard room.id == reader.room.id, let sequence else { return }
-                                  pendingSequence = sequence
-                              },
-                              onSelect: { _ in })
-            }
+            BotSearchView(inbox: inbox, roomIDs: [reader.room.id],
+                          onSelectRoom: { room, sequence in
+                              guard room.id == reader.room.id, let sequence else { return }
+                              pendingSequence = sequence
+                          },
+                          onSelect: { _ in })
         }
     }
 
