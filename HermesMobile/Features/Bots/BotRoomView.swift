@@ -215,68 +215,28 @@ ScrollView {
 .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
 
-    /// The room's own header, drawn by the app instead of the navigation bar.
-    ///
-    /// Two attempts at rearranging `ToolbarItem`s changed nothing on the device:
-    /// with a long room name iOS folded the trailing items into its own "…", which
-    /// taps to nothing. That fold is the system's decision, so the row is ours now
-    /// — a row we lay out cannot be collapsed away from the controls it holds.
-    private var roomHeaderRow: some View {
-        HStack(spacing: 12) {
-            Button { showingProfile = true } label: {
-                HStack(spacing: 8) {
-                    BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 30)
-                    // At accessibility sizes the name is dropped rather than allowed to
-                    // squeeze the controls: the pill keeps its tappable face, and
-                    // VoiceOver still reads the room's name from the button's label.
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        VStack(alignment: .leading, spacing: 0) {
-                            if threadID != nil { Text("Thread").font(.headline) }
-                            Text(reader.room.name)
-                                .font(threadID == nil ? .headline : .caption)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                    }
-                }
-                .modifier(BotChatTitlePillFallback())
-            }
-            .buttonStyle(.plain)
-            .layoutPriority(0)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(reader.room.name)
-            .accessibilityHint("Opens this room’s profile.")
-            .accessibilityAddTraits(.isButton)
+    /// The room's composition for the header's second line, the same place the
+    /// ordinary chat puts the workspace: who is in the room, not how many.
+    private var roomSubtitle: String? {
+        let names = reader.room.members.map(\.name)
+        guard !names.isEmpty else { return nil }
+        return names.joined(separator: ", ")
+    }
 
-            Spacer(minLength: 8)
-
-            // The controls never shrink: the name truncates instead, so a long room
-            // title and a large type size cannot push Stop off the row.
-            HStack(spacing: 12) {
-                Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
-                    .accessibilityLabel(Text("Search this room"))
-                // Never disabled: a dead-looking red button was reported as broken. A tap
-                // that cannot stop says why instead of doing nothing.
-                Button {
-                    if reader.mayStop {
-                        Task { await reader.stop() }
-                    } else {
-                        stopNotice = reader.stopUnavailableReason ?? String(localized: "Nothing to stop.")
-                    }
-                } label: { roomStopLabel }
-                    .tint(.red)
-                    .opacity(reader.mayStop ? 1 : 0.55)
-                    .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
-                    .accessibilityHint(Text(reader.stopUnavailableReason ?? ""))
+    /// Stop is never disabled: a red button that ignores a tap is indistinguishable
+    /// from a broken one. A tap that cannot stop names the reason instead.
+    @ViewBuilder private var stopControl: some View {
+        Button {
+            if reader.mayStop {
+                Task { await reader.stop() }
+            } else {
+                stopNotice = reader.stopUnavailableReason ?? String(localized: "Nothing to stop.")
             }
-            .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(1)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        // Without a background the transcript shows through while scrolling, which is
-        // the same "ugly strip" the composer had.
-        .background(.bar)
+        } label: { roomStopLabel }
+            .tint(.red)
+            .opacity(reader.mayStop ? 1 : 0.55)
+            .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
+            .accessibilityHint(Text(reader.stopUnavailableReason ?? ""))
     }
 
     @ViewBuilder private var roomStopLabel: some View {
@@ -293,7 +253,9 @@ ScrollView {
             let hasHiddenEvents = start > 0
             let showsWelcome = threadID == nil && reader.showsWelcome
             scrollArea(proxy: proxy, hasHiddenEvents: hasHiddenEvents, showsWelcome: showsWelcome)
-            .safeAreaInset(edge: .bottom) { composerInset }
+            // The ordinary chat pins its composer with no system gap: the composer
+            // holds its own spacing, so anything added here reads as a fat margin.
+            .safeAreaInset(edge: .bottom, spacing: 0) { composerInset }
         .task(id: pill?.errorText) {
             guard let text = pill?.errorText else { return }
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
@@ -303,8 +265,35 @@ ScrollView {
         .onChange(of: reader.busy) { _, busy in if busy { dismissedErrors = [] } }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(removing: .title)
-        .safeAreaInset(edge: .top) { roomHeaderRow }
+        .toolbar {
+            // The components the ordinary chat uses, not a copy of their look: title and
+            // subtitle in `.principal`, one slot per control in the trailing cluster, the
+            // same background. Two separate `ToolbarItem`s on purpose — a
+            // `ToolbarItemGroup` is what iOS folded into "…" on a long room name.
+            ToolbarItem(placement: .principal) {
+                Button { showingProfile = true } label: {
+                    ChatToolbarTitleLabel(title: reader.room.name, subtitle: roomSubtitle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(reader.room.name)
+                .accessibilityHint(Text("Opens this room’s profile."))
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                ChatToolbarActionCluster {
+                    ChatToolbarActionSlot {
+                        Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
+                            .accessibilityLabel(Text("Search this room"))
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                ChatToolbarActionCluster {
+                    ChatToolbarActionSlot { stopControl }
+                }
+            }
+        }
+        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .navigationDestination(isPresented: $showingProfile) {
             BotRoomProfileView(reader: reader, roster: roster, avatars: avatars, onUpdateSignIn: onUpdateSignIn)
         }
