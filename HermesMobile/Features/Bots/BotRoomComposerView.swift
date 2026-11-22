@@ -37,7 +37,7 @@ struct BotRoomComposerView: View {
                         text: Binding(get: { reader.draft(in: threadID) }, set: { reader.setDraft($0, in: threadID) }), selection: $selection, isFocused: $focused,
                         inputHeight: $inputHeight, measuredHeight: $measuredHeight,
                         isDisabled: !reader.mayEditDraft(in: threadID), isCollapsed: !focused,
-                        isKeyboardSendEnabled: reader.maySend(in: threadID), verticalPadding: 12,
+                        isKeyboardSendEnabled: reader.maySend(in: threadID), verticalPadding: 6,
                         chipSkills: [], chipFilePaths: [], quotes: [], onKeyboardSend: send,
                         onPasteFileProviders: { _ in }, onPasteFileURLs: { _ in },
                         onPasteImageProviders: { _ in }, onPasteImages: { _ in },
@@ -50,7 +50,10 @@ struct BotRoomComposerView: View {
                 .modifier(ChatComposerSurfaceStyle(isExpanded: focused))
             }
         }
-        .padding(.horizontal, 16).padding(.bottom, 8)
+        // Same geometry as the regular chat and the bot: horizontal 16, no bottom
+        // inset. The 8 points kept the glass surface off the bottom edge and let
+        // the transcript show through the strip underneath it.
+        .padding(.horizontal, 16)
     }
 
     /// Rooms send or stop, never both from one control: Stop lives in the top bar
