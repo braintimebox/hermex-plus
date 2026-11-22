@@ -231,6 +231,8 @@
 		1A2B3C4D5E6F7000000000F1 /* CacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000000000F3 /* CacheStore.swift */; };
 		1A2B3C4D5E6F7000000000F2 /* CacheStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7000000000F4 /* CacheStoreTests.swift */; };
 		C28702000000000000000001 /* ChatDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000002 /* ChatDraftStore.swift */; };
+		D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0DE000000000000000002 /* RoomIconStore.swift */; };
+		D1C0DE000000000000000003 /* RoomIconStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0DE000000000000000004 /* RoomIconStoreTests.swift */; };
 		0B0C0D0E0F000000000001 /* OutboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0C0D0E0F000000000002 /* OutboxStore.swift */; };
 		C28702000000000000000003 /* ChatDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28702000000000000000004 /* ChatDraftStoreTests.swift */; };
 		870000000000000000000201 /* HitchMeterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870000000000000000000202 /* HitchMeterTests.swift */; };
@@ -801,6 +803,8 @@
 		1A2B3C4D5E6F7000000000F3 /* CacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStore.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F7000000000F4 /* CacheStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStoreTests.swift; sourceTree = "<group>"; };
 		C28702000000000000000002 /* ChatDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStore.swift; sourceTree = "<group>"; };
+		D1C0DE000000000000000002 /* RoomIconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomIconStore.swift; sourceTree = "<group>"; };
+		D1C0DE000000000000000004 /* RoomIconStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomIconStoreTests.swift; sourceTree = "<group>"; };
 		0B0C0D0E0F000000000002 /* OutboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxStore.swift; sourceTree = "<group>"; };
 		C28702000000000000000004 /* ChatDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDraftStoreTests.swift; sourceTree = "<group>"; };
 		870000000000000000000202 /* HitchMeterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HitchMeterTests.swift; sourceTree = "<group>"; };
@@ -1224,6 +1228,7 @@
 			isa = PBXGroup;
 			children = (
 				EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */,
+				D1C0DE000000000000000004 /* RoomIconStoreTests.swift */,
 				A496B07E0000000000000002 /* BotModeGateTests.swift */,
 				A4730000000000000000A004 /* BotAvatarTests.swift */,
 				A4750000000000000000B006 /* BotActivityTests.swift */,
@@ -1768,6 +1773,7 @@
 			isa = PBXGroup;
 			children = (
 				C28702000000000000000002 /* ChatDraftStore.swift */,
+				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				0B0C0D0E0F000000000002 /* OutboxStore.swift */,
 				C28702000000000000000006 /* ChatDraftAttachmentStore.swift */,
 				1A2B3C4D5E6F7000000000F3 /* CacheStore.swift */,
@@ -2151,6 +2157,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */,
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
 				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,
 				785784DE20094BA78F432A9A /* BotChatComposerView.swift in Sources */,
@@ -2524,6 +2531,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1C0DE000000000000000003 /* RoomIconStoreTests.swift in Sources */,
 				142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */,
 				A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */,
 				A4730000000000000000A003 /* BotAvatarTests.swift in Sources */,

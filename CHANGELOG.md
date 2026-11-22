@@ -1,3 +1,22 @@
+## 4.2.1 — room icons
+
+- **A room can carry an icon** from a built-in set of 30 symbols in six
+  categories, chosen in the room's profile and shown in the inbox row, the room
+  header and search results.
+- **Restore default removes the choice**, so a room you never customised looks
+  exactly as it did: the faces of its first three members.
+- Icons are drawn by shape alone — monochrome over a neutral container, no
+  colour coding — so light and dark appearance both work without a second set.
+- **An open room suppresses its own notification.** The room registers a
+  `room:<id>` presence, so a reply that arrives while you are reading the room
+  does not also arrive as a banner.
+
+### Known limitations
+
+- **Room icons are local to the device.** There is no icon field in the room
+  model yet, so a second device keeps showing the default faces; a synced icon
+  needs a new room field and a protocol change.
+
 ## 4.2.0 — group control leaves the composer
 
 The first build to carry the 4.1 line. Everything between the published 4.0.6
