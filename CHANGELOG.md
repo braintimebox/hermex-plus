@@ -1,3 +1,17 @@
+## 4.2.2 — room header you can actually use
+
+The room put its controls in the system navigation bar, and on a phone with a
+long room name iOS folded them into its own "…" that taps to nothing. Two
+attempts at rearranging toolbar items changed nothing on the device, because the
+collapse is the system's decision, not ours.
+
+- **The room header is drawn by the app now**: the room's name and face on the
+  left, then search, schedule and the red Stop on the right. A row we lay out
+  cannot be folded away, so the controls stay where they are drawn.
+- Stop stays in the header and is disabled when there is nothing to stop; it
+  never disappears, so its position is predictable.
+- Scheduled sends and attachments in rooms follow in this release.
+
 ## 4.2.1 — room icons
 
 - **A room can carry an icon** from a built-in set of 30 symbols in six

@@ -197,41 +197,40 @@ ScrollView {
 .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
 
-    /// The room's title pill and menu; `body` only attaches it.
-    @ToolbarContentBuilder
-    private var roomToolbar: some ToolbarContent {
-ToolbarItem(placement: .topBarLeading) {
-    Button { showingProfile = true } label: {
-        HStack(spacing: 8) {
-            BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 30)
-            VStack(alignment: .leading, spacing: 0) {
-                if threadID != nil { Text("Thread").font(.headline) }
-                Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
-                    // Without a cap a long room name widens the leading pill until the
-                    // trailing controls no longer fit and the system folds them away.
-                    .frame(maxWidth: 200, alignment: .leading)
+    /// The room's own header, drawn by the app instead of the navigation bar.
+    ///
+    /// Two attempts at rearranging `ToolbarItem`s changed nothing on the device:
+    /// with a long room name iOS folded the trailing items into its own "…", which
+    /// taps to nothing. That fold is the system's decision, so the row is ours now
+    /// — a row we lay out cannot be collapsed away from the controls it holds.
+    private var roomHeaderRow: some View {
+        HStack(spacing: 12) {
+            Button { showingProfile = true } label: {
+                HStack(spacing: 8) {
+                    BotRoomBadge(key: reader.key, room: reader.room, roster: roster, avatars: avatars, size: 30)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if threadID != nil { Text("Thread").font(.headline) }
+                        Text(reader.room.name).font(threadID == nil ? .headline : .caption).lineLimit(1)
+                    }
+                }
+                .modifier(BotChatTitlePillFallback())
             }
-        }
-        .modifier(BotChatTitlePillFallback())
-    }
-    .accessibilityLabel(reader.room.name)
-    .accessibilityHint("Opens this room’s profile.")
-}
-        // One group on purpose. Two separate trailing ToolbarItems let the system
-        // collapse them into its own "…" overflow when the title pill is wide, and
-        // an overflow that holds only one item reads as a control that does nothing.
-        ToolbarItemGroup(placement: .topBarTrailing) {
+            .buttonStyle(.plain)
+            .accessibilityLabel(reader.room.name)
+            .accessibilityHint("Opens this room’s profile.")
+
+            Spacer(minLength: 8)
+
             Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
                 .accessibilityLabel(Text("Search this room"))
-            // Always present, disabled when there is nothing to stop: the design
-            // asked for a dedicated Stop, and a control that appears only under load
-            // is one the user has to hunt for.
             Button { Task { await reader.stop() } } label: { roomStopLabel }
-                .buttonStyle(.plain)
                 .tint(.red)
                 .disabled(!reader.mayStop)
                 .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(.bar)
     }
 
     @ViewBuilder private var roomStopLabel: some View {
@@ -259,7 +258,7 @@ ToolbarItem(placement: .topBarLeading) {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
-        .toolbar { roomToolbar }
+        .safeAreaInset(edge: .top) { roomHeaderRow }
         .navigationDestination(isPresented: $showingProfile) {
             BotRoomProfileView(reader: reader, roster: roster, avatars: avatars, onUpdateSignIn: onUpdateSignIn)
         }
