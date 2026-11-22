@@ -63,7 +63,10 @@ import Observation
     @ObservationIgnored private var viewOwner: UUID?
     @ObservationIgnored private var commandID: UUID?
     @ObservationIgnored private var dispatched = false
-    @ObservationIgnored private var sending: Send?
+    /// The message in flight, exposed so the transcript can draw it before the room
+    /// confirms it. Echoing the send is what makes the app feel like a messenger:
+    /// without it the text appears only after a poll round trip.
+    @ObservationIgnored private(set) var sending: Send?
     @ObservationIgnored private var stateRevision = 0
     @ObservationIgnored private var log = BotRoomLog()
     @ObservationIgnored private var recentOwner: UUID?
@@ -229,7 +232,19 @@ import Observation
     /// no earlier history to load and no message from the user or a member yet.
     var showsWelcome: Bool { link == .live && !hasEarlier && !BotRoomEvent.hasConversation(in: events) }
     var showsStop: Bool { status.working || status.stopping > 0 || awaitingStop }
-    var mayStop: Bool { allows("groups.stop") && !busy && !awaitingStop && status.stopping == 0 && status.stoppable > 0 }
+    var mayStop: Bool { stopUnavailableReason == nil }
+    /// Why Stop cannot run right now, in words the header can say out loud.
+    ///
+    /// A disabled Stop that explains nothing is indistinguishable from a broken one —
+    /// "it looks red but does not tap" was exactly that. The five conditions behind
+    /// `mayStop` are invisible on screen, so the button reports the one that applies.
+    var stopUnavailableReason: String? {
+        if !allows("groups.stop") { return String(localized: "This sign-in is not allowed to stop this room.") }
+        if awaitingStop || status.stopping > 0 { return String(localized: "Already stopping.") }
+        if busy { return String(localized: "Waiting for the room to answer.") }
+        if status.stoppable == 0 { return String(localized: "Nothing is running in this room.") }
+        return nil
+    }
     var mayEditDraft: Bool { mayEditDraft(in: nil) }
     var maySend: Bool { maySend(in: nil) }
     var mayResend: Bool { mayResend(in: nil) }

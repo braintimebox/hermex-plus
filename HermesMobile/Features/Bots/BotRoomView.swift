@@ -4,6 +4,8 @@ import SwiftUI
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
+    /// Set when Stop was tapped but cannot run, so the button can say why.
+    @State private var stopNotice: String?
     @State private var reader: BotRoomReader
     @State private var revision = UUID()
     @State private var showingProfile = false
@@ -63,6 +65,18 @@ import SwiftUI
         return reader.threads.first { $0.latest.seq == event.seq }
     }
 
+    /// The send in flight for this thread, if any. It disappears the moment the room
+    /// confirms it, because `sending` is cleared and the real event is already in the log.
+    private var pendingEcho: (text: String, id: String)? {
+        guard let sending = reader.sending else { return nil }
+        if let threadID {
+            guard sending.contextThreadID == threadID else { return nil }
+        } else {
+            guard sending.contextThreadID == nil else { return nil }
+        }
+        return (sending.text, sending.eventID)
+    }
+
     private var roomDisplayedRows: [BotRoomTranscriptRow] {
         let visible = Array(roomVisibleEvents)
         let ordered = showsThreadOverview ? Array(visible.reversed()) : visible
@@ -96,6 +110,9 @@ VStack(spacing: 16) {
             cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
             onOpenThread: { selectedThread = $0 }
         )
+    }
+    if let echo = pendingEcho {
+        BotRoomEchoRow(text: echo.text)
     }
     if showsThreadOverview && (hasHiddenEvents || reader.hasEarlier) {
         Button("Load earlier") { loadEarlier(proxy: proxy) }
@@ -238,10 +255,19 @@ ScrollView {
             HStack(spacing: 12) {
                 Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
                     .accessibilityLabel(Text("Search this room"))
-                Button { Task { await reader.stop() } } label: { roomStopLabel }
+                // Never disabled: a dead-looking red button was reported as broken. A tap
+                // that cannot stop says why instead of doing nothing.
+                Button {
+                    if reader.mayStop {
+                        Task { await reader.stop() }
+                    } else {
+                        stopNotice = reader.stopUnavailableReason ?? String(localized: "Nothing to stop.")
+                    }
+                } label: { roomStopLabel }
                     .tint(.red)
-                    .disabled(!reader.mayStop)
+                    .opacity(reader.mayStop ? 1 : 0.55)
                     .accessibilityLabel(Text(reader.finishingStop ? "Stopping every bot" : "Stop every bot in this room"))
+                    .accessibilityHint(Text(reader.stopUnavailableReason ?? ""))
             }
             .fixedSize(horizontal: true, vertical: false)
             .layoutPriority(1)
@@ -291,7 +317,24 @@ ScrollView {
         }
         .task(id: revision) {
             visible = true
-            if scenePhase == .active { await reader.open(owner: owner, preservingLoadedHistory: true) }
+            guard scenePhase == .active else { return }
+            await reader.open(owner: owner, preservingLoadedHistory: true)
+            // The first attempt can lose the race with a connection that is still being
+            // established, and then the room sits empty until the user pulls to refresh.
+            // One retry covers that; a real failure keeps its own message.
+            if reader.link != .live, reader.errorMessage == nil, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                guard !Task.isCancelled, scenePhase == .active else { return }
+                await reader.open(owner: owner, preservingLoadedHistory: true)
+            }
+        }
+        .alert("Stop unavailable", isPresented: Binding(
+            get: { stopNotice != nil },
+            set: { if !$0 { stopNotice = nil } }
+        )) {
+            Button("OK", role: .cancel) { stopNotice = nil }
+        } message: {
+            Text(stopNotice ?? "")
         }
         .onChange(of: scenePhase) {
             // Control Center and banners (`.inactive`) keep the room live (#902); the
@@ -721,5 +764,34 @@ private struct BotRoomRowView: View {
                 )
             }
         }
+    }
+}
+
+/// The message being sent, drawn before the room confirms it.
+///
+/// Rooms have no delivery channel — the transcript is polled — so without an echo the
+/// user's own text appears up to ten seconds after they tapped Send, which reads as
+/// "the app did not get it". This row is the local copy; it is replaced by the real
+/// event on acknowledgement and disappears if the send is abandoned.
+private struct BotRoomEchoRow: View {
+    let text: String
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 48)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(text)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.16),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Sending…").font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Sending: \(text)"))
     }
 }

@@ -1,3 +1,15 @@
+## 4.2.4 — Stop says why, and the room opens without a pull
+
+Two reports, both about a control that did nothing and gave no reason.
+
+- **Stop is never disabled.** It was greyed out by five conditions none of which are
+  visible on screen, so "it looks red and does not tap" was indistinguishable from a
+  broken button. A tap that cannot stop now names the reason — nothing running,
+  already stopping, waiting for the room to answer, or this sign-in not allowed.
+- **A room opens on the first try.** The initial load could lose the race with a
+  connection that was still being established, and the room then stayed empty until
+  the user pulled to refresh. One retry covers it; a real failure keeps its message.
+
 ## 4.2.3 — a password is not rejected because of a newline
 
 The sign-in form sent the password field verbatim, and a password pasted from a
