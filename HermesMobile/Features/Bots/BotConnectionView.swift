@@ -40,6 +40,16 @@ import Observation
             }
             .listRowBackground(Color.clear)
             Section {
+                // The reason a sign-in failed used to live only in os_log, which cannot be
+                // read on a phone: this is the screen that answers "why did it not connect".
+                NavigationLink {
+                    ConnectionLogView()
+                } label: {
+                    Label("Connection log", systemImage: "list.bullet.rectangle")
+                }
+                .accessibilityIdentifier("hermes-connection-log")
+            }
+            Section {
                 if setup.isServerSignIn {
                     // A Hermes server's address is its identity: removing the server is how
                     // it changes, through Settings → Servers.
@@ -489,6 +499,7 @@ enum BotPasswordInput {
             // Newlines never belong to a password; they arrive from the clipboard and
             // make the host answer "wrong password".
             let secret = BotPasswordInput.normalized(password)
+            ConnectionLog.shared.record(.attempt, address: url.absoluteString, detail: "username \(account)")
             let wire = makeWire(BotConnection(id: UUID(), name: label, address: url, username: account,
                                               password: secret, installID: expected, headers: sent))
             client = wire
@@ -510,6 +521,9 @@ enum BotPasswordInput {
                 return false
             }
             saved = candidate
+            ConnectionLog.shared.record(
+                .connected, address: candidate.address.absoluteString,
+                detail: candidate.hermesVersion.map { "Hermes \($0)" } ?? "connected")
             // The old host's status and any check still in flight describe a host
             // this screen no longer shows.
             if old?.address != candidate.address { statusCheck = nil; hostStatus = nil }
@@ -529,6 +543,11 @@ enum BotPasswordInput {
             // with a `HermesHeaders.Rejection` or a `BotAddressError`.
             errorMessage = attempted.map { BotConnectionAdvice.message(for: error, address: $0) }
                 ?? error.localizedDescription
+            // The reason goes on the record too: "Reconnect did nothing" and "the host
+            // refused this password" look identical from the screen alone.
+            ConnectionLog.shared.record(
+                .refused, address: attempted?.absoluteString ?? address,
+                detail: errorMessage ?? error.localizedDescription)
             return false
         }
     }
