@@ -76,6 +76,19 @@ final class RoomAttachmentUploadTests: XCTestCase {
         }
     }
 
+    func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    func file(in directory: URL, named name: String, bytes: Int) throws -> URL {
+        let url = directory.appendingPathComponent(name)
+        try Data(repeating: 9, count: bytes).write(to: url)
+        return url
+    }
+
     func testReadingAMissingFileSaysSoInsteadOfCrashing() {
         let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).txt")
         XCTAssertThrowsError(try RoomAttachmentUpload(contentsOf: url)) { error in
@@ -83,6 +96,69 @@ final class RoomAttachmentUploadTests: XCTestCase {
                 return XCTFail("expected an unreadable refusal, got \(error)")
             }
         }
+    }
+
+    func testEightThreeMegabyteFilesFitAndTheNinthIsRefusedByName() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var budget = RoomAttachmentBudget()
+        for index in 1...8 {
+            try budget.add(contentsOf: try file(in: directory, named: "f\(index).bin", bytes: 3_000_000))
+        }
+        XCTAssertEqual(budget.uploads.count, 8)
+        XCTAssertEqual(budget.byteCount, 24_000_000)
+        XCTAssertEqual(budget.remainingFiles, 0)
+
+        XCTAssertThrowsError(try budget.add(contentsOf: try file(in: directory, named: "f9.bin", bytes: 10))) { error in
+            guard case let RoomAttachmentFailure.tooManyFiles(name, limit) = error else {
+                return XCTFail("expected a count refusal, got \(error)")
+            }
+            XCTAssertEqual(name, "f9.bin")
+            XCTAssertEqual(limit, RoomAttachmentLimit.filesPerMessage)
+        }
+        // A refusal leaves the selection exactly as it was.
+        XCTAssertEqual(budget.uploads.count, 8)
+    }
+
+    func testTwoFifteenMegabyteFilesAreRefusedOnTheSecondWithTheRemainder() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var budget = RoomAttachmentBudget()
+        try budget.add(contentsOf: try file(in: directory, named: "a.mov", bytes: RoomAttachmentLimit.bytes))
+        XCTAssertEqual(budget.remainingBytes, RoomAttachmentLimit.messageBytes - RoomAttachmentLimit.bytes)
+
+        // The second file passes the per-file limit and fails the message budget —
+        // the case a per-file check alone would let through to `groups.send`.
+        XCTAssertThrowsError(try budget.add(contentsOf: try file(in: directory, named: "b.mov", bytes: RoomAttachmentLimit.bytes))) { error in
+            guard case let RoomAttachmentFailure.exceedsMessageBudget(name, bytes, remaining) = error else {
+                return XCTFail("expected a message-budget refusal, got \(error)")
+            }
+            XCTAssertEqual(name, "b.mov")
+            XCTAssertEqual(bytes, RoomAttachmentLimit.bytes)
+            XCTAssertEqual(remaining, RoomAttachmentLimit.messageBytes - RoomAttachmentLimit.bytes)
+            let text = (error as? LocalizedError)?.errorDescription ?? ""
+            XCTAssertTrue(text.contains("b.mov"), text)
+            XCTAssertFalse(text.isEmpty)
+        }
+        XCTAssertEqual(budget.uploads.count, 1, "a refused file must not be queued")
+        XCTAssertEqual(budget.byteCount, RoomAttachmentLimit.bytes)
+    }
+
+    func testTheBudgetIsCheckedBeforeAnyUploadSoNothingIsOrphaned() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var budget = RoomAttachmentBudget()
+        for index in 1...8 {
+            try budget.add(contentsOf: try file(in: directory, named: "ok\(index).bin", bytes: 3_000_000))
+        }
+        let before = budget.uploads
+
+        XCTAssertThrowsError(try budget.add(contentsOf: try file(in: directory, named: "extra.bin", bytes: 1)))
+        XCTAssertEqual(budget.uploads, before)
+        XCTAssertEqual(Set(budget.uploads.map(\.uploadID)).count, 8)
     }
 
     func testMIMEIsNamedForTheExtensionsAComposerActuallySees() {
