@@ -13,6 +13,8 @@ wrong in the first place.
 - Scheduled room messages move onto that model (`sessionId = "room:<id>"`) and the
   separate JSON store goes away: one queue, one place for attempts and terminal
   failures, one "not sent" screen.
+- Scheduled sends in rooms did not persist before 4.2.7 — there is nothing to migrate.
+  They appear for the first time in this release, on the queue the chat already uses.
 - Room pins ride on `SavedMessage`'s `isPinned`, which already survives a relaunch;
   the chat's pin persistence is scoped to `sessionId + serverURLString`, so opening a
   chat cannot clear a room's pins.
