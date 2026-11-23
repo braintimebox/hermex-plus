@@ -310,6 +310,12 @@ import Observation
     /// Overview sends start a thread; detail replies continue its current discussion.
     /// Only the dedicated retry button reuses an uncertain send's id and payload.
     func send(retry: Bool = false, threadID: String? = nil) async {
+        // A slash command belongs to the room, not to its bots: it must not become a
+        // message, and it must not require the send permission the text path checks.
+        if !retry, let command = RoomSlashCommand.parse(draft(in: threadID)) {
+            await run(command, threadID: threadID)
+            return
+        }
         guard retry ? mayResend(in: threadID) : maySend(in: threadID) else { return }
         let request = retry ? uncertainSend(in: threadID)! : Send(text: draft(in: threadID), threadID: threadID)
         sending = request
@@ -327,6 +333,25 @@ import Observation
             self.publishLog()
             self.feedback = BotFeedback(.sent, after: self.feedback)
         })
+    }
+
+    /// Runs a room command without touching the transcript.
+    private func run(_ command: RoomSlashCommand, threadID: String?) async {
+        switch command {
+        case let .title(name):
+            guard mayRename else {
+                errorMessage = String(localized: "This sign-in is not allowed to rename this room.")
+                return
+            }
+            guard BotRoomRPC.validName(name) else {
+                errorMessage = String(localized: "A room name has to be a single line of ordinary text.")
+                return
+            }
+            await rename(name)
+            if errorMessage == nil { setDraft("", in: threadID) }
+        case let .usage(usage):
+            errorMessage = String(localized: "Use \(usage)")
+        }
     }
 
     func stop() async {
@@ -506,5 +531,26 @@ import Observation
         errorMessage = error.localizedDescription
         needsSignIn = error as? BotFailure == .rejected(401)
         if let failure = error as? BotRoomFailure, failure.expired { discardHistory(); close(); onExpired() }
+    }
+}
+
+/// The room commands the composer understands.
+///
+/// They are handled in the app on purpose: `groups.send` would deliver the text to every
+/// bot in the room, and none of them asked for it. Each command maps onto a verb the room
+/// already has, so nothing new is needed on the gateway.
+enum RoomSlashCommand: Equatable {
+    case title(String)
+    case usage(String)
+
+    /// The command in *text*, or nil when this is an ordinary message.
+    static func parse(_ text: String) -> RoomSlashCommand? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/") else { return nil }
+        let body = trimmed.dropFirst()
+        let name = body.prefix { !$0.isWhitespace }.lowercased()
+        guard name == "title" else { return nil }
+        let rest = body.dropFirst(name.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest.isEmpty ? .usage("/title <new name>") : .title(rest)
     }
 }
