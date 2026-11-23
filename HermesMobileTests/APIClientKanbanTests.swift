@@ -302,7 +302,9 @@ final class APIClientKanbanTests: APIClientTestCase {
         )
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
 
-        XCTAssertEqual(components?.path, "/root/api/plugins/kanban/events/stream")
+        // 4.2.6 reads the board by polling: the plugin tails events over a WebSocket and
+        // there is no SSE route, so this case resolves to `/board` on purpose.
+        XCTAssertEqual(components?.path, "/root/api/plugins/kanban/board")
         XCTAssertEqual(components?.queryItems, [
             URLQueryItem(name: "board", value: "release board"),
             URLQueryItem(name: "since", value: "42")
@@ -582,8 +584,9 @@ final class APIClientKanbanTests: APIClientTestCase {
                 XCTAssertEqual(body as NSDictionary, ["parent_id": "CARD-0", "child_id": "CARD-1"])
                 return apiTestJSONResponse(#"{"ok":true,"parent_id":"CARD-0","child_id":"CARD-1","read_only":false}"#, for: request)
             default:
-                XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/links/delete")
+                // The plugin distinguishes add from remove by method, not by path.
+                XCTAssertEqual(request.httpMethod, "DELETE")
+                XCTAssertEqual(components?.path, "/api/plugins/kanban/links")
                 XCTAssertEqual(body as NSDictionary, ["parent_id": "CARD-0", "child_id": "CARD-1"])
                 return apiTestJSONResponse(#"{"ok":true,"changed":true,"parent_id":"CARD-0","child_id":"CARD-1","read_only":false}"#, for: request)
             }
