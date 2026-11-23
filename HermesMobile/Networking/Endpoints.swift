@@ -363,49 +363,57 @@ enum Endpoint {
         case .cronRecent:
             return "/api/crons/recent"
         case .kanbanConfig:
-            return "/api/kanban/config"
+            // Mounted at `/api/plugins/<name>` by the dashboard
+            // (`hermes_cli/web_server_dashboard.py:1258-1262`), and relative on purpose:
+            // the base address carries the proxy prefix (`…/dash`), so an absolute path
+            // would drop it and 404 at the door.
+            return "api/plugins/kanban/config"
         case .kanbanBoards, .kanbanCreateBoard:
-            return "/api/kanban/boards"
+            return "api/plugins/kanban/boards"
         case let .kanbanEditBoard(request):
-            return "/api/kanban/boards/\(request.slug)"
+            return "api/plugins/kanban/boards/\(request.slug)"
         case let .kanbanArchiveBoard(request):
-            return "/api/kanban/boards/\(request.slug)"
+            return "api/plugins/kanban/boards/\(request.slug)"
         case let .kanbanMakeBoardActive(request):
-            return "/api/kanban/boards/\(request.slug)/switch"
+            return "api/plugins/kanban/boards/\(request.slug)/switch"
         case .kanbanDispatch:
-            return "/api/kanban/dispatch"
+            return "api/plugins/kanban/dispatch"
         case .kanbanBoard:
-            return "/api/kanban/board"
+            return "api/plugins/kanban/board"
         case .kanbanStats:
-            return "/api/kanban/stats"
+            return "api/plugins/kanban/stats"
         case .kanbanAssignees:
-            return "/api/kanban/assignees"
+            return "api/plugins/kanban/assignees"
         case .kanbanEvents:
-            return "/api/kanban/events"
+            return "api/plugins/kanban/events"
         case .kanbanEventsStream:
-            return "/api/kanban/events/stream"
+            // The plugin tails task events over a WebSocket (`/events`); an SSE path does
+            // not exist. Until that channel lands with the room stream, the board is read
+            // by polling `/board`, so this case stays as a marker, not as a request.
+            return "api/plugins/kanban/board"
         case let .kanbanCardDetail(request):
-            return "/api/kanban/tasks/\(request.cardID)"
+            return "api/plugins/kanban/tasks/\(request.cardID)"
         case let .kanbanWorkerLog(request):
-            return "/api/kanban/tasks/\(request.cardID)/log"
+            return "api/plugins/kanban/tasks/\(request.cardID)/log"
         case let .kanbanAddComment(request):
-            return "/api/kanban/tasks/\(request.cardID)/comments"
+            return "api/plugins/kanban/tasks/\(request.cardID)/comments"
         case .kanbanCreateCard:
-            return "/api/kanban/tasks"
+            return "api/plugins/kanban/tasks"
         case .kanbanBulkAction:
-            return "/api/kanban/tasks/bulk"
+            return "api/plugins/kanban/tasks/bulk"
         case let .kanbanEditCard(request):
-            return "/api/kanban/tasks/\(request.cardID)"
+            return "api/plugins/kanban/tasks/\(request.cardID)"
         case let .kanbanCardStatus(request):
-            return "/api/kanban/tasks/\(request.cardID)"
+            return "api/plugins/kanban/tasks/\(request.cardID)"
         case let .kanbanBlockCard(request):
-            return "/api/kanban/tasks/\(request.cardID)/block"
+            return "api/plugins/kanban/tasks/\(request.cardID)/block"
         case let .kanbanUnblockCard(request):
-            return "/api/kanban/tasks/\(request.cardID)/unblock"
+            return "api/plugins/kanban/tasks/\(request.cardID)/unblock"
         case .kanbanAddDependency:
-            return "/api/kanban/links"
+            return "api/plugins/kanban/links"
         case .kanbanRemoveDependency:
-            return "/api/kanban/links/delete"
+            // Same route as the add: the plugin distinguishes them by method (DELETE).
+            return "api/plugins/kanban/links"
         case .memory:
             return "/api/memory"
         case .memoryWrite:
@@ -631,7 +639,7 @@ enum Endpoint {
     }
 
     private func kanbanTaskURL(relativeTo baseURL: URL, cardID: String, suffix: String = "") -> URL {
-        let root = baseURL.appending(path: "/api/kanban/tasks")
+        let root = baseURL.appending(path: "api/plugins/kanban/tasks")
         guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false),
               let encodedCardID = cardID.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed)
         else {
@@ -642,7 +650,7 @@ enum Endpoint {
     }
 
     private func kanbanBoardURL(relativeTo baseURL: URL, slug: String, suffix: String = "") -> URL {
-        let root = baseURL.appending(path: "/api/kanban/boards")
+        let root = baseURL.appending(path: "api/plugins/kanban/boards")
         guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false),
               let encodedSlug = slug.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed)
         else {

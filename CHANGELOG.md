@@ -1,3 +1,22 @@
+## 4.2.6 — the room header is the chat header
+
+The room drew its own header row: a pill around the room's face, a `.bar` background
+and a top safe-area inset. Three releases in, it still looked like a different app,
+because it was a copy of the chat header's appearance rather than the components the
+chat header is built from.
+
+- `ChatToolbarTitleLabel` in `.principal` — the room's name over its composition, the
+  same type and spacing the chat uses for the workspace line.
+- `ChatToolbarActionCluster` + `ChatToolbarActionSlot` for search and Stop, so the
+  icon size, weight, hit area and press state match the chat's toolbar by
+  construction rather than by eye.
+- Two separate `ToolbarItem`s in the trailing position, not a `ToolbarItemGroup`: the
+  group is what iOS folded into its own "…" when a room name was long.
+- The same `toolbarBackground` as the chat, visible.
+- The composer is pinned with `spacing: 0`, as the chat does. The default inset gap
+  sat on top of the composer's own padding, which read as a fat margin under a small
+  composer.
+
 ## 4.2.4 — Stop says why, and the room opens without a pull
 
 Two reports, both about a control that did nothing and gave no reason.

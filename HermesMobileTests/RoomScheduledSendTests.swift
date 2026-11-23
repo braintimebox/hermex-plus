@@ -173,3 +173,29 @@ final class RoomScheduledSendTests: XCTestCase {
         XCTAssertEqual(ready.remainingFiles, RoomAttachmentLimit.filesPerMessage - 1)
     }
 }
+
+@MainActor
+final class RoomSlashCommandTests: XCTestCase {
+    func testTitleWithANameIsACommand() {
+        XCTAssertEqual(RoomSlashCommand.parse("/title Build room"), .title("Build room"))
+        XCTAssertEqual(RoomSlashCommand.parse("  /title   Spaced  out  "), .title("Spaced  out"))
+    }
+
+    func testTitleWithoutANameAsksForOneInsteadOfRenamingToNothing() {
+        XCTAssertEqual(RoomSlashCommand.parse("/title"), .usage("/title <new name>"))
+        XCTAssertEqual(RoomSlashCommand.parse("/title    "), .usage("/title <new name>"))
+    }
+
+    func testOrdinaryTextIsNotACommand() {
+        // A message that merely starts with a slash must still reach the bots.
+        XCTAssertNil(RoomSlashCommand.parse("hello /title there"))
+        XCTAssertNil(RoomSlashCommand.parse("/titles are fine"))
+        XCTAssertNil(RoomSlashCommand.parse(""))
+        XCTAssertNil(RoomSlashCommand.parse("/"))
+    }
+
+    func testTheCommandIsCaseInsensitiveButKeepsTheNameAsTyped() {
+        XCTAssertEqual(RoomSlashCommand.parse("/TITLE Release"), .title("Release"))
+        XCTAssertEqual(RoomSlashCommand.parse("/TiTlE Release"), .title("Release"))
+    }
+}

@@ -254,7 +254,9 @@ extension APIClient: KanbanDataClient {
     func removeKanbanDependency(_ request: KanbanDependencyMutationRequest) async throws -> KanbanDependencyMutationEnvelope {
         try await kanbanJSON(
             endpoint: .kanbanRemoveDependency(request),
-            method: "POST",
+            // The plugin separates add from remove by method on the same route
+            // (`delete("/links")`), not by a `/links/delete` path.
+            method: "DELETE",
             body: KanbanDependencyBody(request: request)
         )
     }

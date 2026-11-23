@@ -1740,6 +1740,12 @@ private struct KanbanBoardManagementView: View {
                     .font(.headline)
                 Text(boardMutationPhase(mutation.phase))
                     .foregroundStyle(.secondary)
+                if let message = mutation.message, mutation.phase == .failed {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             Spacer()
             if mutation.phase == .outcomeUncertain {
