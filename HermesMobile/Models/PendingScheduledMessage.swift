@@ -75,13 +75,20 @@ final class PendingScheduledMessage {
         createdAt: Date = Date(),
         attachments: [ScheduledMessageAttachment] = [],
         eventID: String? = nil,
-        threadID: String? = nil
+        threadID: String? = nil,
+        scheduleKey: String? = nil
     ) {
         // Unique key: sessionId + timestamp + UUID. Timestamp alone collides
         // when two messages are scheduled for the same minute (DatePicker wheel
         // zeroes seconds), which made SwiftData's @Attribute(.unique) drop the
         // second insert silently — the "message disappears" bug.
-        self.scheduleKey = "\(sessionId)|\(scheduledAt.timeIntervalSince1970)|\(UUID().uuidString)"
+        // A chat row's key is its link to the server's scheduled list
+        // (`ScheduledMessagesView` deletes rows the server no longer has), so its shape
+        // must not change. A room has no server-side list, so its key is derived from the
+        // event id instead: stable across launches, unique by construction, and it cannot
+        // collide the way two messages scheduled in the same minute once did.
+        self.scheduleKey = scheduleKey
+            ?? "\(sessionId)|\(scheduledAt.timeIntervalSince1970)|\(UUID().uuidString)"
         self.sessionId = sessionId
         self.sessionTitle = sessionTitle
         self.draftText = draftText
