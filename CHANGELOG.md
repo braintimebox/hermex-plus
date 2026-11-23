@@ -1,3 +1,22 @@
+## 4.2.7 — one queue for scheduled sends, one store for pins
+
+Rooms were growing their own storage beside the chat's. Two things the chat already
+does well, and a second implementation of each is how the composer and the header went
+wrong in the first place.
+
+- `PendingScheduledMessage` gained `eventID` and `threadID`. The first is the
+  `event_id` `groups.send` deduplicates by: a retry after an uncertain result must
+  carry the same id, or the message is posted into the room twice and the bots answer
+  it twice. The second keeps a scheduled reply inside the thread it was written in.
+  Both are optional with a default, so the existing database migrates without a new
+  schema version.
+- Scheduled room messages move onto that model (`sessionId = "room:<id>"`) and the
+  separate JSON store goes away: one queue, one place for attempts and terminal
+  failures, one "not sent" screen.
+- Room pins ride on `SavedMessage`'s `isPinned`, which already survives a relaunch;
+  the chat's pin persistence is scoped to `sessionId + serverURLString`, so opening a
+  chat cannot clear a room's pins.
+
 ## 4.2.6 — the room header is the chat header
 
 The room drew its own header row: a pill around the room's face, a `.bar` background
