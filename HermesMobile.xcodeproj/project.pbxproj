@@ -548,12 +548,15 @@
 		EDCC36EF9A18A386E481D7B2 /* TranscriptLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 309359316C851605012FD5FC /* TranscriptLinks.swift */; };
 		27E646C4882847C344822646 /* RoomAttachmentUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */; };
 		AA83C5AD66A2AA2CBDDD2C27 /* RoomAttachmentUploadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */; };
-		679C4CE83B26B2500FEA4EBA /* RoomScheduledSend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6370B022F99134DE7DC8A1 /* RoomScheduledSend.swift */; };
-		58302EA3F0F75B4415A13AEB /* RoomScheduledSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D186221F5FA11B804AFF6DA /* RoomScheduledSendTests.swift */; };
 		6D6A0F1539A2573026DAC86F /* BotPasswordInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F575705571AA3187E5BF36 /* BotPasswordInputTests.swift */; };
 		A60DDB7E60DD910F3A7A5148 /* ConnectionLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF95EACE3DB7EAEF613253CE /* ConnectionLog.swift */; };
 		56FA49A771157AFD5A884E0A /* ConnectionLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 967DC22810B2C85E54EDF7DB /* ConnectionLogTests.swift */; };
 		ECAD7E8080F252950FEA05D0 /* KanbanEndpointPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99855C1485CC94C69488182B /* KanbanEndpointPathTests.swift */; };
+		6E811015562079F5EF3A593E /* RoomScheduleQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27681EE5F9C1A3D8C56AD79B /* RoomScheduleQueue.swift */; };
+		0E23D452317582F4107F9F32 /* RoomScheduleQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456459BEE25CA86AE97ACB1A /* RoomScheduleQueueTests.swift */; };
+		6101047BC5CE7A66B0961961 /* RoomPins.swift in Sources */ = {isa = PBXBuildFile; fileRef = 921EF1F7D4F490BC15FEE85F /* RoomPins.swift */; };
+		682FFB6817FAFCFFFDBF079E /* RoomPinsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 958C9C076BFA1678E607B53C /* RoomPinsTests.swift */; };
+		C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1133,12 +1136,15 @@
 		309359316C851605012FD5FC /* TranscriptLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Chat/TranscriptLinks.swift"; sourceTree = "<group>"; };
 		24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomAttachmentUpload.swift"; sourceTree = "<group>"; };
 		99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomAttachmentUploadTests.swift"; sourceTree = "<group>"; };
-		6C6370B022F99134DE7DC8A1 /* RoomScheduledSend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduledSend.swift"; sourceTree = "<group>"; };
-		1D186221F5FA11B804AFF6DA /* RoomScheduledSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomScheduledSendTests.swift"; sourceTree = "<group>"; };
 		38F575705571AA3187E5BF36 /* BotPasswordInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BotPasswordInputTests.swift"; sourceTree = "<group>"; };
 		BF95EACE3DB7EAEF613253CE /* ConnectionLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/ConnectionLog.swift"; sourceTree = "<group>"; };
 		967DC22810B2C85E54EDF7DB /* ConnectionLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionLogTests.swift"; sourceTree = "<group>"; };
 		99855C1485CC94C69488182B /* KanbanEndpointPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KanbanEndpointPathTests.swift"; sourceTree = "<group>"; };
+		27681EE5F9C1A3D8C56AD79B /* RoomScheduleQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduleQueue.swift"; sourceTree = "<group>"; };
+		456459BEE25CA86AE97ACB1A /* RoomScheduleQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomScheduleQueueTests.swift"; sourceTree = "<group>"; };
+		921EF1F7D4F490BC15FEE85F /* RoomPins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomPins.swift"; sourceTree = "<group>"; };
+		958C9C076BFA1678E607B53C /* RoomPinsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomPinsTests.swift"; sourceTree = "<group>"; };
+		DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduleView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1245,10 +1251,11 @@
 			children = (
 				EE6A7BC5738C4EF9AB0A965B /* BotDraftTests.swift */,
 				99C6DFF0D61B19D668251BAD /* RoomAttachmentUploadTests.swift */,
-				1D186221F5FA11B804AFF6DA /* RoomScheduledSendTests.swift */,
 				38F575705571AA3187E5BF36 /* BotPasswordInputTests.swift */,
 				967DC22810B2C85E54EDF7DB /* ConnectionLogTests.swift */,
 				99855C1485CC94C69488182B /* KanbanEndpointPathTests.swift */,
+				456459BEE25CA86AE97ACB1A /* RoomScheduleQueueTests.swift */,
+				958C9C076BFA1678E607B53C /* RoomPinsTests.swift */,
 				D1C0DE000000000000000004 /* RoomIconStoreTests.swift */,
 				A496B07E0000000000000002 /* BotModeGateTests.swift */,
 				A4730000000000000000A004 /* BotAvatarTests.swift */,
@@ -1554,8 +1561,10 @@
 				2ECB8C16F87FE47562BDC022 /* BotRoomReader.swift */,
 				7F7546E0B84641762CE6F25A /* BotRoomView.swift */,
 				24FCA3CFD1B678ADAA3A8810 /* RoomAttachmentUpload.swift */,
-				6C6370B022F99134DE7DC8A1 /* RoomScheduledSend.swift */,
 				BF95EACE3DB7EAEF613253CE /* ConnectionLog.swift */,
+				27681EE5F9C1A3D8C56AD79B /* RoomScheduleQueue.swift */,
+				921EF1F7D4F490BC15FEE85F /* RoomPins.swift */,
+				DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */,
 				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				2151C61191916592AFD8B5C1 /* BotSearchView.swift */,
 				383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */,
@@ -2182,8 +2191,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				27E646C4882847C344822646 /* RoomAttachmentUpload.swift in Sources */,
-				679C4CE83B26B2500FEA4EBA /* RoomScheduledSend.swift in Sources */,
 				A60DDB7E60DD910F3A7A5148 /* ConnectionLog.swift in Sources */,
+				6E811015562079F5EF3A593E /* RoomScheduleQueue.swift in Sources */,
+				6101047BC5CE7A66B0961961 /* RoomPins.swift in Sources */,
+				C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */,
 				D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */,
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
 				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,
@@ -2559,10 +2570,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA83C5AD66A2AA2CBDDD2C27 /* RoomAttachmentUploadTests.swift in Sources */,
-				58302EA3F0F75B4415A13AEB /* RoomScheduledSendTests.swift in Sources */,
 				6D6A0F1539A2573026DAC86F /* BotPasswordInputTests.swift in Sources */,
 				56FA49A771157AFD5A884E0A /* ConnectionLogTests.swift in Sources */,
 				ECAD7E8080F252950FEA05D0 /* KanbanEndpointPathTests.swift in Sources */,
+				0E23D452317582F4107F9F32 /* RoomScheduleQueueTests.swift in Sources */,
+				682FFB6817FAFCFFFDBF079E /* RoomPinsTests.swift in Sources */,
 				D1C0DE000000000000000003 /* RoomIconStoreTests.swift in Sources */,
 				142E7F57D82742678CF78DCA /* BotDraftTests.swift in Sources */,
 				A496B07E0000000000000001 /* BotModeGateTests.swift in Sources */,

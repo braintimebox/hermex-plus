@@ -1,3 +1,29 @@
+## 4.2.8 — the calendar, the pins and one queue
+
+Rooms were growing their own storage beside the chat's. Two things the chat already
+does well, and a second implementation of each is how the composer and the header went
+wrong in the first place.
+
+- The trailing slot now says what the room can do: a **calendar** while nothing runs,
+  the red **Stop** only when something is stoppable. A control drawn in the active
+  colour is always pressable; when Stop cannot act it is absent, not greyed out.
+- A **scheduled** screen lists everything waiting to go out: due time, how many attempts
+  failed, the terminal reason in words, and retry or delete for each row.
+- `PendingScheduledMessage` gained `eventID` and `threadID`. The first is the
+  `event_id` `groups.send` deduplicates by: a retry after an uncertain result must
+  carry the same id, or the message is posted into the room twice and the bots answer
+  it twice. The second keeps a scheduled reply inside the thread it was written in.
+  Both are optional with a default, so the existing database migrates without a new
+  schema version.
+- Scheduled room messages move onto that model (`sessionId = "room:<id>"`) and the
+  separate JSON store goes away: one queue, one place for attempts and terminal
+  failures, one "not sent" screen.
+- Scheduled sends in rooms did not persist before 4.2.8 — there is nothing to migrate.
+  They appear for the first time in this release, on the queue the chat already uses.
+- Room pins ride on `SavedMessage`'s `isPinned`, which already survives a relaunch;
+  the chat's pin persistence is scoped to `sessionId + serverURLString`, so opening a
+  chat cannot clear a room's pins.
+
 ## 4.2.6 — the room header is the chat header
 
 The room drew its own header row: a pill around the room's face, a `.bar` background

@@ -32,6 +32,24 @@ final class PendingScheduledMessage {
     /// keep a message in flight forever.
     var failedAttemptCount: Int = 0
 
+    /// HERMEX-FORK: the `event_id` a room send is deduplicated by.
+    ///
+    /// WHY: `groups.send` accepts an event id and drops a repeat of it. A scheduled
+    /// message that is retried after an uncertain result — the request may or may not
+    /// have been applied — must carry the *same* id, otherwise the retry posts the
+    /// message into the room a second time and the bots answer it twice. Chat sessions
+    /// have no such field because their API has no such idempotency key.
+    ///
+    /// Optional with a default: a row written before this column existed has nothing to
+    /// fill it with, and SwiftData's lightweight migration needs that.
+    var eventID: String? = nil
+
+    /// HERMEX-FORK: the thread a room message belongs to.
+    ///
+    /// WHY: a scheduled reply written inside a room thread must land in that thread. The
+    /// chat has no threads, so the field is unused there and nil for every chat row.
+    var threadID: String? = nil
+
     /// True when automatic delivery has been given up for this message.
     var isDeliveryTerminal: Bool { terminalFailureReason != nil }
 
@@ -55,19 +73,30 @@ final class PendingScheduledMessage {
         scheduledAt: Date,
         serverURLString: String,
         createdAt: Date = Date(),
-        attachments: [ScheduledMessageAttachment] = []
+        attachments: [ScheduledMessageAttachment] = [],
+        eventID: String? = nil,
+        threadID: String? = nil,
+        scheduleKey: String? = nil
     ) {
         // Unique key: sessionId + timestamp + UUID. Timestamp alone collides
         // when two messages are scheduled for the same minute (DatePicker wheel
         // zeroes seconds), which made SwiftData's @Attribute(.unique) drop the
         // second insert silently — the "message disappears" bug.
-        self.scheduleKey = "\(sessionId)|\(scheduledAt.timeIntervalSince1970)|\(UUID().uuidString)"
+        // A chat row's key is its link to the server's scheduled list
+        // (`ScheduledMessagesView` deletes rows the server no longer has), so its shape
+        // must not change. A room has no server-side list, so its key is derived from the
+        // event id instead: stable across launches, unique by construction, and it cannot
+        // collide the way two messages scheduled in the same minute once did.
+        self.scheduleKey = scheduleKey
+            ?? "\(sessionId)|\(scheduledAt.timeIntervalSince1970)|\(UUID().uuidString)"
         self.sessionId = sessionId
         self.sessionTitle = sessionTitle
         self.draftText = draftText
         self.scheduledAt = scheduledAt
         self.createdAt = createdAt
         self.serverURLString = serverURLString
+        self.eventID = eventID
+        self.threadID = threadID
         setAttachments(attachments)
     }
 }

@@ -157,3 +157,44 @@ final class ScheduledDeliveryRetryTests: XCTestCase {
         XCTAssertEqual(due.map(\.sessionId), ["live"])
     }
 }
+
+/// The two fields a room send needs from the shared queue, and the reason each exists.
+final class ScheduledRoomFieldsTests: XCTestCase {
+    func testTheRoomFieldsDefaultToNilSoChatRowsAreUnchanged() {
+        let message = PendingScheduledMessage(
+            sessionId: "session-1",
+            draftText: "hello",
+            scheduledAt: Date(),
+            serverURLString: "https://example.test"
+        )
+        XCTAssertNil(message.eventID)
+        XCTAssertNil(message.threadID)
+    }
+
+    func testTheEventIDAndThreadAreKeptForTheRetry() {
+        // A retry that invents a new event id posts the message twice; the id has to
+        // survive the queue, the relaunch and the delivery attempt.
+        let message = PendingScheduledMessage(
+            sessionId: "room:room-1",
+            draftText: "reply",
+            scheduledAt: Date(),
+            serverURLString: "https://example.test",
+            eventID: "evt-42",
+            threadID: "thread-7"
+        )
+        XCTAssertEqual(message.eventID, "evt-42")
+        XCTAssertEqual(message.threadID, "thread-7")
+        XCTAssertEqual(message.sessionId, "room:room-1")
+    }
+
+    func testTwoMessagesScheduledForTheSameMinuteStillGetDistinctKeys() {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = PendingScheduledMessage(
+            sessionId: "room:room-1", draftText: "a", scheduledAt: at,
+            serverURLString: "https://example.test", eventID: "evt-1")
+        let second = PendingScheduledMessage(
+            sessionId: "room:room-1", draftText: "b", scheduledAt: at,
+            serverURLString: "https://example.test", eventID: "evt-2")
+        XCTAssertNotEqual(first.scheduleKey, second.scheduleKey)
+    }
+}

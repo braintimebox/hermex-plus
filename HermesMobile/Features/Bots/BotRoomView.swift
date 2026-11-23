@@ -6,6 +6,7 @@ import SwiftUI
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     /// Set when Stop was tapped but cannot run, so the button can say why.
     @State private var stopNotice: String?
+    @State private var showingSchedule = false
     @State private var reader: BotRoomReader
     @State private var revision = UUID()
     @State private var showingProfile = false
@@ -291,7 +292,17 @@ ScrollView {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 ChatToolbarActionCluster {
-                    ChatToolbarActionSlot { stopControl }
+                    // One slot, two meanings, decided by state: Stop while there is
+                    // something to stop, the calendar when the room is idle. Two slots
+                    // would have meant two buttons competing for the same width.
+                    ChatToolbarActionSlot {
+                        if reader.showsStop || reader.mayStop || reader.finishingStop {
+                            stopControl
+                        } else {
+                            Button { showingSchedule = true } label: { Image(systemName: "calendar") }
+                                .accessibilityLabel(Text("Scheduled messages"))
+                        }
+                    }
                 }
             }
         }
@@ -318,6 +329,12 @@ ScrollView {
                 try? await Task.sleep(nanoseconds: 700_000_000)
                 guard !Task.isCancelled, scenePhase == .active else { return }
                 await reader.open(owner: owner, preservingLoadedHistory: true)
+            }
+        }
+        .sheet(isPresented: $showingSchedule) {
+            NavigationStack {
+                RoomScheduleView(room: reader.key, roomName: reader.room.name,
+                                 serverURLString: reader.key.server.absoluteString)
             }
         }
         .alert("Stop unavailable", isPresented: Binding(
