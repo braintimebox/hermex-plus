@@ -234,6 +234,10 @@ enum KanbanBoardMutationKind: Equatable, Sendable {
 struct KanbanBoardMutationState: Equatable, Sendable {
     let kind: KanbanBoardMutationKind
     let phase: KanbanCardMutationPhase
+    /// The server's own words when it refused, e.g. "the 'default' board cannot be
+    /// removed". Dropping it left the user with a generic failure for a request the
+    /// server explained precisely.
+    var message: String?
 }
 
 struct KanbanBoardSelectionNotice: Equatable, Sendable {
@@ -2114,6 +2118,8 @@ final class KanbanFeatureState {
             guard continueBoardMutation(mutationGeneration, kind: kind) else { return }
             forwardAuthentication(error)
             markCapabilityUnavailableIfNeeded(.boardManagement, error: error)
+            boardMutationState = KanbanBoardMutationState(
+                kind: kind, phase: .failed, message: error.localizedDescription)
             definitiveFailure = isDefinitiveWriteFailure(error)
         }
         guard continueBoardMutation(mutationGeneration, kind: kind) else {
@@ -2132,7 +2138,9 @@ final class KanbanFeatureState {
             return
         }
         if definitiveFailure {
-            boardMutationState = KanbanBoardMutationState(kind: kind, phase: .failed)
+            if boardMutationState?.phase != .failed {
+                boardMutationState = KanbanBoardMutationState(kind: kind, phase: .failed)
+            }
         } else if let response {
             boardMutationState = KanbanBoardMutationState(
                 kind: kind,

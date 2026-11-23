@@ -441,6 +441,11 @@ struct KanbanBoard: Decodable, Equatable, Sendable {
     let counts: [String: Int]?
     let readOnly: Bool?
 
+    /// There is no read-only board on the server (`grep read_only` over
+    /// `kanban_db_boards.py` and `plugin_api.py`: zero), so a missing flag means
+    /// "editable", not "unknown".
+    var isReadOnly: Bool { readOnly ?? false }
+
     enum CodingKeys: String, CodingKey {
         case slug, name, description, icon, color, isCurrent, total, counts, readOnly
     }
@@ -449,9 +454,12 @@ struct KanbanBoard: Decodable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         slug = container.decodeLossyStringIfPresent(forKey: .slug)
         name = container.decodeLossyStringIfPresent(forKey: .name)
-        description = container.decodeLossyStringIfPresent(forKey: .description)
-        icon = container.decodeLossyStringIfPresent(forKey: .icon)
-        color = container.decodeLossyStringIfPresent(forKey: .color)
+        // The plugin defaults these to "" (kanban_db_boards.py:44-48). "" means "not set",
+        // and normalising it here is what stops every screen from having to remember that —
+        // an icon of "" draws an empty square instead of nothing.
+        description = container.decodeLossyStringIfPresent(forKey: .description).flatMap { $0.isEmpty ? nil : $0 }
+        icon = container.decodeLossyStringIfPresent(forKey: .icon).flatMap { $0.isEmpty ? nil : $0 }
+        color = container.decodeLossyStringIfPresent(forKey: .color).flatMap { $0.isEmpty ? nil : $0 }
         isCurrent = container.decodeLossyBoolIfPresent(forKey: .isCurrent)
         total = container.decodeLossyIntIfPresent(forKey: .total)
         counts = try? container.decodeIfPresent([String: Int].self, forKey: .counts)
