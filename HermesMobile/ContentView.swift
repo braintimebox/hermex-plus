@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var authManager: AuthManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(ResponseCompletionNotifications.isEnabledKey) private var isResponseCompletionNotificationsEnabled = false
     @State private var pendingSharedImport: SharedImportReservation?
     @State private var hasWaitingSharedImport = false
@@ -15,6 +16,16 @@ struct ContentView: View {
     var body: some View {
         content
             .onOpenURL(perform: handleOpenURL)
+            // Room scheduled sends are delivered from here, not from a screen: a loop that
+            // lived in the session list stopped running the moment the user opened a room or
+            // settings, which is exactly when a scheduled message is most likely to be due.
+            .task {
+                await deliverScheduledRoomMessages()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    await deliverScheduledRoomMessages()
+                }
+            }
             .task {
                 guard !didCheckInitialPendingShare else { return }
                 didCheckInitialPendingShare = true
@@ -51,6 +62,11 @@ struct ContentView: View {
                 // paths own notifications while the app is alive.
                 Task { await reconcileOrphanedLiveActivities(notifiesOnCompletion: false) }
             }
+    }
+
+    private func deliverScheduledRoomMessages() async {
+        guard case .loggedIn = authManager.state else { return }
+        await RoomScheduledDelivery.deliverDue(in: modelContext)
     }
 
     private func reconcileOrphanedLiveActivities(notifiesOnCompletion: Bool) async {

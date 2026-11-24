@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The Bot editor and mention panel, with only the controls rooms support.
 struct BotRoomComposerView: View {
@@ -7,6 +8,7 @@ struct BotRoomComposerView: View {
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(HeaderLogoColor.storageKey) private var themeHex = HeaderLogoColor.defaultHex
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
@@ -15,6 +17,15 @@ struct BotRoomComposerView: View {
     @State private var focused = false
     @State private var inputHeight: CGFloat = 22
     @State private var measuredHeight: CGFloat = 0
+    /// The schedule sheet: without an entry point the queue had no way in, and the calendar
+    /// in the header showed a list nobody could add to.
+    /// Files picked or pasted into this draft. Uploaded at send time, so a file that is
+    /// removed from the draft never becomes a blob the room has to store.
+    @State private var attachments: [RoomAttachmentUpload] = []
+    @State private var attachmentNotice: String?
+    @State private var isPickingAttachments = false
+    @State private var isScheduling = false
+    @State private var scheduledAt = Date().addingTimeInterval(3_600)
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 16
 
     var body: some View {
@@ -39,12 +50,29 @@ struct BotRoomComposerView: View {
                         isDisabled: !reader.mayEditDraft(in: threadID), isCollapsed: !focused,
                         isKeyboardSendEnabled: reader.maySend(in: threadID), verticalPadding: 6,
                         chipSkills: [], chipFilePaths: [], quotes: [], onKeyboardSend: send,
-                        onPasteFileProviders: { _ in }, onPasteFileURLs: { _ in },
-                        onPasteImageProviders: { _ in }, onPasteImages: { _ in },
+                        onPasteFileProviders: { providers in add(providers: providers) },
+                        onPasteFileURLs: { urls in add(urls: urls) },
+                        onPasteImageProviders: { providers in add(providers: providers) },
+                        onPasteImages: { providers in add(providers: providers) },
                         onTapChip: { _ in }, onTapQuote: { _ in }, onRemoveQuote: { _ in },
-                        placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: false
+                        placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: true
                     )
+                    if reader.showsComposer {
+                        // The attach control sits next to Send, where the user already is
+                        // when they decide a message needs a file.
+                        Button { isPickingAttachments = true } label: {
+                            Image(systemName: "paperclip")
+                                .font(.system(size: 18, weight: .regular))
+                                .frame(width: ChatComposerMetrics.actionSize)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(Text("Attach a file"))
+                    }
                     actionButton
+                }
+                if !attachments.isEmpty || attachmentNotice != nil {
+                    attachmentBudgetLine
                 }
                 .padding(ChatComposerMetrics.pillInset)
                 .modifier(ChatComposerSurfaceStyle(isExpanded: focused))
@@ -54,6 +82,10 @@ struct BotRoomComposerView: View {
         // inset. The 8 points kept the glass surface off the bottom edge and let
         // the transcript show through the strip underneath it.
         .padding(.horizontal, 16)
+        .roomAttachmentPicker(isPresented: $isPickingAttachments) { urls in
+            guard !urls.isEmpty else { return }
+            add(urls: urls)
+        }
     }
 
     /// Rooms send or stop, never both from one control: Stop lives in the top bar
@@ -76,9 +108,127 @@ struct BotRoomComposerView: View {
         }
         .buttonStyle(.chatTactile(.icon)).disabled(!enabled)
         .accessibilityLabel(Text("Send"))
+        // The same gesture the chat uses: long-press Send for "Schedule Message". It lives
+        // on the send button because that is where the user already is when they decide the
+        // message should go later.
+        .contextMenu {
+            if enabled {
+                Button { send() } label: { Label("Send", systemImage: "arrow.up.circle.fill") }
+                Button {
+                    scheduledAt = Date().addingTimeInterval(3_600)
+                    isScheduling = true
+                } label: {
+                    Label("Schedule Message", systemImage: "calendar.badge.plus")
+                }
+            }
+        }
+        .sheet(isPresented: $isScheduling) { scheduleSheet }
     }
 
-    private func send() { Task { await reader.send(threadID: threadID) } }
+    /// Date, time, and the one button that turns a draft into a queued message.
+    private var scheduleSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Send at", selection: $scheduledAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                } footer: {
+                    Text("The message leaves the queue when it is due and the app is running. It keeps its id, so a retry cannot post it twice.")
+                }
+            }
+            .navigationTitle("Schedule Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isScheduling = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Schedule") { schedule() }
+                        .disabled(!reader.maySend(in: threadID))
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func schedule() {
+        let text = reader.draft(in: threadID)
+        RoomScheduleQueue.enqueue(
+            room: reader.key,
+            roomName: reader.room.name,
+            threadID: threadID,
+            text: text,
+            dueAt: scheduledAt,
+            serverURLString: reader.key.server.absoluteString,
+            in: modelContext
+        )
+        reader.setDraft("", in: threadID)
+        isScheduling = false
+        ChatHaptics.autocompleteAccepted(isEnabled: isHapticsEnabled)
+    }
+
+    /// The budget the picker shows before anything is uploaded: the same numbers the refusal
+    /// would use, so a file that will not fit is a sentence, not a failed send.
+    private var attachmentBudgetLine: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let attachmentNotice {
+                Text(attachmentNotice).font(.caption2).foregroundStyle(.red)
+            }
+            if !attachments.isEmpty {
+                Text(budget.remainingSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var budget: RoomAttachmentBudget {
+        var budget = RoomAttachmentBudget()
+        for attachment in attachments { budget.append(attachment) }
+        return budget
+    }
+
+    private func add(urls: [URL]) {
+        attachmentNotice = nil
+        var selection = budget
+        for url in urls {
+            // A URL from the system picker lives outside our sandbox: reading it needs the
+            // security scope started, and the scope ends with this loop iteration.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                try selection.add(contentsOf: url)
+            } catch {
+                attachmentNotice = error.localizedDescription
+            }
+        }
+        attachments = selection.uploads
+    }
+
+    private func add(providers: [NSItemProvider]) {
+        // A provider copies its file into our container asynchronously; the paste path keeps
+        // that copy so the draft does not depend on the source app staying alive.
+        attachmentNotice = nil
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            _ = provider.loadFileRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { url, _ in
+                guard let url else { return }
+                let copy = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(RoomAttachmentUpload.makeUploadID())
+                    .appendingPathExtension(url.pathExtension)
+                try? FileManager.default.copyItem(at: url, to: copy)
+                Task { @MainActor in add(urls: [copy]) }
+            }
+        }
+    }
+
+    private func send() {
+        guard attachments.isEmpty else {
+            let files = attachments
+            let text = reader.draft(in: threadID)
+            attachments = []
+            Task { await reader.send(text: text, threadID: threadID, attachments: files) }
+            return
+        }
+        Task { await reader.send(threadID: threadID) }
+    }
 }
 
 /// Room handles are server routing keys. Friendly names only help searching;
