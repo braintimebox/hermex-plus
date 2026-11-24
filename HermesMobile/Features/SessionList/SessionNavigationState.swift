@@ -15,6 +15,10 @@ enum SessionNavigationDestination: Hashable, Identifiable {
 
 struct SessionNavigationState: Equatable {
     private(set) var destination: SessionNavigationDestination?
+    /// The dock's selection. It lives here, in the shared state, because a deep link has
+    /// to switch the section *before* opening the object: a link handled while another
+    /// section is on screen would otherwise push into a stack nobody is looking at.
+    var selectedTab: AppTab = .chats
     private(set) var lastSelectedSessionID: String?
     private(set) var rootRevision = 0
     private var newChatSessionID: String?
@@ -44,6 +48,10 @@ struct SessionNavigationState: Equatable {
         rootRevision += 1
         newChatSessionID = nil
         destination = .newChat(route)
+    }
+
+    mutating func select(tab: AppTab) {
+        selectedTab = tab
     }
 
     mutating func select(_ utility: SessionListUtilityDestination) {

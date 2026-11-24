@@ -1,3 +1,25 @@
+## 4.3.0 — a dock, and five sections under it
+
+The app had one screen with a mode switch: sessions, or the bots inbox, chosen by a
+gate. Everything else — settings, tasks, kanban, saved, scheduled — was a push onto that
+one stack, so "where am I" depended on how you arrived rather than on what you were
+looking at.
+
+- A dock of five sections at the bottom: Groups, Bots, Chats, Kanban, Settings. Drawn by
+  the app rather than by `TabView`, because iOS on iPad puts tabs on top or in a sidebar,
+  and a sidebar would have taken away the two-column master-detail the tablet has today.
+- The selected section lives in the shared navigation state, so a deep link can switch
+  section first and open the object second. A link that arrives while another section is
+  on screen no longer navigates into a stack nobody is looking at.
+- Sections that are switched off stay out of the dock: Bots behind its gate, Kanban
+  behind its section flag.
+- The composer keeps its own spacing above the dock; the dock is a bottom inset, not an
+  overlay, so the transcript cannot scroll underneath it.
+
+Groups is the first section that is not finished: the rooms list still lives inside the
+bots inbox, and tapping Groups opens that inbox. Splitting rooms out of it is the next
+change, and until it lands the section is honest about what it shows.
+
 ## 4.2.8 — the calendar, the pins and one queue
 
 Rooms were growing their own storage beside the chat's. Two things the chat already

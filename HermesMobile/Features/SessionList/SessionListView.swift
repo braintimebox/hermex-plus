@@ -433,6 +433,27 @@ struct SessionListView: View {
                 guard !showsProjectsSection else { return }
                 selectedProjectID = nil
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                AppDock(selection: $navigationState.selectedTab, available: availableTabs)
+            }
+            .onChange(of: navigationState.selectedTab) { _, tab in
+                // The sections are the existing surfaces, not new ones: Bots and Groups are
+                // the inbox, Kanban and Settings are the utility destinations that already
+                // existed. Only the way in changes.
+                switch tab {
+                case .chats:
+                    showsBots = false
+                    navigationState.clearDestination()
+                case .bots, .groups:
+                    showsBots = true
+                case .kanban:
+                    showsBots = false
+                    navigationState.select(.kanban)
+                case .settings:
+                    showsBots = false
+                    navigationState.select(.settings(nil))
+                }
+            }
             .onChange(of: navigationState.destination) { oldValue, newValue in
                 SessionListDestinationReturn.run(
                     from: oldValue,
@@ -487,6 +508,15 @@ struct SessionListView: View {
 
     private var showsBotsInbox: Bool {
         BotModeGate.showsBotsInbox(isEnabled: isBotModeEnabled, userPickedBots: showsBots)
+    }
+
+    /// Sections that exist for this server: Bots behind its gate, Kanban behind its flag.
+    private var availableTabs: [AppTab] {
+        var tabs: [AppTab] = [.groups, .chats]
+        if isBotModeEnabled { tabs.insert(.bots, at: 1) }
+        if showsKanbanSection { tabs.insert(.kanban, at: tabs.count - 1) }
+        tabs.append(.settings)
+        return tabs
     }
 
     @ViewBuilder
