@@ -146,6 +146,7 @@ VStack(spacing: 16) {
     @ViewBuilder
     private var composerInset: some View {
 VStack(spacing: 10) {
+    if !reader.status.activity.isEmpty { activityStrip }
     if let pill {
         BotComposerPillView(pill: pill, onReconnect: { revision = UUID() }, onUpdateSignIn: onUpdateSignIn,
             onShowRequest: { showRequestID = UUID() }, onCancelUpload: {},
@@ -230,6 +231,71 @@ ScrollView {
         guard seconds >= 5 else { return nil }
         return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
     }
+
+    /// One line per participant while a turn is live or its outcome is not a message.
+    ///
+    /// The status comes from `groups.state.member_activity`, which is the host's own
+    /// vocabulary (`hosted_room_service.py:47-50`): a live turn, a settled one, a failure
+    /// with its reason from `turn.failed`, a deferral, or an outcome that is genuinely
+    /// unknown. Showing the last one as "failed" would be a lie about a turn that may have
+    /// run.
+    private var activityStrip: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(reader.status.activity) { activity in
+                HStack(spacing: 6) {
+                    if activity.isLive {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: activity.phase == .answered ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(activity.phase == .answered ? .green : .orange)
+                    }
+                    Text(activityText(activity))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            }
+            if reader.status.activity.contains(where: \.isLive) {
+                Button {
+                    Task { await reader.stop() }
+                } label: {
+                    Text(String(localized: "Stop everyone (\(reader.room.members.count))"))
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .disabled(!reader.mayStop)
+            }
+        }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func activityText(_ activity: BotRoomStatus.Activity) -> String {
+        let name = reader.room.members.first { $0.id == activity.memberID }?.name ?? activity.memberID
+        switch activity.phase {
+        case .working:
+            let elapsed = Self.elapsedLabel(activity.startedAt).map { " \($0)" } ?? ""
+            let tool = activity.tool.map { " · \($0)" } ?? ""
+            // A live status that has not moved for the threshold is not a failure: the host
+            // still calls it running, so the reason is "no end of turn", not "error".
+            if let startedAt = activity.startedAt,
+               Date().timeIntervalSince1970 - startedAt > Self.noAnswerAfter {
+                return String(localized: "\(name): no answer for \(Self.elapsedLabel(startedAt) ?? "a while")")
+            }
+            return String(localized: "\(name) is working…\(elapsed)\(tool)")
+        case .answered: return String(localized: "\(name) answered")
+        case .failed: return String(localized: "\(name) failed — see the turn below")
+        case .cancelled: return String(localized: "\(name) was cancelled")
+        case .deferred: return String(localized: "\(name) deferred: the participant did not confirm the stop")
+        case .unknownOutcome: return String(localized: "\(name): outcome unknown — retry or remove")
+        }
+    }
+
+    /// Ten minutes, the threshold in the spec.
+    private static let noAnswerAfter: TimeInterval = 600
 
     /// The room's composition for the header's second line, the same place the
     /// ordinary chat puts the workspace: who is in the room, not how many.

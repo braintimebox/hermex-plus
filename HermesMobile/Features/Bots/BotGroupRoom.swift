@@ -69,7 +69,38 @@ struct BotRoomStatus: Equatable {
         let memberID: String
         let tool: String?
         let startedAt: Double?
+        let status: String?
         var id: String { memberID }
+
+        /// What the host's status means for a person reading the room.
+        ///
+        /// `hosted_room_service.py:47-50` separates live (`queued`/`running`/`stopping`),
+        /// terminal (`deferred`/`settled`/`failed`/`cancelled`) and retryable
+        /// (`indeterminate`/`deferred`). `indeterminate` is deliberately not "failed": its
+        /// outcome is unknown, so its actions are retry and remove, not "try again" on a
+        /// turn that may already have run.
+        enum Phase: Equatable {
+            case working
+            case answered
+            case failed
+            case cancelled
+            case deferred
+            case unknownOutcome
+        }
+
+        var phase: Phase {
+            switch status {
+            case "queued", "running", "stopping", nil: .working
+            case "settled": .answered
+            case "failed": .failed
+            case "cancelled": .cancelled
+            case "deferred": .deferred
+            case "indeterminate": .unknownOutcome
+            default: .working
+            }
+        }
+
+        var isLive: Bool { phase == .working }
     }
 
     let working: Bool
@@ -85,7 +116,8 @@ struct BotRoomStatus: Equatable {
             guard let memberID = item["member_id"].text else { return nil }
             return Activity(memberID: memberID,
                             tool: item["tool"].text ?? item["progress"]["tool"].text,
-                            startedAt: item["started_at"].number ?? item["progress_at"].number)
+                            startedAt: item["started_at"].number ?? item["progress_at"].number,
+                            status: item["status"].text)
         }
         blocked = value["blocked"].flag == true
         stopping = max(0, value["counts"]["stopping"].integer ?? 0)
