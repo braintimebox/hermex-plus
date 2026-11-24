@@ -30,6 +30,9 @@ struct ChatMessageActionItem: Identifiable {
         case reply
         case forward
         case save
+        /// A room reply can carry uploads; copying it means copying the file
+        /// references, which is a different thing from copying its text.
+        case copyAttachment
         case pin
         /// One Tapback; consecutive ones form the menu's inline emoji row.
         case react(String)

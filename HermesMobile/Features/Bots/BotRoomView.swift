@@ -109,7 +109,8 @@ VStack(spacing: 16) {
             roster: roster,
             avatars: avatars,
             cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
-            onOpenThread: { selectedThread = $0 }
+            onOpenThread: { selectedThread = $0 },
+            onStopEveryone: { Task { await reader.stop() } }
         )
     }
     if let echo = pendingEcho {
@@ -216,6 +217,19 @@ ScrollView {
 .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
 
+    /// Seconds since a turn started, counted on the client.
+    ///
+    /// The server's progress signature is rounded to 30 s
+    /// (`hosted_room_member_activity.py:94-95`), so a counter driven by server ticks would
+    /// stand still for half a minute. The state poll runs every 2 s while a turn is live,
+    /// and the number is derived from `started_at` each time it lands.
+    private static func elapsedLabel(_ startedAt: Double?) -> String? {
+        guard let startedAt else { return nil }
+        let seconds = max(0, Int(Date().timeIntervalSince1970 - startedAt))
+        guard seconds >= 5 else { return nil }
+        return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
+    }
+
     /// The room's composition for the header's second line, the same place the
     /// ordinary chat puts the workspace: who is in the room, not how many.
     private var roomSubtitle: String? {
@@ -225,9 +239,14 @@ ScrollView {
             reader.room.members.first { $0.id == activity.memberID }?.name
         }
         if !working.isEmpty {
-            return working.count == 1
-                ? String(localized: "\(working[0]) is working…")
-                : String(localized: "\(working.count) working: \(working.joined(separator: ", "))")
+            let elapsed = Self.elapsedLabel(reader.status.activity.compactMap(\.startedAt).min())
+            let tool = reader.status.activity.compactMap(\.tool).first
+            let detail = [elapsed, tool].compactMap { $0 }.joined(separator: " · ")
+            let who = working.count == 1
+                ? working[0]
+                : String(localized: "\(working.count) working")
+            return detail.isEmpty ? String(localized: "\(who) is working…")
+                                  : String(localized: "\(who) · \(detail)")
         }
         let names = reader.room.members.map(\.name)
         guard !names.isEmpty else { return nil }
@@ -603,7 +622,12 @@ private struct BotRoomEventView: View {
                             return viewport.intersects(CGRect(origin: .zero, size: geometry.size))
                         } action: { responseIsVisible = $0 }
                             .padding(12).background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 20))
-                            .chatMessageContextMenu(actions, longPress: false)
+                            // Long-press was pinned off here (`longPress: false`), so a room reply
+                            // could not be copied at all while the same text in a chat could.
+                            // The menu is the chat's own: Copy keeps the whole Markdown source,
+                            // including fenced code, and the attachment item is separate because
+                            // a reply's file references are not its prose.
+                            .chatMessageContextMenu(actions, longPress: true)
                     }
                     Spacer(minLength: 20)
                 }
@@ -612,10 +636,32 @@ private struct BotRoomEventView: View {
                 // Under the bubble, past the avatar, which stays level with the bubble.
                 footer.padding(.leading, 34)
             }
+        } else if event.kind == "turn.started" {
+            VStack(spacing: 4) {
+                Text(event.systemText(in: reader.room))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button {
+                    onStopEveryone()
+                } label: {
+                    Text(stopLabel)
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .disabled(!reader.mayStop)
+            }
+            .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         } else {
             Text(event.systemText(in: reader.room)).font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         }
+    }
+
+    /// "Stop everyone (3)" — the count is the point: the tap ends every turn in the room,
+    /// and saying so is cheaper than a user discovering it afterwards.
+    private var stopLabel: String {
+        let count = reader.room.members.count
+        return String(localized: "Stop everyone (\(count))")
     }
 
     private var messageText: String { event.payload["text"].text ?? "" }
@@ -761,6 +807,10 @@ private struct BotRoomRowView: View {
     let avatars: [String: UIImage]
     let cacheNamespace: String
     let onOpenThread: (String) -> Void
+    /// Stops the whole room. There is no per-member cancel: `groups.stop` takes
+    /// `{room_id, cancel_id}` and no `member_id` (`hosted_room_service.py:985`), so the
+    /// button says "stops everyone" instead of pretending to be precise.
+    let onStopEveryone: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
