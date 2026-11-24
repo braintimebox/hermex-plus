@@ -185,3 +185,23 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
         )
     }
 }
+
+extension PendingScheduledMessage {
+    /// Вложения строки в том виде, в котором их ждёт `groups.send`: ровно пять полей.
+    ///
+    /// Строка, чья загрузка не завершилась, манифеста не даёт. Отправить текст без файла
+    /// честнее, чем манифест без `attachment_id`: такой хост отвергает целиком, и
+    /// отложенное сообщение потерялось бы из-за одного вложения.
+    var roomAttachmentManifests: [RoomAttachmentManifest] {
+        attachments.compactMap { item in
+            guard let attachmentID = item.attachmentID, !attachmentID.isEmpty else { return nil }
+            return RoomAttachmentManifest(
+                attachmentID: attachmentID,
+                kind: RoomAttachmentUpload.kind(forMIME: item.mime),
+                name: item.name,
+                size: item.size ?? 0,
+                mime: item.mime
+            )
+        }
+    }
+}
