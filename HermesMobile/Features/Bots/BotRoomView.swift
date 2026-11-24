@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor struct BotRoomView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -674,8 +675,30 @@ private struct BotRoomEventView: View {
         }
     }
 
+    /// File references a reply carries, in the order the gateway sent them.
+    private var attachmentNames: [String] {
+        guard case let .array(items)? = event.payload["attachments"] else { return [] }
+        return items.compactMap { item in
+            guard case let .object(fields) = item else { return nil }
+            return fields["name"]?.text ?? fields["path"]?.text
+        }
+    }
+
     private var actions: [ChatMessageActionItem] {
-        BotMessageActions.items(copyText: messageText, isHapticsEnabled: isHapticsEnabled)
+        var items = BotMessageActions.items(copyText: messageText, isHapticsEnabled: isHapticsEnabled)
+        let names = attachmentNames
+        if !names.isEmpty {
+            items.append(ChatMessageActionItem(
+                kind: .copyAttachment,
+                title: names.count == 1
+                    ? String(localized: "Copy attachment")
+                    : String(localized: "Copy \(names.count) attachments"),
+                systemImage: "paperclip",
+                isEnabled: true,
+                perform: { UIPasteboard.general.string = names.joined(separator: "\n") }
+            ))
+        }
+        return items
     }
 }
 
