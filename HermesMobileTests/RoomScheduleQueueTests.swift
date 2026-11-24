@@ -70,3 +70,53 @@ final class RoomScheduleQueueTests: XCTestCase {
         XCTAssertEqual(RoomScheduleQueue.pending(room: other, in: context).map(\.draftText), ["two"])
     }
 }
+
+/// The two delivery paths share one table, so each must be able to say which rows are not
+/// its own. The failure this prevents is silent: the chat's "Scheduled Messages" screen
+/// reconciles against the server's list, a room row is never on it, and the row would be
+/// deleted before it was ever sent.
+@MainActor
+final class ScheduledRowOwnershipTests: XCTestCase {
+    private var container: ModelContainer!
+    private var context: ModelContext!
+
+    override func setUp() async throws {
+        container = try ModelContainer(
+            for: PendingScheduledMessage.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        context = ModelContext(container)
+    }
+
+    func testARoomRowIsNotAChatRow() {
+        let room = PendingScheduledMessage(
+            sessionId: "room:room-1", draftText: "x", scheduledAt: Date(),
+            serverURLString: "https://example.test")
+        let chat = PendingScheduledMessage(
+            sessionId: "session-1", draftText: "y", scheduledAt: Date(),
+            serverURLString: "https://example.test")
+        XCTAssertFalse(room.isChatRow)
+        XCTAssertTrue(chat.isChatRow)
+    }
+
+    func testTheChatPredicateDoesNotSeeRoomRows() throws {
+        context.insert(PendingScheduledMessage(
+            sessionId: "room:room-1", draftText: "room", scheduledAt: Date(),
+            serverURLString: "https://example.test"))
+        context.insert(PendingScheduledMessage(
+            sessionId: "session-1", draftText: "chat", scheduledAt: Date(),
+            serverURLString: "https://example.test"))
+        try context.save()
+
+        // Exactly the predicate the chat's list and its reconcile now use.
+        let descriptor = FetchDescriptor<PendingScheduledMessage>(
+            predicate: #Predicate { !$0.sessionId.hasPrefix("room:") })
+        let visible = try context.fetch(descriptor)
+        XCTAssertEqual(visible.map(\.draftText), ["chat"])
+
+        // And the room row is still there afterwards: nothing this view does not show can
+        // be deleted by it.
+        let all = try context.fetch(FetchDescriptor<PendingScheduledMessage>())
+        XCTAssertEqual(Set(all.map(\.draftText)), ["chat", "room"])
+    }
+}

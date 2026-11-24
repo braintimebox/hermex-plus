@@ -50,6 +50,18 @@ final class PendingScheduledMessage {
     /// chat has no threads, so the field is unused there and nil for every chat row.
     var threadID: String? = nil
 
+    /// True for a message addressed to a chat session, false for a room.
+    ///
+    /// Rooms and chats share this table, and the two delivery paths must never pick up each
+    /// other's rows: the chat path would post a room message into a session that does not
+    /// exist, and the chat's "Scheduled Messages" screen reconciles against the *server's*
+    /// scheduled list — which can never contain a room row, so it would delete it silently.
+    /// One helper, used everywhere, so the rule cannot be re-derived differently in four
+    /// `#Predicate`s.
+    var isChatRow: Bool { !sessionId.hasPrefix(Self.roomSessionPrefix) }
+
+    static let roomSessionPrefix = "room:"
+
     /// True when automatic delivery has been given up for this message.
     var isDeliveryTerminal: Bool { terminalFailureReason != nil }
 

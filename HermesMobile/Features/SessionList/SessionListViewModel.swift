@@ -1510,7 +1510,12 @@ final class SessionListViewModel {
             let allMessages = (try? backgroundContext.fetch(descriptor)) ?? []
             // Terminal failures are never picked up again: the user's result is
             // recorded on the row and shown in the list, not retried forever.
-            let due = allMessages.filter { $0.scheduledAt <= now && $0.terminalFailureReason == nil }
+            // Rooms keep their own rows in this table and are delivered by the room path;
+            // a chat dispatcher that picked one up would post it into a session that does
+            // not exist.
+            let due = allMessages.filter {
+                $0.isChatRow && $0.scheduledAt <= now && $0.terminalFailureReason == nil
+            }
 
             // Drop stale entries (no server URL) right here on the background
             // context, then return sendable scalars for the genuinely-due ones.

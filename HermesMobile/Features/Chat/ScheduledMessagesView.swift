@@ -112,7 +112,13 @@ struct ScheduledMessagesView: View {
             let ctx = ModelContext(container)
             let descriptor: FetchDescriptor<PendingScheduledMessage>
             if filter.isEmpty {
-                descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.scheduledAt)])
+                // Only chat rows: this screen reconciles against the server's scheduled
+                // list, and a room row is never on it — showing one here would let the
+                // reconcile below delete it.
+                descriptor = FetchDescriptor(
+                    predicate: #Predicate<PendingScheduledMessage> { !$0.sessionId.hasPrefix("room:") },
+                    sortBy: [SortDescriptor(\.scheduledAt)]
+                )
             } else {
                 descriptor = FetchDescriptor(
                     predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == filter },
@@ -133,7 +139,9 @@ struct ScheduledMessagesView: View {
     /// are kept (the server may still be retrying).
     private func reconcileWithServer() async {
         let now = Date()
-        let stale = messages.filter { $0.scheduledAt < now }
+        // Only what this screen shows, and only what this screen created: a row this view
+        // does not display must not be deleted by its reconcile, whatever it is.
+        let stale = messages.filter { $0.isChatRow && $0.scheduledAt < now }
         guard !stale.isEmpty else { return }
         let byServer = Dictionary(grouping: stale) { $0.serverURLString }
         var toDelete: [PendingScheduledMessage] = []

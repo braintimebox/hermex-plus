@@ -105,7 +105,11 @@ struct TasksView: View {
         let container = modelContext.container
         let count = await Task.detached(priority: .userInitiated) { () -> Int in
             let ctx = ModelContext(container)
-            let descriptor = FetchDescriptor<PendingScheduledMessage>()
+            // Chat rows only: a room's scheduled message is not a task, and counting it
+            // here would send the user to a list that reconciles against the chat server.
+            let descriptor = FetchDescriptor<PendingScheduledMessage>(
+                predicate: #Predicate { !$0.sessionId.hasPrefix("room:") }
+            )
             return (try? ctx.fetchCount(descriptor)) ?? 0
         }.value
         scheduledCount = count
