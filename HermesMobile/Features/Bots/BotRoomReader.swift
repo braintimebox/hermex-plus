@@ -52,8 +52,9 @@ import Observation
         let contextThreadID: String?
         /// Already-uploaded files, projected to the five fields the host accepts.
         let attachments: [RoomAttachmentManifest]
-        init(text: String, threadID: String? = nil, attachments: [RoomAttachmentManifest] = []) {
-            self.text = text; eventID = UUID().uuidString
+        init(text: String, threadID: String? = nil, attachments: [RoomAttachmentManifest] = [],
+             eventID: String? = nil) {
+            self.text = text; self.eventID = eventID ?? UUID().uuidString
             self.threadID = threadID ?? UUID().uuidString; contextThreadID = threadID
             self.attachments = attachments
         }
@@ -323,6 +324,7 @@ import Observation
                   BotRoomEvent(result["event"]) != nil else { throw BotFailure.unsupported }
             self.log.acknowledge(result["event"])
             self.uncertainSends[request.contextThreadID ?? ""] = nil; self.sending = nil
+            self.draftIdentities[request.contextThreadID ?? ""] = nil
             if self.draft(in: request.contextThreadID) == request.text { self.setDraft("", in: request.contextThreadID) }
             self.publishLog()
             self.feedback = BotFeedback(.sent, after: self.feedback)
@@ -337,7 +339,10 @@ import Observation
             return
         }
         guard retry ? mayResend(in: threadID) : maySend(in: threadID) else { return }
-        let request = retry ? uncertainSend(in: threadID)! : Send(text: draft(in: threadID), threadID: threadID)
+        let text = draft(in: threadID)
+        let request = retry
+            ? uncertainSend(in: threadID)!
+            : Send(text: text, threadID: threadID, eventID: identity(for: text, threadID: threadID))
         sending = request
         let send = HermesCall.groupsSend(roomID: key.roomID, eventID: request.eventID, text: request.text,
                                  threadID: request.threadID, attachments: request.attachments)
@@ -357,6 +362,24 @@ import Observation
     }
 
     /// Runs a room command without touching the transcript.
+    /// One draft, one identity: the event id is minted when the text first appears and is
+    /// reused until the room acknowledges it.
+    ///
+    /// Without this a second tap, or a resend of the same text, arrives as a *different*
+    /// event, and the host treats it as a newer message in the thread — which is exactly
+    /// what makes it discard the answer that was still being written
+    /// (`hosted_room_discussion.py:1021-1036`). The duplicate is the client's bug; the
+    /// discarded answer is the host's rule, and they are fixed in different places.
+    private var draftIdentities: [String: (text: String, eventID: String)] = [:]
+
+    private func identity(for text: String, threadID: String?) -> String {
+        let key = threadID ?? ""
+        if let existing = draftIdentities[key], existing.text == text { return existing.eventID }
+        let eventID = UUID().uuidString
+        draftIdentities[key] = (text, eventID)
+        return eventID
+    }
+
     private func run(_ command: RoomSlashCommand, threadID: String?) async {
         switch command {
         case let .title(name):
@@ -414,7 +437,8 @@ import Observation
             errorMessage = error.localizedDescription
             return
         }
-        await send(Send(text: text, threadID: threadID, attachments: manifests))
+        await send(Send(text: text, threadID: threadID, attachments: manifests,
+                        eventID: identity(for: text, threadID: threadID)))
     }
 
     func stop() async {
