@@ -41,12 +41,13 @@ enum RoomScheduledDelivery {
     }
 
     static func dueRows(in context: ModelContext, now: Date) -> [PendingScheduledMessage] {
+        // No prefix operator in `#Predicate`; the scheduled table is small, and filtering
+        // here also keeps one definition of "is a room row" (`isChatRow`).
         let descriptor = FetchDescriptor<PendingScheduledMessage>(
-            predicate: #Predicate { $0.sessionId.hasPrefix("room:") && $0.terminalFailureReason == nil },
             sortBy: [SortDescriptor(\.scheduledAt)]
         )
         let rows = (try? context.fetch(descriptor)) ?? []
-        return rows.filter { $0.scheduledAt <= now }
+        return rows.filter { !$0.isChatRow && $0.terminalFailureReason == nil && $0.scheduledAt <= now }
     }
 
     private static func deliver(

@@ -108,10 +108,8 @@ final class ScheduledRowOwnershipTests: XCTestCase {
             serverURLString: "https://example.test"))
         try context.save()
 
-        // Exactly the predicate the chat's list and its reconcile now use.
-        let descriptor = FetchDescriptor<PendingScheduledMessage>(
-            predicate: #Predicate { !$0.sessionId.hasPrefix("room:") })
-        let visible = try context.fetch(descriptor)
+        // Exactly the rule the chat's list and its reconcile now use.
+        let visible = try context.fetch(FetchDescriptor<PendingScheduledMessage>()).filter(\.isChatRow)
         XCTAssertEqual(visible.map(\.draftText), ["chat"])
 
         // And the room row is still there afterwards: nothing this view does not show can

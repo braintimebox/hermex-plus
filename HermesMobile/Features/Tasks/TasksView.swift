@@ -107,10 +107,9 @@ struct TasksView: View {
             let ctx = ModelContext(container)
             // Chat rows only: a room's scheduled message is not a task, and counting it
             // here would send the user to a list that reconciles against the chat server.
-            let descriptor = FetchDescriptor<PendingScheduledMessage>(
-                predicate: #Predicate { !$0.sessionId.hasPrefix("room:") }
-            )
-            return (try? ctx.fetchCount(descriptor)) ?? 0
+            // `#Predicate` has no prefix operator, and the table is small: read and filter.
+            let all = (try? ctx.fetch(FetchDescriptor<PendingScheduledMessage>())) ?? []
+            return all.filter(\.isChatRow).count
         }.value
         scheduledCount = count
     }

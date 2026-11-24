@@ -115,17 +115,17 @@ struct ScheduledMessagesView: View {
                 // Only chat rows: this screen reconciles against the server's scheduled
                 // list, and a room row is never on it — showing one here would let the
                 // reconcile below delete it.
-                descriptor = FetchDescriptor(
-                    predicate: #Predicate<PendingScheduledMessage> { !$0.sessionId.hasPrefix("room:") },
-                    sortBy: [SortDescriptor(\.scheduledAt)]
-                )
+                descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.scheduledAt)])
             } else {
                 descriptor = FetchDescriptor(
                     predicate: #Predicate<PendingScheduledMessage> { $0.sessionId == filter },
                     sortBy: [SortDescriptor(\.scheduledAt)]
                 )
             }
-            return (try? ctx.fetch(descriptor).map { $0.persistentModelID }) ?? []
+            // Room rows share this table; `#Predicate` has no prefix operator, so the chat
+            // filter is applied here rather than in the query.
+            let rows = (try? ctx.fetch(descriptor)) ?? []
+            return rows.filter(\.isChatRow).map { $0.persistentModelID }
         }.value
         messages = ids.compactMap { modelContext.model(for: $0) as? PendingScheduledMessage }
         await reconcileWithServer()
