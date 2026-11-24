@@ -1,8 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/45475031157
-Commit: 435e3235c7d048d59b120a1ec54a4d1b3aed4f88
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/45503045944
+Commit: 24ae8aef3ad0276295eb8e7b04accc48660c8355
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomComposerView.swift:56:70: error: cannot convert value of type '[UIImage]' to expected argument type '[NSItemProvider]'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Shared/AdaptiveGlassModifier.swift:179:32: error: cannot find type 'Glass' in scope
 ```
