@@ -84,7 +84,10 @@ enum HermesCall: Equatable, Sendable {
     case groupsList(offset: Int)
     case groupsState(roomID: String)
     case groupsLog(roomID: String, sinceSeq: Int, limit: Int)
-    case groupsSend(roomID: String, eventID: String, text: String, threadID: String)
+    case groupsSend(roomID: String, eventID: String, text: String, threadID: String,
+                    attachments: [RoomAttachmentManifest])
+    case groupsAttachmentUpload(roomID: String, uploadID: String, kind: String, name: String,
+                                mime: String, dataBase64: String)
     case groupsStop(roomID: String, cancelID: String)
     case groupsApprove(roomID: String, memberID: String, taskID: String, executionGeneration: Int,
                        requestID: String, choice: BotApprovalRequest.Choice)
@@ -216,6 +219,7 @@ enum HermesCall: Equatable, Sendable {
         case .groupsState: return "groups.state"
         case .groupsLog: return "groups.log"
         case .groupsSend: return "groups.send"
+        case .groupsAttachmentUpload: return "groups.attachment.upload"
         case .groupsStop: return "groups.stop"
         case .groupsApprove: return "groups.approve"
         case .groupsRetry: return "groups.retry"
@@ -315,9 +319,26 @@ enum HermesCall: Equatable, Sendable {
         case .groupsState(let roomID), .groupsDisband(let roomID): return ["room_id": .string(roomID)]
         case .groupsLog(let roomID, let sinceSeq, let limit):
             return ["room_id": .string(roomID), "since_seq": .number(Double(sinceSeq)), "limit": .number(Double(limit))]
-        case .groupsSend(let roomID, let eventID, let text, let threadID):
+        case .groupsSend(let roomID, let eventID, let text, let threadID, let attachments):
+            var payload: [String: BotJSON] = ["text": .string(text), "thread_id": .string(threadID)]
+            if !attachments.isEmpty {
+                // The manifest travels with the text in one message: a file is not a
+                // separate message, and the five-field projection is all the host accepts.
+                payload["attachments"] = .array(attachments.map { manifest in
+                    .object([
+                        "attachment_id": .string(manifest.attachmentID),
+                        "kind": .string(manifest.kind),
+                        "name": .string(manifest.name),
+                        "size": .number(Double(manifest.size)),
+                        "mime": .string(manifest.mime),
+                    ])
+                })
+            }
             return ["room_id": .string(roomID), "event_id": .string(eventID),
-                    "payload": .object(["text": .string(text), "thread_id": .string(threadID)])]
+                    "payload": .object(payload)]
+        case let .groupsAttachmentUpload(roomID, uploadID, kind, name, mime, dataBase64):
+            return ["room_id": .string(roomID), "upload_id": .string(uploadID), "kind": .string(kind),
+                    "name": .string(name), "mime": .string(mime), "data_base64": .string(dataBase64)]
         case .groupsStop(let roomID, let cancelID): return ["room_id": .string(roomID), "cancel_id": .string(cancelID)]
         case .groupsApprove(let roomID, let memberID, let taskID, let executionGeneration, let requestID, let choice):
             return ["room_id": .string(roomID), "member_id": .string(memberID), "task_id": .string(taskID),
@@ -385,8 +406,19 @@ enum HermesCall: Equatable, Sendable {
         case .groupsState(let roomID), .groupsDisband(let roomID): valid = BotRoomRPC.validID(roomID)
         case .groupsLog(let roomID, let sinceSeq, let limit):
             valid = BotRoomRPC.validID(roomID) && sinceSeq >= 0 && (1...Self.roomPageSize).contains(limit)
-        case .groupsSend(let roomID, let eventID, let text, let threadID):
+        case .groupsSend(let roomID, let eventID, let text, let threadID, let attachments):
             valid = [roomID, eventID, threadID].allSatisfy(BotRoomRPC.validID) && BotRoomRPC.validText(text)
+                && attachments.allSatisfy(\.isValid)
+        case let .groupsAttachmentUpload(roomID, uploadID, kind, name, mime, dataBase64):
+            // The host validates the id with `^[A-Za-z0-9][A-Za-z0-9._:-]*$` and refuses a
+            // body larger than `((15 000 000 + 2) / 3) * 4` base64 characters; both are
+            // checked here so a bad upload never leaves the device.
+            valid = BotRoomRPC.validID(roomID)
+                && uploadID.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]*$", options: .regularExpression) != nil
+                && !name.isEmpty && !mime.isEmpty
+                && ["image", "pdf", "file"].contains(kind)
+                && !dataBase64.isEmpty
+                && dataBase64.count <= RoomAttachmentLimit.encodedCharacters
         case .groupsStop(let roomID, let cancelID): valid = BotRoomRPC.validID(roomID) && BotRoomRPC.validID(cancelID)
         case .groupsApprove(let roomID, let memberID, let taskID, let executionGeneration, let requestID, let choice):
             valid = [roomID, memberID, taskID, requestID].allSatisfy(BotRoomRPC.validID) && executionGeneration > 0

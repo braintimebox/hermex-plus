@@ -90,7 +90,8 @@ enum RoomScheduledDelivery {
         // message is not a reply (`BotRoomReader.Send`).
         _ = try await wire.call(
             .groupsSend(roomID: roomID, eventID: eventID, text: row.draftText,
-                        threadID: row.threadID ?? UUID().uuidString)
+                        threadID: row.threadID ?? UUID().uuidString,
+                        attachments: row.roomAttachmentManifests)
         )
     }
 

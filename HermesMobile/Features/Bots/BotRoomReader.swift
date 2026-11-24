@@ -50,9 +50,12 @@ import Observation
         let eventID: String
         let threadID: String
         let contextThreadID: String?
-        init(text: String, threadID: String? = nil) {
+        /// Already-uploaded files, projected to the five fields the host accepts.
+        let attachments: [RoomAttachmentManifest]
+        init(text: String, threadID: String? = nil, attachments: [RoomAttachmentManifest] = []) {
             self.text = text; eventID = UUID().uuidString
             self.threadID = threadID ?? UUID().uuidString; contextThreadID = threadID
+            self.attachments = attachments
         }
         /// Pinned gateway user_event_id: SHA256 of the client retry key.
         var serverEventID: String {
@@ -319,7 +322,8 @@ import Observation
         guard retry ? mayResend(in: threadID) : maySend(in: threadID) else { return }
         let request = retry ? uncertainSend(in: threadID)! : Send(text: draft(in: threadID), threadID: threadID)
         sending = request
-        let send = HermesCall.groupsSend(roomID: key.roomID, eventID: request.eventID, text: request.text, threadID: request.threadID)
+        let send = HermesCall.groupsSend(roomID: key.roomID, eventID: request.eventID, text: request.text,
+                                 threadID: request.threadID, attachments: request.attachments)
         await command(send, validate: {}, accept: { result in
             guard result["accepted"].flag == true, result["client_event_id"].text == request.eventID,
                   result["event"]["room_id"].text == self.key.roomID,
