@@ -111,7 +111,8 @@ VStack(spacing: 16) {
             avatars: avatars,
             cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
             onOpenThread: { selectedThread = $0 },
-            onStopEveryone: { Task { await reader.stop() } }
+            onStopEveryone: { Task { await reader.stop() } },
+            canStopEveryone: reader.mayStop
         )
     }
     if let echo = pendingEcho {
@@ -658,6 +659,10 @@ private struct BotRoomEventView: View {
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     let transcriptMediaCacheNamespace: String
+    /// Stops the whole room. There is no per-member cancel: `groups.stop` takes
+    /// `{room_id, cancel_id}` and no `member_id` (`hosted_room_service.py:985`).
+    let canStopEveryone: Bool
+    let onStopEveryone: () -> Void
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @State private var responseIsVisible = false
 
@@ -705,7 +710,7 @@ private struct BotRoomEventView: View {
             }
         } else if event.kind == "turn.started" {
             VStack(spacing: 4) {
-                Text(event.systemText(in: reader.room))
+                Text(event.systemText(in: room))
                     .font(.caption).foregroundStyle(.secondary)
                 Button {
                     onStopEveryone()
@@ -715,11 +720,11 @@ private struct BotRoomEventView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
-                .disabled(!reader.mayStop)
+                .disabled(!canStopEveryone)
             }
             .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         } else {
-            Text(event.systemText(in: reader.room)).font(.caption).foregroundStyle(.secondary)
+            Text(event.systemText(in: room)).font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         }
     }
@@ -727,7 +732,7 @@ private struct BotRoomEventView: View {
     /// "Stop everyone (3)" — the count is the point: the tap ends every turn in the room,
     /// and saying so is cheaper than a user discovering it afterwards.
     private var stopLabel: String {
-        let count = reader.room.members.count
+        let count = room.members.count
         return String(localized: "Stop everyone (\(count))")
     }
 
@@ -896,6 +901,7 @@ private struct BotRoomRowView: View {
     /// `{room_id, cancel_id}` and no `member_id` (`hosted_room_service.py:985`), so the
     /// button says "stops everyone" instead of pretending to be precise.
     let onStopEveryone: () -> Void
+    let canStopEveryone: Bool
 
     var body: some View {
         VStack(spacing: 16) {
@@ -914,7 +920,9 @@ private struct BotRoomRowView: View {
                     room: room,
                     roster: roster,
                     avatars: avatars,
-                    transcriptMediaCacheNamespace: cacheNamespace
+                    transcriptMediaCacheNamespace: cacheNamespace,
+                    canStopEveryone: canStopEveryone,
+                    onStopEveryone: onStopEveryone
                 )
             }
         }
