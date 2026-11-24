@@ -149,7 +149,9 @@ def param_signature(clean_lines: list[str], index: int) -> str:
 
 ENCLOSING_RE = re.compile(
     r"^(?:@\w+\s+)*(?:final |private |fileprivate |public |internal |open )*"
-    r"(class|struct|enum|extension|actor|protocol)\s+([\w`]+)"
+    # Dotted names matter: `extension HermesCall.RoomCreation` and
+    # `extension HermesCall.NewProfile` are two scopes, not one `HermesCall`.
+    r"(class|struct|enum|extension|actor|protocol)\s+([\w`][\w`.]*)"
 )
 FUNC_HEAD_RE = re.compile(
     r"^(?:\s*)(?:@\w+(?:\([^)]*\))?\s+)*"
@@ -203,6 +205,18 @@ def enclosing_types(clean_lines):
     return info
 
 
+def same_type(a: str, b: str) -> bool:
+    """`RoomCreation` and `HermesCall.RoomCreation` name the same nested type.
+
+    A nested declaration is captured bare, while an extension of it carries the
+    qualification; without this the protocol/extension exemption would miss every
+    nested protocol, and two extensions of different nested types would collide.
+    """
+    if a == b:
+        return True
+    return a.endswith("." + b) or b.endswith("." + a)
+
+
 def is_requirement_default_pair(
     first: tuple[str, str], second: tuple[str, str]
 ) -> bool:
@@ -215,7 +229,7 @@ def is_requirement_default_pair(
     type stay reported, because those are the shapes that mean a real duplicate.
     """
     (name_a, kind_a), (name_b, kind_b) = first, second
-    if name_a != name_b or name_a == "<file>":
+    if name_a == "<file>" or not same_type(name_a, name_b):
         return False
     return {kind_a, kind_b} == {"protocol", "extension"}
 
