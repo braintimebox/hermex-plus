@@ -19,6 +19,16 @@ Two silences, both of which read as "the app did not get it".
   "failed" would misreport a turn that may have run. A live turn that has not moved for ten
   minutes is reported as "no answer", because the host still calls it running and there is
   no error to quote.
+- **Scheduled room messages are actually sent.** The queue had an entrance and no exit:
+  `enqueue` was wired to the composer and nothing ever called `due`, so a message sat in
+  the store while the screen promised delivery. The loop now runs at app level — not inside
+  the session list, which stops existing the moment the user opens a room — and sends each
+  row with the `eventID` created when it was scheduled, so a retry cannot post it twice.
+  A failure is recorded with its reason and the row stays visible; after five attempts, or
+  on a refusal that cannot fix itself, it becomes terminal.
+  Known limitation: delivery happens while the app is running. This build asks iOS for no
+  background time (no `fetch` mode, no permitted `BGTaskScheduler` identifier), so a message
+  whose time passed while the app was closed goes out at the next launch.
 - **Send can schedule.** Long-press Send in a room opens the same menu the chat has —
   Send, Schedule Message — and Schedule Message writes through `RoomScheduleQueue` with
   the message's `eventID` and `threadID`. Before this, the calendar in the header opened a
