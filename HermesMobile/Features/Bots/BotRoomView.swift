@@ -743,11 +743,7 @@ private struct BotRoomEventView: View {
 
     /// File references a reply carries, in the order the gateway sent them.
     private var attachmentNames: [String] {
-        guard case let .array(items)? = event.payload["attachments"] else { return [] }
-        return items.compactMap { item in
-            guard case let .object(fields) = item else { return nil }
-            return fields["name"]?.text ?? fields["path"]?.text
-        }
+        (event.payload["attachments"].list ?? []).compactMap { $0["name"].text ?? $0["path"].text }
     }
 
     private var actions: [ChatMessageActionItem] {
