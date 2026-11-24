@@ -161,6 +161,15 @@ final class RoomAttachmentUploadTests: XCTestCase {
         XCTAssertEqual(Set(budget.uploads.map(\.uploadID)).count, 8)
     }
 
+    func testTheUploadIDMatchesTheGatewaysIdentifierRule() {
+        // ^[A-Za-z0-9][A-Za-z0-9._:-]*$ — a hyphen is not allowed, and a dashed UUID would
+        // be refused as invalid_params on every upload.
+        let id = RoomAttachmentUpload.makeUploadID()
+        XCTAssertFalse(id.contains("-"), id)
+        XCTAssertTrue(id.allSatisfy { $0.isHexDigit }, id)
+        XCTAssertNotNil(id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]*$", options: .regularExpression), id)
+    }
+
     func testMIMEIsNamedForTheExtensionsAComposerActuallySees() {
         XCTAssertEqual(RoomAttachmentUpload.mime(for: URL(fileURLWithPath: "a.HEIC")), "image/heic")
         XCTAssertEqual(RoomAttachmentUpload.mime(for: URL(fileURLWithPath: "a.pdf")), "application/pdf")

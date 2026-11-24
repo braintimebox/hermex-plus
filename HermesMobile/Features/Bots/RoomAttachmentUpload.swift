@@ -98,7 +98,15 @@ struct RoomAttachmentUpload: Equatable {
         ]
     }
 
-    init(data: Data, name: String, mime: String, uploadID: String = UUID().uuidString.lowercased()) throws {
+    /// The gateway validates `upload_id` with `^[A-Za-z0-9][A-Za-z0-9._:-]*$`
+    /// (`session_rules/hosted_attachments.py:41`), and a hyphen is not in that class — a
+    /// UUID with dashes would be refused as `invalid_params` on every upload and look like
+    /// "attachments are broken".
+    static func makeUploadID() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    init(data: Data, name: String, mime: String, uploadID: String = RoomAttachmentUpload.makeUploadID()) throws {
         guard !data.isEmpty else { throw RoomAttachmentFailure.empty(name: name) }
         guard data.count <= RoomAttachmentLimit.bytes else {
             throw RoomAttachmentFailure.tooLarge(name: name, bytes: data.count, limit: RoomAttachmentLimit.bytes)
