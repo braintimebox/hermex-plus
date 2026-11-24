@@ -312,6 +312,23 @@ import Observation
 
     /// Overview sends start a thread; detail replies continue its current discussion.
     /// Only the dedicated retry button reuses an uncertain send's id and payload.
+    func send(_ request: Send) async {
+        sending = request
+        let send = HermesCall.groupsSend(roomID: key.roomID, eventID: request.eventID,
+                                         text: request.text, threadID: request.threadID,
+                                         attachments: request.attachments)
+        await command(send, validate: {}, accept: { result in
+            guard result["accepted"].flag == true,
+                  result["event"]["payload"]["text"].text != nil,
+                  BotRoomEvent(result["event"]) != nil else { throw BotFailure.unsupported }
+            self.log.acknowledge(result["event"])
+            self.uncertainSends[request.contextThreadID ?? ""] = nil; self.sending = nil
+            if self.draft(in: request.contextThreadID) == request.text { self.setDraft("", in: request.contextThreadID) }
+            self.publishLog()
+            self.feedback = BotFeedback(.sent, after: self.feedback)
+        })
+    }
+
     func send(retry: Bool = false, threadID: String? = nil) async {
         // A slash command belongs to the room, not to its bots: it must not become a
         // message, and it must not require the send permission the text path checks.
@@ -356,6 +373,48 @@ import Observation
         case let .usage(usage):
             errorMessage = String(localized: "Use \(usage)")
         }
+    }
+
+    /// Uploads one file and returns the manifest the message will carry.
+    ///
+    /// The upload and the send are separate RPCs by contract: the file is stored first and
+    /// the message names it by `attachment_id`. A failure here must not send a message with
+    /// a missing file, so the caller gets the error and nothing is queued.
+    func uploadAttachment(_ upload: RoomAttachmentUpload) async throws -> RoomAttachmentManifest {
+        guard let client = wire, allows("groups.attachment.upload") else {
+            throw RoomAttachmentUploadFailure.notConnected
+        }
+        let result = try await client.call(
+            .groupsAttachmentUpload(roomID: key.roomID, uploadID: upload.uploadID,
+                                    kind: upload.kind, name: upload.name, mime: upload.mime,
+                                    dataBase64: upload.dataBase64)
+        )
+        // The response also carries sha256/state/created_at/idempotent; only the five fields
+        // the message accepts are taken from it.
+        guard let attachmentID = result["attachment_id"].text ?? result["attachment"]["attachment_id"].text,
+              attachmentID.range(of: "^att_[0-9a-f]{32}$", options: .regularExpression) != nil
+        else { throw RoomAttachmentUploadFailure.malformedResponse }
+        return RoomAttachmentManifest(
+            attachmentID: attachmentID,
+            kind: upload.kind,
+            name: upload.name,
+            size: upload.byteCount,
+            mime: upload.mime
+        )
+    }
+
+    /// Sends the draft with files: upload first, then one message carrying the manifests.
+    func send(text: String, threadID: String?, attachments: [RoomAttachmentUpload]) async {
+        var manifests: [RoomAttachmentManifest] = []
+        do {
+            for upload in attachments {
+                manifests.append(try await uploadAttachment(upload))
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        await send(Send(text: text, threadID: threadID, attachments: manifests))
     }
 
     func stop() async {

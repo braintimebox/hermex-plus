@@ -205,6 +205,12 @@ struct RoomAttachmentBudget: Equatable {
         return nil
     }
 
+    /// Re-adds an already-built upload (the composer keeps them across edits).
+    mutating func append(_ upload: RoomAttachmentUpload) {
+        if let refusal = refusal(adding: upload.name, bytes: upload.byteCount) { return }
+        uploads.append(upload)
+    }
+
     /// Adds a picked file, or throws the refusal that names what is left.
     mutating func add(contentsOf url: URL) throws {
         let name = url.lastPathComponent
@@ -257,6 +263,21 @@ struct RoomAttachmentManifest: Equatable {
         case "pdf": return mime.lowercased() == "application/pdf"
         case "file": return !mime.lowercased().hasPrefix("image/") && mime.lowercased() != "application/pdf"
         default: return false
+        }
+    }
+}
+
+/// Why a room file could not be uploaded.
+enum RoomAttachmentUploadFailure: LocalizedError {
+    case notConnected
+    case malformedResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            String(localized: "Not connected to this room right now.")
+        case .malformedResponse:
+            String(localized: "The server accepted the file but did not return its id.")
         }
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The Bot editor and mention panel, with only the controls rooms support.
 struct BotRoomComposerView: View {
@@ -18,6 +19,10 @@ struct BotRoomComposerView: View {
     @State private var measuredHeight: CGFloat = 0
     /// The schedule sheet: without an entry point the queue had no way in, and the calendar
     /// in the header showed a list nobody could add to.
+    /// Files picked or pasted into this draft. Uploaded at send time, so a file that is
+    /// removed from the draft never becomes a blob the room has to store.
+    @State private var attachments: [RoomAttachmentUpload] = []
+    @State private var attachmentNotice: String?
     @State private var isScheduling = false
     @State private var scheduledAt = Date().addingTimeInterval(3_600)
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 16
@@ -44,12 +49,17 @@ struct BotRoomComposerView: View {
                         isDisabled: !reader.mayEditDraft(in: threadID), isCollapsed: !focused,
                         isKeyboardSendEnabled: reader.maySend(in: threadID), verticalPadding: 6,
                         chipSkills: [], chipFilePaths: [], quotes: [], onKeyboardSend: send,
-                        onPasteFileProviders: { _ in }, onPasteFileURLs: { _ in },
-                        onPasteImageProviders: { _ in }, onPasteImages: { _ in },
+                        onPasteFileProviders: { providers in add(providers: providers) },
+                        onPasteFileURLs: { urls in add(urls: urls) },
+                        onPasteImageProviders: { providers in add(providers: providers) },
+                        onPasteImages: { providers in add(providers: providers) },
                         onTapChip: { _ in }, onTapQuote: { _ in }, onRemoveQuote: { _ in },
-                        placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: false
+                        placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: true
                     )
                     actionButton
+                }
+                if !attachments.isEmpty || attachmentNotice != nil {
+                    attachmentBudgetLine
                 }
                 .padding(ChatComposerMetrics.pillInset)
                 .modifier(ChatComposerSurfaceStyle(isExpanded: focused))
@@ -137,7 +147,67 @@ struct BotRoomComposerView: View {
         ChatHaptics.autocompleteAccepted(isEnabled: isHapticsEnabled)
     }
 
-    private func send() { Task { await reader.send(threadID: threadID) } }
+    /// The budget the picker shows before anything is uploaded: the same numbers the refusal
+    /// would use, so a file that will not fit is a sentence, not a failed send.
+    private var attachmentBudgetLine: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let attachmentNotice {
+                Text(attachmentNotice).font(.caption2).foregroundStyle(.red)
+            }
+            if !attachments.isEmpty {
+                Text(budget.remainingSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var budget: RoomAttachmentBudget {
+        var budget = RoomAttachmentBudget()
+        for attachment in attachments { budget.append(attachment) }
+        return budget
+    }
+
+    private func add(urls: [URL]) {
+        attachmentNotice = nil
+        var selection = budget
+        for url in urls {
+            do {
+                try selection.add(contentsOf: url)
+            } catch {
+                attachmentNotice = error.localizedDescription
+            }
+        }
+        attachments = selection.uploads
+    }
+
+    private func add(providers: [NSItemProvider]) {
+        // A provider copies its file into our container asynchronously; the paste path keeps
+        // that copy so the draft does not depend on the source app staying alive.
+        attachmentNotice = nil
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            _ = provider.loadFileRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { url, _ in
+                guard let url else { return }
+                let copy = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(RoomAttachmentUpload.makeUploadID())
+                    .appendingPathExtension(url.pathExtension)
+                try? FileManager.default.copyItem(at: url, to: copy)
+                Task { @MainActor in add(urls: [copy]) }
+            }
+        }
+    }
+
+    private func send() {
+        guard attachments.isEmpty else {
+            let files = attachments
+            let text = reader.draft(in: threadID)
+            attachments = []
+            Task { await reader.send(text: text, threadID: threadID, attachments: files) }
+            return
+        }
+        Task { await reader.send(threadID: threadID) }
+    }
 }
 
 /// Room handles are server routing keys. Friendly names only help searching;
