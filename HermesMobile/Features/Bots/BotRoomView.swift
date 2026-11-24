@@ -219,6 +219,16 @@ ScrollView {
     /// The room's composition for the header's second line, the same place the
     /// ordinary chat puts the workspace: who is in the room, not how many.
     private var roomSubtitle: String? {
+        // While a turn runs the second line says who is working, not who is in the room:
+        // the room's silence during a long turn is the thing being fixed.
+        let working = reader.status.activity.compactMap { activity in
+            reader.room.members.first { $0.id == activity.memberID }?.name
+        }
+        if !working.isEmpty {
+            return working.count == 1
+                ? String(localized: "\(working[0]) is working…")
+                : String(localized: "\(working.count) working: \(working.joined(separator: ", "))")
+        }
         let names = reader.room.members.map(\.name)
         guard !names.isEmpty else { return nil }
         return names.joined(separator: ", ")
@@ -603,7 +613,7 @@ private struct BotRoomEventView: View {
                 footer.padding(.leading, 34)
             }
         } else {
-            Text(event.systemText).font(.caption).foregroundStyle(.secondary)
+            Text(event.systemText(in: reader.room)).font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         }
     }

@@ -1,3 +1,22 @@
+## 4.2.9 — a room that says what it is doing, and a Send that can schedule
+
+Two silences, both of which read as "the app did not get it".
+
+- **The room shows each participant's turn.** `turn.started` and `turn.settled` were
+  already in the room's event dictionary on the gateway; the client simply did not draw
+  them, so a room looked dead for the whole turn and the answer arrived from nowhere.
+  Each line now carries the author's name — "Build is working…", "Build answered",
+  "Build failed: <reason>" — because a room answers with several bots at once and an
+  unattributed line is one nobody can act on.
+- **The header says who is working.** `groups.state` carries `member_activity`; while a
+  turn runs, the header's second line names the participants instead of listing the
+  roster. The host has no step history to show (`hosted_rooms.py:60-70` is a closed list
+  of event kinds), so this is who and since when, not what.
+- **Send can schedule.** Long-press Send in a room opens the same menu the chat has —
+  Send, Schedule Message — and Schedule Message writes through `RoomScheduleQueue` with
+  the message's `eventID` and `threadID`. Before this, the calendar in the header opened a
+  list nothing could add to.
+
 ## 4.2.8 — the calendar, the pins and one queue
 
 Rooms were growing their own storage beside the chat's. Two things the chat already

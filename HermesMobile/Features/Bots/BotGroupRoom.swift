@@ -59,7 +59,21 @@ struct BotGroupRoom: Hashable {
 }
 
 struct BotRoomStatus: Equatable {
+    /// One participant's live turn, from `groups.state.driver_status.member_activity`.
+    ///
+    /// `tool` is the only step information the host has: the room's event dictionary has no
+    /// step events (`hosted_rooms.py:60-70` is a closed list), and progress lives in the
+    /// gateway's process memory. So the header can say who is working, since when, and in
+    /// which tool — not what they are doing.
+    struct Activity: Equatable, Identifiable {
+        let memberID: String
+        let tool: String?
+        let startedAt: Double?
+        var id: String { memberID }
+    }
+
     let working: Bool
+    let activity: [Activity]
     let blocked: Bool
     let stopping: Int
     let stoppable: Int
@@ -67,6 +81,12 @@ struct BotRoomStatus: Equatable {
     var pending: Bool { !actions.isEmpty }
     init(_ value: BotJSON) {
         working = value["working"].flag == true
+        activity = (value["member_activity"].list ?? []).compactMap { item in
+            guard let memberID = item["member_id"].text else { return nil }
+            return Activity(memberID: memberID,
+                            tool: item["tool"].text ?? item["progress"]["tool"].text,
+                            startedAt: item["started_at"].number ?? item["progress_at"].number)
+        }
         blocked = value["blocked"].flag == true
         stopping = max(0, value["counts"]["stopping"].integer ?? 0)
         stoppable = max(0, value["counts"]["queued"].integer ?? 0) + max(0, value["counts"]["running"].integer ?? 0)
@@ -107,7 +127,11 @@ struct BotRoomEvent: Identifiable, Equatable {
         events.contains { ["message.user", "message.member"].contains($0.kind) }
     }
     var visible: Bool {
-        ["message.user", "message.member", "turn.failed", "turn.cancelled", "room.stop_requested", "room.renamed"].contains(kind)
+        // `turn.started` and `turn.settled` are in the room's event dictionary on the
+        // gateway (`hosted_rooms.py:62-66`) and were simply not drawn: the room looked
+        // silent for the whole turn, which is what "answers come from space" describes.
+        ["message.user", "message.member", "turn.started", "turn.settled", "turn.failed",
+         "turn.cancelled", "room.stop_requested", "room.renamed"].contains(kind)
     }
     func member(in room: BotGroupRoom) -> BotGroupRoom.Member? {
         let id = payload["member_id"].text ?? actor["id"].text
@@ -116,10 +140,22 @@ struct BotRoomEvent: Identifiable, Equatable {
     func sender(in room: BotGroupRoom) -> String {
         actor["display_name"].text ?? member(in: room)?.name ?? actor["profile"].text ?? String(localized: "Bot")
     }
-    var systemText: String {
+    var systemText: String { systemText(in: nil) }
+
+    /// One line per participant, with the author's name on it: a room answers with several
+    /// bots at once, and "Turn failed" without a name is a line nobody can act on.
+    func systemText(in room: BotGroupRoom?) -> String {
+        let who = room.map { sender(in: $0) } ?? actor["display_name"].text ?? String(localized: "Bot")
         switch kind {
-        case "turn.failed": return payload["error"].text.map { String(localized: "Failed: \($0)") } ?? String(localized: "Turn failed")
-        case "turn.cancelled": return String(localized: "Turn cancelled")
+        case "turn.started":
+            return String(localized: "\(who) is working…")
+        case "turn.settled":
+            return String(localized: "\(who) answered")
+        case "turn.failed":
+            return payload["error"].text.map { String(localized: "\(who) failed: \($0)") }
+                ?? String(localized: "\(who) failed")
+        case "turn.cancelled":
+            return String(localized: "\(who) was cancelled")
         case "room.stop_requested": return String(localized: "Stop requested")
         case "room.renamed": return String(localized: "Room renamed to \(payload["name"].text ?? "")")
         default: return ""
