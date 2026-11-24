@@ -23,6 +23,7 @@ struct BotRoomComposerView: View {
     /// removed from the draft never becomes a blob the room has to store.
     @State private var attachments: [RoomAttachmentUpload] = []
     @State private var attachmentNotice: String?
+    @State private var isPickingAttachments = false
     @State private var isScheduling = false
     @State private var scheduledAt = Date().addingTimeInterval(3_600)
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 16
@@ -56,6 +57,18 @@ struct BotRoomComposerView: View {
                         onTapChip: { _ in }, onTapQuote: { _ in }, onRemoveQuote: { _ in },
                         placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: true
                     )
+                    if reader.showsComposer {
+                        // The attach control sits next to Send, where the user already is
+                        // when they decide a message needs a file.
+                        Button { isPickingAttachments = true } label: {
+                            Image(systemName: "paperclip")
+                                .font(.system(size: 18, weight: .regular))
+                                .frame(width: ChatComposerMetrics.actionSize)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(Text("Attach a file"))
+                    }
                     actionButton
                 }
                 if !attachments.isEmpty || attachmentNotice != nil {
@@ -69,6 +82,10 @@ struct BotRoomComposerView: View {
         // inset. The 8 points kept the glass surface off the bottom edge and let
         // the transcript show through the strip underneath it.
         .padding(.horizontal, 16)
+        .roomAttachmentPicker(isPresented: $isPickingAttachments) { urls in
+            guard !urls.isEmpty else { return }
+            add(urls: urls)
+        }
     }
 
     /// Rooms send or stop, never both from one control: Stop lives in the top bar
@@ -173,6 +190,10 @@ struct BotRoomComposerView: View {
         attachmentNotice = nil
         var selection = budget
         for url in urls {
+            // A URL from the system picker lives outside our sandbox: reading it needs the
+            // security scope started, and the scope ends with this loop iteration.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 try selection.add(contentsOf: url)
             } catch {

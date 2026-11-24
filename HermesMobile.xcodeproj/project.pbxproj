@@ -559,6 +559,7 @@
 		C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */; };
 		F0740C1D2FFC918C936DBFFC /* RoomScheduledDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175F3E41950511B27F712D39 /* RoomScheduledDelivery.swift */; };
 		0979A440A793A48689554BC0 /* RoomScheduledDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */; };
+		A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1149,6 +1150,7 @@
 		DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduleView.swift"; sourceTree = "<group>"; };
 		175F3E41950511B27F712D39 /* RoomScheduledDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduledDelivery.swift"; sourceTree = "<group>"; };
 		A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomScheduledDeliveryTests.swift"; sourceTree = "<group>"; };
+		D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomAttachmentPicker.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1571,6 +1573,7 @@
 				921EF1F7D4F490BC15FEE85F /* RoomPins.swift */,
 				DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */,
 				175F3E41950511B27F712D39 /* RoomScheduledDelivery.swift */,
+				D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */,
 				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				2151C61191916592AFD8B5C1 /* BotSearchView.swift */,
 				383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */,
@@ -2202,6 +2205,7 @@
 				6101047BC5CE7A66B0961961 /* RoomPins.swift in Sources */,
 				C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */,
 				F0740C1D2FFC918C936DBFFC /* RoomScheduledDelivery.swift in Sources */,
+				A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */,
 				D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */,
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
 				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,
