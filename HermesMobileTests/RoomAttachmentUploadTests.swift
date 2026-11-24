@@ -176,3 +176,33 @@ final class RoomAttachmentUploadTests: XCTestCase {
         XCTAssertEqual(RoomAttachmentUpload.mime(for: URL(fileURLWithPath: "a.unknown")), "application/octet-stream")
     }
 }
+
+/// The manifest is the only shape `groups.send` accepts, and the gateway validates it
+/// strictly: exactly five fields, an `att_` id, and a `kind` that matches the MIME type
+/// (`session_rules/hosted_attachments.py:37,90-112`).
+final class RoomAttachmentManifestTests: XCTestCase {
+    private func manifest(kind: String = "image", mime: String = "image/png",
+                          attachmentID: String = "att_" + String(repeating: "a", count: 32)) -> RoomAttachmentManifest {
+        RoomAttachmentManifest(attachmentID: attachmentID, kind: kind, name: "p.png", size: 1_024, mime: mime)
+    }
+
+    func testTheManifestCarriesExactlyTheFiveAcceptedFields() {
+        XCTAssertEqual(Set(manifest().params.keys), RoomAttachmentManifest.fieldNames)
+        XCTAssertEqual(RoomAttachmentManifest.fieldNames,
+                       ["attachment_id", "kind", "name", "size", "mime"])
+        // The upload response also returns sha256/state/created_at/idempotent; forwarding
+        // any of them would be refused as "unknown fields".
+        for extra in ["sha256", "state", "created_at", "idempotent"] {
+            XCTAssertNil(manifest().params[extra])
+        }
+    }
+
+    func testAManifestThatTheGatewayWouldRefuseIsRejectedHereFirst() {
+        XCTAssertTrue(manifest().isValid)
+        XCTAssertFalse(manifest(attachmentID: "att-123").isValid, "the id form is att_ + 32 hex")
+        XCTAssertFalse(manifest(kind: "file", mime: "image/png").isValid, "an image declared as file is refused")
+        XCTAssertFalse(manifest(kind: "image", mime: "application/pdf").isValid)
+        XCTAssertFalse(manifest(kind: "pdf", mime: "image/png").isValid)
+        XCTAssertTrue(manifest(kind: "pdf", mime: "application/pdf").isValid)
+    }
+}

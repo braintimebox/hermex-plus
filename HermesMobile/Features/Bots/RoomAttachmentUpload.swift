@@ -224,3 +224,39 @@ struct RoomAttachmentBudget: Equatable {
 
     mutating func removeAll() { uploads.removeAll() }
 }
+
+/// One attachment as `groups.send` accepts it.
+///
+/// The gateway's manifest is a **strict** set of five fields
+/// (`session_rules/hosted_attachments.py:37`, validated at `:90-103`): anything else —
+/// `sha256`, `state`, `created_at`, `idempotent` from the upload response — is refused as
+/// "unknown fields". So the upload response cannot be forwarded as-is; this is the
+/// projection, and it is the only shape the send path is allowed to carry.
+struct RoomAttachmentManifest: Equatable {
+    static let fieldNames: Set<String> = ["attachment_id", "kind", "name", "size", "mime"]
+
+    let attachmentID: String
+    let kind: String
+    let name: String
+    let size: Int
+    let mime: String
+
+    /// The five fields, and nothing else.
+    var params: [String: Any] {
+        ["attachment_id": attachmentID, "kind": kind, "name": name, "size": size, "mime": mime]
+    }
+
+    /// True when this manifest would survive the gateway's strict validation: exactly the
+    /// five field names, an id in the `att_` form, and a `kind` that matches the MIME type.
+    var isValid: Bool {
+        guard Set(params.keys) == Self.fieldNames else { return false }
+        guard attachmentID.range(of: "^att_[0-9a-f]{32}$", options: .regularExpression) != nil else { return false }
+        guard !name.isEmpty, size > 0, size <= RoomAttachmentLimit.bytes else { return false }
+        switch kind {
+        case "image": return mime.lowercased().hasPrefix("image/")
+        case "pdf": return mime.lowercased() == "application/pdf"
+        case "file": return !mime.lowercased().hasPrefix("image/") && mime.lowercased() != "application/pdf"
+        default: return false
+        }
+    }
+}

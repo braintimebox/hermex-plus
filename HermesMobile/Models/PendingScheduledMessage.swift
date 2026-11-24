@@ -125,8 +125,16 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
     var size: Int?
     var isImage: Bool
     var draftFileName: String?
+    /// The gateway's upload key (`^[A-Za-z0-9][A-Za-z0-9._:-]*$`, no hyphens). Same value on
+    /// a retry means the host deduplicates instead of storing a second blob.
+    var uploadID: String?
+    /// What the message manifest names; returned by the upload response.
+    var attachmentID: String?
 
-    init(name: String, path: String, mime: String, size: Int?, isImage: Bool, draftFileName: String?) {
+    init(name: String, path: String, mime: String, size: Int?, isImage: Bool, draftFileName: String?,
+         uploadID: String? = nil, attachmentID: String? = nil) {
+        self.uploadID = uploadID
+        self.attachmentID = attachmentID
         self.name = name
         self.path = path
         self.mime = mime
