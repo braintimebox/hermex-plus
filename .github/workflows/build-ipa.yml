@@ -103,7 +103,7 @@ jobs:
     # The cache (SPM + CAS) lives here, where the only compilation happens. The
     # shards do not restore it, because they never compile.
     needs: guard
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 60
     # The failure step commits the compiler errors back to the branch: the
     # Actions log API rejects /jobs and /logs for this repository.
@@ -277,7 +277,7 @@ jobs:
     # shard without anyone updating a list.
     name: Test (shard ${{ matrix.shard }}/3)
     needs: [guard, unit-build]
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -540,7 +540,7 @@ jobs:
     # ship, and the wasted runner pushed every later run down the queue. A green
     # compile is the precondition; publishing still needs both jobs.
     needs: [guard, unit-build]
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 60
     env:
       PROJECT_PATH: HermesMobile.xcodeproj
