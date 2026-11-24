@@ -7,6 +7,7 @@ struct BotRoomComposerView: View {
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(HeaderLogoColor.storageKey) private var themeHex = HeaderLogoColor.defaultHex
     @AppStorage(PrimaryActionTintSettings.isEnabledKey) private var tintsPrimaryActions = false
@@ -15,6 +16,10 @@ struct BotRoomComposerView: View {
     @State private var focused = false
     @State private var inputHeight: CGFloat = 22
     @State private var measuredHeight: CGFloat = 0
+    /// The schedule sheet: without an entry point the queue had no way in, and the calendar
+    /// in the header showed a list nobody could add to.
+    @State private var isScheduling = false
+    @State private var scheduledAt = Date().addingTimeInterval(3_600)
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 16
 
     var body: some View {
@@ -76,6 +81,60 @@ struct BotRoomComposerView: View {
         }
         .buttonStyle(.chatTactile(.icon)).disabled(!enabled)
         .accessibilityLabel(Text("Send"))
+        // The same gesture the chat uses: long-press Send for "Schedule Message". It lives
+        // on the send button because that is where the user already is when they decide the
+        // message should go later.
+        .contextMenu {
+            if enabled {
+                Button { send() } label: { Label("Send", systemImage: "arrow.up.circle.fill") }
+                Button {
+                    scheduledAt = Date().addingTimeInterval(3_600)
+                    isScheduling = true
+                } label: {
+                    Label("Schedule Message", systemImage: "calendar.badge.plus")
+                }
+            }
+        }
+        .sheet(isPresented: $isScheduling) { scheduleSheet }
+    }
+
+    /// Date, time, and the one button that turns a draft into a queued message.
+    private var scheduleSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Send at", selection: $scheduledAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                } footer: {
+                    Text("The message leaves the queue when it is due and the app is running. It keeps its id, so a retry cannot post it twice.")
+                }
+            }
+            .navigationTitle("Schedule Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isScheduling = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Schedule") { schedule() }
+                        .disabled(!reader.maySend(in: threadID))
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func schedule() {
+        let text = reader.draft(in: threadID)
+        RoomScheduleQueue.enqueue(
+            room: reader.key,
+            roomName: reader.room.name,
+            threadID: threadID,
+            text: text,
+            dueAt: scheduledAt,
+            serverURLString: reader.key.server.absoluteString,
+            in: modelContext
+        )
+        reader.setDraft("", in: threadID)
+        isScheduling = false
+        ChatHaptics.autocompleteAccepted(isEnabled: isHapticsEnabled)
     }
 
     private func send() { Task { await reader.send(threadID: threadID) } }
