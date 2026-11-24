@@ -37,6 +37,16 @@ CASES = [
         "dup_two_implementations.swift",
         1,
     ),
+    (
+        "extensions of two different nested types are not duplicates",
+        "dup_nested_extensions.swift",
+        0,
+    ),
+    (
+        "two extensions of the same nested type are a duplicate",
+        "dup_same_nested_twice.swift",
+        1,
+    ),
 ]
 
 
@@ -56,13 +66,18 @@ def main() -> int:
                 print(f"          {line}")
             failures += 1
 
-    # The real file that exposed the defect: sixteen requirements have defaults.
-    kanban = ROOT / "HermesMobile" / "Networking" / "APIClient+Kanban.swift"
-    if kanban.exists():
-        found = cdd.find_duplicates(kanban)
+    # The two real files that exposed the defect: sixteen requirements with defaults,
+    # and four members of three different nested types sharing a leading component.
+    for name, why in [
+        ("HermesMobile/Networking/APIClient+Kanban.swift", "KanbanDataClient defaults"),
+        ("HermesMobile/Networking/Hermes/HermesCall.swift", "nested-type extensions"),
+    ]:
+        target = ROOT / name
+        if not target.exists():
+            continue
+        found = cdd.find_duplicates(target)
         ok = not found
-        print(f"  {'ok  ' if ok else 'FAIL'}  KanbanDataClient defaults are not duplicates: "
-              f"{len(found)} report(s)")
+        print(f"  {'ok  ' if ok else 'FAIL'}  {why} are not duplicates: {len(found)} report(s)")
         if not ok:
             for line in found[:3]:
                 print(f"          {line}")
@@ -70,6 +85,7 @@ def main() -> int:
 
     # Guard the cross-scope rule that shares enclosing_types(): a type and a type it
     # owns declaring the same property must still be reported.
+    kanban = ROOT / "HermesMobile" / "Networking" / "APIClient+Kanban.swift"
     print("  ---- cross-scope rule still runs: "
           f"{len(cdd.cross_scope_duplicates(kanban)) if kanban.exists() else 'n/a'} report(s)")
 
