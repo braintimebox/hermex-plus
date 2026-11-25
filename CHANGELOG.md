@@ -1,3 +1,28 @@
+## 4.2.10 — one context menu for both authors
+
+4.2.8 opened the message menu with two different mechanisms: a UIKit interaction
+for user messages and a SwiftUI `.contextMenu` for assistant ones, while an
+assistant reply also carried an inline text-selection interaction. The same
+long press therefore did three different things depending on the author and on
+whether the reply was still streaming.
+
+- **One mechanism.** The transcript drops its SwiftUI `.contextMenu`; both
+  authors go through the single `UIContextMenuInteraction` on the transcript's
+  scroll view, which anchors the menu at the press point with a transparent
+  1×1 preview — no bubble lift, no snapshot, no jump on a multi-screen reply.
+- **One host per bubble.** `MessageBubbleView` applied two menu modifiers over
+  the same frame (upstream's item list and this fork's ready-made menu), so which
+  menu answered a press depended on hash order. It now resolves to a single list.
+- **The long press belongs to the menu.** UIKit's own long press on the text
+  interaction began a selection first, which is why an assistant reply could show
+  no menu at all. That recogniser is disabled; selection stays on taps, double
+  taps and the drag handles, and the explicit «Select Text» action still opens
+  the full-text sheet.
+
+Unchanged on purpose: every action and its order, Tapback (react / remove,
+`isSelected`, emoji-image cache), streaming gating, VoiceOver actions, and the
+Bot message menu paths.
+
 ## 4.2.9 — a room that says what it is doing, and a Send that can schedule
 
 Two silences, both of which read as "the app did not get it".

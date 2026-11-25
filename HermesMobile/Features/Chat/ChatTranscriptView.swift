@@ -1045,31 +1045,14 @@ private struct ChatTranscriptMessageRow: View {
         // don't apply to system-emitted markers.
         if let markerKind = ChatMarkerMessageClassifier.classify(message) {
             MarkerMessageCardView(kind: markerKind, content: message.content)
-        } else if let actionContext {
+        } else if actionContext != nil {
+            // 4.2.10: one mechanism for both roles. The UIKit interaction on the
+            // transcript's scroll view owns the long press; a SwiftUI
+            // `.contextMenu` here was a second, competing path — and on an
+            // assistant reply the text-selection interaction took the gesture
+            // before either menu could open, so the two authors behaved
+            // differently for the same press.
             bubble
-                .contentShape(Rectangle())
-                .contextMenu {
-                    ChatMessageActionMenu(
-                        context: actionContext,
-                        listeningMessageID: listeningMessageID,
-                        isViewingCachedData: isViewingCachedData,
-                        hasActiveStream: hasActiveStream,
-                        isRegeneratingMessage: isRegeneratingMessage,
-                        isEditingMessage: isEditingMessage,
-                        isForkingMessage: isForkingMessage,
-                        onToggleListening: onToggleListening,
-                        onRegenerate: onRegenerate,
-                        onEdit: onEdit,
-                        onFork: onFork,
-                        onCopy: onCopy,
-                        onSelectText: onSelectText,
-                        onReply: onReply,
-                        onForward: onForward,
-                        onSave: onSave,
-                        onPin: onPin,
-                        isPinned: isMessagePinned(message.id)
-                    )
-                }
         } else {
             VStack(alignment: isUserMessage ? .trailing : .leading, spacing: 4) {
                 bubble
@@ -1118,7 +1101,10 @@ private struct ChatTranscriptMessageRow: View {
             isStreaming: isStreaming,
             liveTokensPerSecond: liveTokensPerSecond,
             onAskHermex: onAskHermex,
-            contextMenu: isUserMessage ? actionMenu : nil
+            // 4.2.10: the menu is no longer user-only. Both authors go through
+            // the UIKit interaction on the scroll view, which is the single
+            // mechanism the transcript uses now.
+            contextMenu: actionMenu
         )
     }
 
