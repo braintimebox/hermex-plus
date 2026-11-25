@@ -53,7 +53,7 @@ struct BotRoomComposerView: View {
                         onPasteFileProviders: { providers in add(providers: providers) },
                         onPasteFileURLs: { urls in add(urls: urls) },
                         onPasteImageProviders: { providers in add(providers: providers) },
-                        onPasteImages: { providers in add(providers: providers) },
+                        onPasteImages: { images in add(images: images) },
                         onTapChip: { _ in }, onTapQuote: { _ in }, onRemoveQuote: { _ in },
                         placeholder: threadID == nil ? String(localized: "Message \(reader.room.name)") : String(localized: "Reply in thread"), acceptsAttachments: true
                     )
@@ -216,6 +216,25 @@ struct BotRoomComposerView: View {
                 try? FileManager.default.copyItem(at: url, to: copy)
                 Task { @MainActor in add(urls: [copy]) }
             }
+        }
+    }
+
+    private func add(images: [UIImage]) {
+        // У вставленной картинки нет файла за спиной: пишем её в наш контейнер, чтобы
+        // черновик не зависел от исходного приложения, и дальше идём общим путём add(urls:).
+        attachmentNotice = nil
+        for image in images {
+            guard let data = image.pngData() else { continue }
+            let copy = FileManager.default.temporaryDirectory
+                .appendingPathComponent(RoomAttachmentUpload.makeUploadID())
+                .appendingPathExtension("png")
+            do {
+                try data.write(to: copy, options: .atomic)
+            } catch {
+                attachmentNotice = error.localizedDescription
+                continue
+            }
+            add(urls: [copy])
         }
     }
 
