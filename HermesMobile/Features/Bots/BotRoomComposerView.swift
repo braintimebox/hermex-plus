@@ -71,11 +71,13 @@ struct BotRoomComposerView: View {
                     }
                     actionButton
                 }
-                if !attachments.isEmpty || attachmentNotice != nil {
-                    attachmentBudgetLine
-                }
                 .padding(ChatComposerMetrics.pillInset)
                 .modifier(ChatComposerSurfaceStyle(isExpanded: focused))
+                if !attachments.isEmpty || attachmentNotice != nil {
+                    // The budget sits under the pill, aligned with its inner text.
+                    attachmentBudgetLine
+                        .padding(.horizontal, ChatComposerMetrics.pillInset)
+                }
             }
         }
         // Same geometry as the regular chat and the bot: horizontal 16, no bottom
