@@ -1,8 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/45558649957
-Commit: aeb712f98e561ec17c981bf3c88734e6a0798a07
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/45592922475
+Commit: df906f1d4f455ffda10d375d00fddde75680991f
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomComposerView.swift:56:70: error: cannot convert value of type '[UIImage]' to expected argument type '[NSItemProvider]'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Bots/BotRoomComposerView.swift:77:18: error: instance member 'padding' cannot be used on type 'View'
 ```
