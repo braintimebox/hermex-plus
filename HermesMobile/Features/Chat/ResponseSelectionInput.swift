@@ -51,10 +51,13 @@ final class ResponseSelectionInput: UIView, UITextInput, UITextInteractionDelega
     /// taps, double taps and the drag handles; the explicit «Select Text» action
     /// still opens the full-text sheet.
     ///
-    /// The recognisers are created lazily, so this runs again when the view
-    /// reaches a window.
+    /// `UITextInteraction` does not expose its recognisers, so the interaction's
+    /// own instances are read from this view: installing an interaction adds its
+    /// recognisers here, and that is the only public path to them. They are
+    /// created lazily, which is why this runs again when the view reaches a
+    /// window.
     func releaseLongPressForMessageMenu() {
-        selectionInteraction.gestureRecognizers?
+        gestureRecognizers?
             .compactMap { $0 as? UILongPressGestureRecognizer }
             .forEach { $0.isEnabled = false }
     }
