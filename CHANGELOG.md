@@ -1,3 +1,13 @@
+## 4.3.3 — the FAB clears the dock, and the bot composer matches the chat
+
+- **New Chat button no longer clipped by the dock.** The floating button was a sibling
+  of a `Color` that ignores the safe area, so the ZStack stretched to the screen edge
+  and the button's 16 pt were measured from there — under the dock. It is an overlay
+  of the content now, whose bounds the dock's inset has already shrunk.
+- **Bot and room composers sit at the chat's height.** The bot surface added 10 pt
+  while the keyboard was up; the chat and the room add none. Removed, together with
+  the keyboard observation that existed only for that padding.
+
 ## 4.3.2 — the dock goes where it navigates, and the default profile is first
 
 - **One rule for the dock.** It is drawn on the Chats root and on the utility sections

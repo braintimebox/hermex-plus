@@ -571,25 +571,29 @@ struct SessionListView: View {
     }
 
     private var sessionListSurface: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color(.systemBackground)
-                .ignoresSafeArea()
-                // HERMEX-FORK: the share-activation hook rides here, on a leaf
-                // whose chain is two nodes long, instead of in `body` — see the
-                // note at the top of the body chain. The observer reports every
-                // return to the foreground; the callback decides whether a staged
-                // share still needs its destination dialog.
-                .background(SceneActivationObserver { reaskShareDestinationIfActive() })
-
-            content
-
-            if !isSearchingSessions {
-                newSessionButton
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 16)
-                    .zIndex(1)
+        // The FAB is an overlay of the content, not a sibling of the full-screen
+        // background. A Color that ignores the safe area stretched the ZStack to the
+        // screen edge, so the button's 16 pt were measured from the edge — under the
+        // dock, which then clipped it (owner screenshot, 4.3.2). An overlay lives in
+        // the content's bounds, which the dock's safe-area inset has already shrunk.
+        content
+            .background {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+                    // HERMEX-FORK: the share-activation hook rides here, on a leaf
+                    // whose chain is two nodes long, instead of in `body` — see the
+                    // note at the top of the body chain. The observer reports every
+                    // return to the foreground; the callback decides whether a staged
+                    // share still has its destination dialog.
+                    .background(SceneActivationObserver { reaskShareDestinationIfActive() })
             }
-        }
+            .overlay(alignment: .bottomTrailing) {
+                if !isSearchingSessions {
+                    newSessionButton
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 16)
+                }
+            }
     }
 
     @ViewBuilder

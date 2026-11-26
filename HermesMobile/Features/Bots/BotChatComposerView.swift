@@ -35,7 +35,9 @@ struct BotChatComposerView: View {
     @State private var selection = ComposerSelection()
     @State private var inputHeight: CGFloat = 22
     @State private var measuredHeight: CGFloat = 0
-    @State private var keyboardIsVisible = false
+    // The composer's geometry is fixed at horizontal 16 with no bottom inset, the same
+    // as the chat's and the room's. A keyboard-driven extra inset used to live here and
+    // made the bot surface sit higher than the other two.
     @State private var voiceInput = ComposerVoiceInputController()
     /// Hold-to-record, as in Sessions. The clip lands in the same attachment draft the
     /// "+" picker feeds, so a voice note and a picked file are sent the same way.
@@ -242,7 +244,10 @@ struct BotChatComposerView: View {
             guard current > previous, model.mayEditDraft else { return }
             isFocused = true
         }
-        .padding(.bottom, keyboardIsVisible ? 10 : 0)
+        // Same geometry as the regular chat and the room: horizontal 16, no bottom
+        // inset. The 10 points this used to add while the keyboard was up made the
+        // bot composer sit higher than the chat's and the room's, so three screens
+        // that look the same were three different heights.
         // The card rides the same keyboard-retaining overlay as the "+" picker, so
         // the keyboard stays up and the two cards look and move alike.
         .background {
@@ -259,12 +264,6 @@ struct BotChatComposerView: View {
         // the next send re-asks with the current truth.
         .onChange(of: busyChoices) { _, choices in
             if choices.isEmpty { choosingSendMode = false }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            keyboardIsVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardIsVisible = false
         }
         // The cap is enforced here too, not only on finger-up: a held button that
         // nobody lifts must not record forever.
