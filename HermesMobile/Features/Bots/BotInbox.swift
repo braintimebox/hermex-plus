@@ -9,6 +9,15 @@ import UIKit
 @MainActor @Observable final class BotInbox {
     enum Link: Equatable { case idle, connecting, live, disconnected }
 
+    /// Which rows this inbox shows: everything, only bots, or only rooms.
+    ///
+    /// Groups and Bots are two labels over one screen (4.3 shipped them identical);
+    /// the scope is what makes them different without a second screen, and it filters
+    /// pins, sections and rooms through the same two sources the list already reads.
+    enum Scope: Equatable { case all, bots, rooms }
+
+    var scope: Scope = .all
+
     /// The roster split the way Desktop draws it: pinned first, the rest in server
     /// order, hidden bots apart and only when revealed or when a search names them.
     /// The inbox list regroups these into `sections`; search reads them flat.
@@ -127,7 +136,11 @@ import UIKit
             + byAttention(visibleRooms.filter { isRoomPinned($0) && !isRoomHidden($0) }.map(ChatRow.room))
     }
 
-    private var visibleRooms: [BotGroupRoom] { roomCapabilities.enabled ? rooms : [] }
+    private var visibleRooms: [BotGroupRoom] {
+        // Bots shows bots only, so the room rows (pinned and unfiled) disappear.
+        guard scope != .bots else { return [] }
+        return roomCapabilities.enabled ? rooms : []
+    }
 
     /// The one order inside every group (each tile group and each section): waiting,
     /// then working, then unread, then newest, undated last and ties by id. Rooms
@@ -255,6 +268,9 @@ import UIKit
     var hiddenCount: Int { profiles.filter(\.hidden).count + visibleRooms.filter(isRoomHidden).count }
 
     func rows(matching search: String) -> Rows {
+        // Groups shows rooms only: the bot roster collapses to nothing, and every
+        // section/pin derived from it follows without a second filter.
+        guard scope != .rooms else { return Rows() }
         let matching = profiles.filter { search.isEmpty || $0.name.localizedStandardContains(search) }
         let shown = matching.filter { !$0.hidden }
         return Rows(pinned: shown.filter(\.pinned), others: shown.filter { !$0.pinned },

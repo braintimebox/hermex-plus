@@ -1,3 +1,21 @@
+## 4.3.1 — the four things 4.3 got wrong
+
+- **Groups and Bots are different screens now.** 4.3 mapped both tabs to the same bots
+  inbox; Groups opens it filtered to rooms, Bots filtered to bots, through one
+  `BotInbox.Scope` instead of a second surface. Pins, sections and search follow the
+  same filter, so neither tab shows the other's rows.
+- **Kanban is in the dock by default and in its intended slot.** The tab was off behind
+  an `@AppStorage` default of `false`, and `insert(at: tabs.count - 1)` placed it before
+  Chats instead of before Settings.
+- **The dock no longer follows you into a chat.** It was a bottom safe-area inset on the
+  container that owns the NavigationStack, so it stayed on every pushed screen; with the
+  keyboard up, dock plus composer left the transcript a single line. The dock is hidden
+  whenever a destination is open.
+- **The active profile is no longer forced to `administrator`.** The dashboard had been
+  launched with `--open-profile administrator` and the sticky `active_profile` file held
+  that name; `default` is the home profile, not the active one. The file is reset and the
+  service starts without the flag.
+
 ## 4.3.0 — a dock, and five sections under it
 
 The app had one screen with a mode switch: sessions, or the bots inbox, chosen by a

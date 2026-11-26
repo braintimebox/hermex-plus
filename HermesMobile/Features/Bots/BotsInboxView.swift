@@ -20,6 +20,9 @@ struct BotsInboxHome {
     /// never appear on its own; the leading button below stands in for it. Nil where the
     /// inbox is pushed instead, and the system back button does the job.
     private let onClose: (() -> Void)?
+    /// Which slice of the inbox this entry point shows: Groups passes `.rooms`,
+    /// Bots passes `.bots`, and the server home leaves it `.all`.
+    private let scope: BotInbox.Scope
     /// The bot a deep link named, resolved here because this is where the live roster
     /// is. Cleared once this inbox has settled, whether or not it matched (#554).
     @Binding private var pendingDestination: BotDestination?
@@ -56,16 +59,18 @@ struct BotsInboxHome {
 
     init(
         server: URL,
+        scope: BotInbox.Scope = .all,
         pendingDestination: Binding<BotDestination?> = .constant(nil),
         onClose: (() -> Void)? = nil
     ) where HomeControl == EmptyView {
-        self.init(server: server, pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
+        self.init(server: server, scope: scope, pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
     }
 
     /// A Hermes server's home. Its sign-in form is reached through Settings there, so
     /// `homeControl`, the server's avatar, takes the gear's place.
     init(
         server: URL,
+        scope: BotInbox.Scope = .all,
         pendingDestination: Binding<BotDestination?>,
         home: BotsInboxHome?,
         onClose: (() -> Void)? = nil,
@@ -75,8 +80,11 @@ struct BotsInboxHome {
         self.home = home
         self.homeControl = homeControl()
         self.onClose = onClose
+        self.scope = scope
         _pendingDestination = pendingDestination
-        _inbox = State(initialValue: BotInbox(server: server))
+        let inbox = BotInbox(server: server)
+        inbox.scope = scope
+        _inbox = State(initialValue: inbox)
     }
 
     /// An inbox the caller built, such as one on scripted wires.
@@ -85,6 +93,7 @@ struct BotsInboxHome {
         home = nil
         homeControl = EmptyView()
         self.onClose = onClose
+        scope = inbox.scope
         _pendingDestination = .constant(nil)
         _inbox = State(initialValue: inbox)
     }
@@ -102,6 +111,11 @@ struct BotsInboxHome {
                 guard toast != nil else { return }
                 do { try await Task.sleep(for: .seconds(5)) } catch { return }
                 toast = nil
+            }
+            // Switching Groups <-> Bots keeps this view mounted; the scope is what
+            // changes, so the same inbox re-filters instead of being rebuilt.
+            .onChange(of: scope) { _, newValue in
+                inbox.scope = newValue
             }
         attachPresentations(to: toasted)
     }

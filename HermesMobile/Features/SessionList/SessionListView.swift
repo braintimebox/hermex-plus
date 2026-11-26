@@ -36,6 +36,8 @@ struct SessionListView: View {
     @State private var projectPendingRename: ProjectSummary?
     @State private var searchText = ""
     @State private var showsBots = false
+    /// Groups opens the inbox filtered to rooms; Bots opens it filtered to bots.
+    @State private var botsScope: BotInbox.Scope = .bots
     @State private var isSearchVisible = false
     @State private var isSearchFocused = false
     @State private var searchChromeIsExpanded = false
@@ -65,7 +67,7 @@ struct SessionListView: View {
     @AppStorage(SessionRowDisplaySettings.showSubagentSessionsKey)
     private var showsSubagentSessions = SessionRowDisplaySettings.defaultShowsSubagentSessions
     @AppStorage(SectionVisibilitySettings.tasksKey) private var showsTasksSection = true
-    @AppStorage(SectionVisibilitySettings.kanbanKey) private var showsKanbanSection = false
+    @AppStorage(SectionVisibilitySettings.kanbanKey) private var showsKanbanSection = true
     @AppStorage(SectionVisibilitySettings.skillsKey) private var showsSkillsSection = true
     @AppStorage(SectionVisibilitySettings.memoryKey) private var showsMemorySection = true
     @AppStorage(SectionVisibilitySettings.insightsKey) private var showsInsightsSection = true
@@ -434,7 +436,13 @@ struct SessionListView: View {
                 selectedProjectID = nil
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                AppDock(selection: $navigationState.selectedTab, available: availableTabs)
+                // The dock belongs to the section root. It used to be attached to the
+                // container that owns the NavigationStack, so it stayed on every pushed
+                // screen — including a chat, where its height plus the keyboard left the
+                // composer no room. Hidden as soon as a destination is open.
+                if navigationState.destination == nil {
+                    AppDock(selection: $navigationState.selectedTab, available: availableTabs)
+                }
             }
             .onChange(of: navigationState.selectedTab) { _, tab in
                 // The sections are the existing surfaces, not new ones: Bots and Groups are
@@ -444,7 +452,11 @@ struct SessionListView: View {
                 case .chats:
                     showsBots = false
                     navigationState.clearDestination()
-                case .bots, .groups:
+                case .bots:
+                    botsScope = .bots
+                    showsBots = true
+                case .groups:
+                    botsScope = .rooms
                     showsBots = true
                 case .kanban:
                     showsBots = false
@@ -514,7 +526,7 @@ struct SessionListView: View {
     private var availableTabs: [AppTab] {
         var tabs: [AppTab] = [.groups, .chats]
         if isBotModeEnabled { tabs.insert(.bots, at: 1) }
-        if showsKanbanSection { tabs.insert(.kanban, at: tabs.count - 1) }
+        if showsKanbanSection { tabs.append(.kanban) }
         tabs.append(.settings)
         return tabs
     }
@@ -526,7 +538,7 @@ struct SessionListView: View {
                 // The ported inbox owns its own navigation, but it is this stack's root, so
                 // iOS draws no back chevron for it and the picker that got us here lives on
                 // the other side of the switch. The leading button it renders calls this.
-                BotsInboxView(server: server, onClose: { showsBots = false })
+                BotsInboxView(server: server, scope: botsScope, onClose: { showsBots = false })
             }
         } else if horizontalSizeClass == .regular {
             NavigationSplitView {
