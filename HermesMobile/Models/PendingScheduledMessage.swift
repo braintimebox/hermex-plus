@@ -50,6 +50,18 @@ final class PendingScheduledMessage {
     /// chat has no threads, so the field is unused there and nil for every chat row.
     var threadID: String? = nil
 
+    /// True for a message addressed to a chat session, false for a room.
+    ///
+    /// Rooms and chats share this table, and the two delivery paths must never pick up each
+    /// other's rows: the chat path would post a room message into a session that does not
+    /// exist, and the chat's "Scheduled Messages" screen reconciles against the *server's*
+    /// scheduled list — which can never contain a room row, so it would delete it silently.
+    /// One helper, used everywhere, so the rule cannot be re-derived differently in four
+    /// `#Predicate`s.
+    var isChatRow: Bool { !sessionId.hasPrefix(Self.roomSessionPrefix) }
+
+    static let roomSessionPrefix = "room:"
+
     /// True when automatic delivery has been given up for this message.
     var isDeliveryTerminal: Bool { terminalFailureReason != nil }
 
@@ -113,8 +125,16 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
     var size: Int?
     var isImage: Bool
     var draftFileName: String?
+    /// The gateway's upload key (`^[A-Za-z0-9][A-Za-z0-9._:-]*$`, no hyphens). Same value on
+    /// a retry means the host deduplicates instead of storing a second blob.
+    var uploadID: String?
+    /// What the message manifest names; returned by the upload response.
+    var attachmentID: String?
 
-    init(name: String, path: String, mime: String, size: Int?, isImage: Bool, draftFileName: String?) {
+    init(name: String, path: String, mime: String, size: Int?, isImage: Bool, draftFileName: String?,
+         uploadID: String? = nil, attachmentID: String? = nil) {
+        self.uploadID = uploadID
+        self.attachmentID = attachmentID
         self.name = name
         self.path = path
         self.mime = mime
@@ -163,5 +183,25 @@ struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
             isImage: pending.isImage,
             draftFileName: pending.draftFileName
         )
+    }
+}
+
+extension PendingScheduledMessage {
+    /// Вложения строки в том виде, в котором их ждёт `groups.send`: ровно пять полей.
+    ///
+    /// Строка, чья загрузка не завершилась, манифеста не даёт. Отправить текст без файла
+    /// честнее, чем манифест без `attachment_id`: такой хост отвергает целиком, и
+    /// отложенное сообщение потерялось бы из-за одного вложения.
+    var roomAttachmentManifests: [RoomAttachmentManifest] {
+        attachments.compactMap { item in
+            guard let attachmentID = item.attachmentID, !attachmentID.isEmpty else { return nil }
+            return RoomAttachmentManifest(
+                attachmentID: attachmentID,
+                kind: RoomAttachmentUpload.kind(forMIME: item.mime),
+                name: item.name,
+                size: item.size ?? 0,
+                mime: item.mime
+            )
+        }
     }
 }

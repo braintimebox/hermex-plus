@@ -39,6 +39,27 @@ final class ResponseSelectionInput: UIView, UITextInput, UITextInteractionDelega
         selectionInteraction.textInput = self
         selectionInteraction.delegate = self
         addInteraction(selectionInteraction)
+        releaseLongPressForMessageMenu()
+    }
+
+    /// 4.2.10: the message menu owns the long press for every author.
+    ///
+    /// UIKit's own long press on the text interaction began a selection first, so
+    /// a menu could never open on an assistant reply — that is exactly why the
+    /// transcript offered the UIKit menu to user messages only and the two
+    /// authors behaved differently for the same gesture. Selection stays on
+    /// taps, double taps and the drag handles; the explicit «Select Text» action
+    /// still opens the full-text sheet.
+    ///
+    /// `UITextInteraction` does not expose its recognisers, so the interaction's
+    /// own instances are read from this view: installing an interaction adds its
+    /// recognisers here, and that is the only public path to them. They are
+    /// created lazily, which is why this runs again when the view reaches a
+    /// window.
+    func releaseLongPressForMessageMenu() {
+        gestureRecognizers?
+            .compactMap { $0 as? UILongPressGestureRecognizer }
+            .forEach { $0.isEnabled = false }
     }
 
     @available(*, unavailable)
@@ -47,6 +68,7 @@ final class ResponseSelectionInput: UIView, UITextInput, UITextInteractionDelega
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil { selectedTextRange = nil }
+        if window != nil { releaseLongPressForMessageMenu() }
     }
 
     func interactionShouldBegin(_ interaction: UITextInteraction, at point: CGPoint) -> Bool {

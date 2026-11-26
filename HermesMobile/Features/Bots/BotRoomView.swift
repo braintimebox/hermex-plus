@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor struct BotRoomView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -109,7 +110,9 @@ VStack(spacing: 16) {
             roster: roster,
             avatars: avatars,
             cacheNamespace: "\(reader.key.server.absoluteString)|bot-room:\(reader.room.id)",
-            onOpenThread: { selectedThread = $0 }
+            onOpenThread: { selectedThread = $0 },
+            onStopEveryone: { Task { await reader.stop() } },
+            canStopEveryone: reader.mayStop
         )
     }
     if let echo = pendingEcho {
@@ -144,6 +147,7 @@ VStack(spacing: 16) {
     @ViewBuilder
     private var composerInset: some View {
 VStack(spacing: 10) {
+    if !reader.status.activity.isEmpty { activityStrip }
     if let pill {
         BotComposerPillView(pill: pill, onReconnect: { revision = UUID() }, onUpdateSignIn: onUpdateSignIn,
             onShowRequest: { showRequestID = UUID() }, onCancelUpload: {},
@@ -216,9 +220,102 @@ ScrollView {
 .overlay(alignment: .bottom) { scrollToBottomOverlay(proxy: proxy) }
         }
 
+    /// Seconds since a turn started, counted on the client.
+    ///
+    /// The server's progress signature is rounded to 30 s
+    /// (`hosted_room_member_activity.py:94-95`), so a counter driven by server ticks would
+    /// stand still for half a minute. The state poll runs every 2 s while a turn is live,
+    /// and the number is derived from `started_at` each time it lands.
+    private static func elapsedLabel(_ startedAt: Double?) -> String? {
+        guard let startedAt else { return nil }
+        let seconds = max(0, Int(Date().timeIntervalSince1970 - startedAt))
+        guard seconds >= 5 else { return nil }
+        return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
+    }
+
+    /// One line per participant while a turn is live or its outcome is not a message.
+    ///
+    /// The status comes from `groups.state.member_activity`, which is the host's own
+    /// vocabulary (`hosted_room_service.py:47-50`): a live turn, a settled one, a failure
+    /// with its reason from `turn.failed`, a deferral, or an outcome that is genuinely
+    /// unknown. Showing the last one as "failed" would be a lie about a turn that may have
+    /// run.
+    private var activityStrip: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(reader.status.activity) { activity in
+                HStack(spacing: 6) {
+                    if activity.isLive {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: activity.phase == .answered ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(activity.phase == .answered ? .green : .orange)
+                    }
+                    Text(activityText(activity))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            }
+            if reader.status.activity.contains(where: \.isLive) {
+                Button {
+                    Task { await reader.stop() }
+                } label: {
+                    Text(String(localized: "Stop everyone (\(reader.room.members.count))"))
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .disabled(!reader.mayStop)
+            }
+        }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func activityText(_ activity: BotRoomStatus.Activity) -> String {
+        let name = reader.room.members.first { $0.id == activity.memberID }?.name ?? activity.memberID
+        switch activity.phase {
+        case .working:
+            let elapsed = Self.elapsedLabel(activity.startedAt).map { " \($0)" } ?? ""
+            let tool = activity.tool.map { " · \($0)" } ?? ""
+            // A live status that has not moved for the threshold is not a failure: the host
+            // still calls it running, so the reason is "no end of turn", not "error".
+            if let startedAt = activity.startedAt,
+               Date().timeIntervalSince1970 - startedAt > Self.noAnswerAfter {
+                return String(localized: "\(name): no answer for \(Self.elapsedLabel(startedAt) ?? "a while")")
+            }
+            return String(localized: "\(name) is working…\(elapsed)\(tool)")
+        case .answered: return String(localized: "\(name) answered")
+        case .failed: return String(localized: "\(name) failed — see the turn below")
+        case .cancelled: return String(localized: "\(name) was cancelled")
+        case .deferred: return String(localized: "\(name) deferred: the participant did not confirm the stop")
+        case .unknownOutcome: return String(localized: "\(name): outcome unknown — retry or remove")
+        }
+    }
+
+    /// Ten minutes, the threshold in the spec.
+    private static let noAnswerAfter: TimeInterval = 600
+
     /// The room's composition for the header's second line, the same place the
     /// ordinary chat puts the workspace: who is in the room, not how many.
     private var roomSubtitle: String? {
+        // While a turn runs the second line says who is working, not who is in the room:
+        // the room's silence during a long turn is the thing being fixed.
+        let working = reader.status.activity.compactMap { activity in
+            reader.room.members.first { $0.id == activity.memberID }?.name
+        }
+        if !working.isEmpty {
+            let elapsed = Self.elapsedLabel(reader.status.activity.compactMap(\.startedAt).min())
+            let tool = reader.status.activity.compactMap(\.tool).first
+            let detail = [elapsed, tool].compactMap { $0 }.joined(separator: " · ")
+            let who = working.count == 1
+                ? working[0]
+                : String(localized: "\(working.count) working")
+            return detail.isEmpty ? String(localized: "\(who) is working…")
+                                  : String(localized: "\(who) · \(detail)")
+        }
         let names = reader.room.members.map(\.name)
         guard !names.isEmpty else { return nil }
         return names.joined(separator: ", ")
@@ -562,6 +659,10 @@ private struct BotRoomEventView: View {
     let roster: [BotProfile]
     let avatars: [String: UIImage]
     let transcriptMediaCacheNamespace: String
+    /// Stops the whole room. There is no per-member cancel: `groups.stop` takes
+    /// `{room_id, cancel_id}` and no `member_id` (`hosted_room_service.py:985`).
+    let canStopEveryone: Bool
+    let onStopEveryone: () -> Void
     @AppStorage(AppHaptics.isEnabledKey) private var isHapticsEnabled = true
     @State private var responseIsVisible = false
 
@@ -593,7 +694,12 @@ private struct BotRoomEventView: View {
                             return viewport.intersects(CGRect(origin: .zero, size: geometry.size))
                         } action: { responseIsVisible = $0 }
                             .padding(12).background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 20))
-                            .chatMessageContextMenu(actions, longPress: false)
+                            // Long-press was pinned off here (`longPress: false`), so a room reply
+                            // could not be copied at all while the same text in a chat could.
+                            // The menu is the chat's own: Copy keeps the whole Markdown source,
+                            // including fenced code, and the attachment item is separate because
+                            // a reply's file references are not its prose.
+                            .chatMessageContextMenu(actions, longPress: true)
                     }
                     Spacer(minLength: 20)
                 }
@@ -602,10 +708,32 @@ private struct BotRoomEventView: View {
                 // Under the bubble, past the avatar, which stays level with the bubble.
                 footer.padding(.leading, 34)
             }
+        } else if event.kind == "turn.started" {
+            VStack(spacing: 4) {
+                Text(event.systemText(in: room))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button {
+                    onStopEveryone()
+                } label: {
+                    Text(stopLabel)
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .disabled(!canStopEveryone)
+            }
+            .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         } else {
-            Text(event.systemText).font(.caption).foregroundStyle(.secondary)
+            Text(event.systemText(in: room)).font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity).multilineTextAlignment(.center)
         }
+    }
+
+    /// "Stop everyone (3)" — the count is the point: the tap ends every turn in the room,
+    /// and saying so is cheaper than a user discovering it afterwards.
+    private var stopLabel: String {
+        let count = room.members.count
+        return String(localized: "Stop everyone (\(count))")
     }
 
     private var messageText: String { event.payload["text"].text ?? "" }
@@ -618,8 +746,26 @@ private struct BotRoomEventView: View {
         }
     }
 
+    /// File references a reply carries, in the order the gateway sent them.
+    private var attachmentNames: [String] {
+        (event.payload["attachments"].list ?? []).compactMap { $0["name"].text ?? $0["path"].text }
+    }
+
     private var actions: [ChatMessageActionItem] {
-        BotMessageActions.items(copyText: messageText, isHapticsEnabled: isHapticsEnabled)
+        var items = BotMessageActions.items(copyText: messageText, isHapticsEnabled: isHapticsEnabled)
+        let names = attachmentNames
+        if !names.isEmpty {
+            items.append(ChatMessageActionItem(
+                kind: .copyAttachment,
+                title: names.count == 1
+                    ? String(localized: "Copy attachment")
+                    : String(localized: "Copy \(names.count) attachments"),
+                systemImage: "paperclip",
+                isEnabled: true,
+                perform: { UIPasteboard.general.string = names.joined(separator: "\n") }
+            ))
+        }
+        return items
     }
 }
 
@@ -751,6 +897,11 @@ private struct BotRoomRowView: View {
     let avatars: [String: UIImage]
     let cacheNamespace: String
     let onOpenThread: (String) -> Void
+    /// Stops the whole room. There is no per-member cancel: `groups.stop` takes
+    /// `{room_id, cancel_id}` and no `member_id` (`hosted_room_service.py:985`), so the
+    /// button says "stops everyone" instead of pretending to be precise.
+    let onStopEveryone: () -> Void
+    let canStopEveryone: Bool
 
     var body: some View {
         VStack(spacing: 16) {
@@ -769,7 +920,9 @@ private struct BotRoomRowView: View {
                     room: room,
                     roster: roster,
                     avatars: avatars,
-                    transcriptMediaCacheNamespace: cacheNamespace
+                    transcriptMediaCacheNamespace: cacheNamespace,
+                    canStopEveryone: canStopEveryone,
+                    onStopEveryone: onStopEveryone
                 )
             }
         }

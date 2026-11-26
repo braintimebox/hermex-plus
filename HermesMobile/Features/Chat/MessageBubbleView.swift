@@ -94,6 +94,15 @@ struct MessageBubbleView: View {
         }
     }
 
+    /// One menu host, not two. Upstream supplied an item list while this fork's
+    /// transcript supplies a ready-made menu; applying both modifiers installed
+    /// two `ChatMessageContextMenuHost` views over the same frame, and which one
+    /// answered a press depended on hash order. That is a second, quieter source
+    /// of "the same gesture behaves differently" — 4.2.10 keeps exactly one.
+    private var resolvedMenuActions: [ChatMessageActionItem] {
+        contextMenuActions.isEmpty ? (legacyContextMenu?.items ?? []) : contextMenuActions
+    }
+
     private var userMessageRow: some View {
         let previewURL = linkPreviewURL
         let text = userBubbleText
@@ -119,8 +128,7 @@ struct MessageBubbleView: View {
                         }
                         linkPreview(previewURL)
                     }
-                    .chatMessageContextMenu(contextMenuActions)
-                    .chatMessageContextMenu(legacyContextMenu)
+                    .chatMessageContextMenu(resolvedMenuActions)
                 }
             }
         }
@@ -227,6 +235,11 @@ struct MessageBubbleView: View {
 
             linkPreview(linkPreviewURL)
         }
+        // 4.2.10: the assistant row carries the same single menu host the user
+        // row does. Until now only user bubbles and the attachment area had one,
+        // so even without the text-selection conflict an assistant reply had no
+        // UIKit menu to open.
+        .chatMessageContextMenu(resolvedMenuActions)
         .frame(maxWidth: .infinity, alignment: .leading)
         // While this row is the active streaming message, animate its height
         // growth at the same curve as the bottom-follow scroll so the streaming
@@ -493,8 +506,7 @@ struct MessageBubbleView: View {
             }
         }
         // Before the full-width frame, so the marker covers the grid only.
-        .chatMessageContextMenu(contextMenuActions)
-        .chatMessageContextMenu(legacyContextMenu)
+        .chatMessageContextMenu(resolvedMenuActions)
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 

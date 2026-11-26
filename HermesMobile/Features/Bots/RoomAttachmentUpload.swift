@@ -98,7 +98,15 @@ struct RoomAttachmentUpload: Equatable {
         ]
     }
 
-    init(data: Data, name: String, mime: String, uploadID: String = UUID().uuidString.lowercased()) throws {
+    /// The gateway validates `upload_id` with `^[A-Za-z0-9][A-Za-z0-9._:-]*$`
+    /// (`session_rules/hosted_attachments.py:41`), and a hyphen is not in that class — a
+    /// UUID with dashes would be refused as `invalid_params` on every upload and look like
+    /// "attachments are broken".
+    static func makeUploadID() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    init(data: Data, name: String, mime: String, uploadID: String = RoomAttachmentUpload.makeUploadID()) throws {
         guard !data.isEmpty else { throw RoomAttachmentFailure.empty(name: name) }
         guard data.count <= RoomAttachmentLimit.bytes else {
             throw RoomAttachmentFailure.tooLarge(name: name, bytes: data.count, limit: RoomAttachmentLimit.bytes)
@@ -197,6 +205,12 @@ struct RoomAttachmentBudget: Equatable {
         return nil
     }
 
+    /// Re-adds an already-built upload (the composer keeps them across edits).
+    mutating func append(_ upload: RoomAttachmentUpload) {
+        if let refusal = refusal(adding: upload.name, bytes: upload.byteCount) { return }
+        uploads.append(upload)
+    }
+
     /// Adds a picked file, or throws the refusal that names what is left.
     mutating func add(contentsOf url: URL) throws {
         let name = url.lastPathComponent
@@ -215,4 +229,55 @@ struct RoomAttachmentBudget: Equatable {
     }
 
     mutating func removeAll() { uploads.removeAll() }
+}
+
+/// One attachment as `groups.send` accepts it.
+///
+/// The gateway's manifest is a **strict** set of five fields
+/// (`session_rules/hosted_attachments.py:37`, validated at `:90-103`): anything else —
+/// `sha256`, `state`, `created_at`, `idempotent` from the upload response — is refused as
+/// "unknown fields". So the upload response cannot be forwarded as-is; this is the
+/// projection, and it is the only shape the send path is allowed to carry.
+struct RoomAttachmentManifest: Equatable {
+    static let fieldNames: Set<String> = ["attachment_id", "kind", "name", "size", "mime"]
+
+    let attachmentID: String
+    let kind: String
+    let name: String
+    let size: Int
+    let mime: String
+
+    /// The five fields, and nothing else.
+    var params: [String: Any] {
+        ["attachment_id": attachmentID, "kind": kind, "name": name, "size": size, "mime": mime]
+    }
+
+    /// True when this manifest would survive the gateway's strict validation: exactly the
+    /// five field names, an id in the `att_` form, and a `kind` that matches the MIME type.
+    var isValid: Bool {
+        guard Set(params.keys) == Self.fieldNames else { return false }
+        guard attachmentID.range(of: "^att_[0-9a-f]{32}$", options: .regularExpression) != nil else { return false }
+        guard !name.isEmpty, size > 0, size <= RoomAttachmentLimit.bytes else { return false }
+        switch kind {
+        case "image": return mime.lowercased().hasPrefix("image/")
+        case "pdf": return mime.lowercased() == "application/pdf"
+        case "file": return !mime.lowercased().hasPrefix("image/") && mime.lowercased() != "application/pdf"
+        default: return false
+        }
+    }
+}
+
+/// Why a room file could not be uploaded.
+enum RoomAttachmentUploadFailure: LocalizedError {
+    case notConnected
+    case malformedResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            String(localized: "Not connected to this room right now.")
+        case .malformedResponse:
+            String(localized: "The server accepted the file but did not return its id.")
+        }
+    }
 }

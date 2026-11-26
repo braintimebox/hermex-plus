@@ -22,7 +22,7 @@ struct RoomScheduleView: View {
                 ContentUnavailableView(
                     "Nothing scheduled",
                     systemImage: "calendar",
-                    description: Text("Messages you schedule for this room appear here.")
+                    description: Text("Long-press Send → Schedule Message.")
                 )
             }
             ForEach(rows, id: \.scheduleKey) { row in

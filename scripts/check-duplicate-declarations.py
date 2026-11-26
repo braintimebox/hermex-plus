@@ -149,7 +149,9 @@ def param_signature(clean_lines: list[str], index: int) -> str:
 
 ENCLOSING_RE = re.compile(
     r"^(?:@\w+\s+)*(?:final |private |fileprivate |public |internal |open )*"
-    r"(class|struct|enum|extension|actor|protocol)\s+([\w`]+)"
+    # Dotted names matter: `extension HermesCall.RoomCreation` and
+    # `extension HermesCall.NewProfile` are two scopes, not one `HermesCall`.
+    r"(class|struct|enum|extension|actor|protocol)\s+([\w`][\w`.]*)"
 )
 FUNC_HEAD_RE = re.compile(
     r"^(?:\s*)(?:@\w+(?:\([^)]*\))?\s+)*"
@@ -166,24 +168,29 @@ MEMBER_RE = re.compile(
 
 
 def enclosing_types(clean_lines):
-    """Map each line to (innermost enclosing type, brace depth, in_func_body).
+    """Map each line to ((innermost enclosing type name, its kind), in_func_body).
 
     Depth matters as much as the type: a `let data` local inside one function is
     not a member of the type, and two functions each having one is not a
     duplicate. Tracking the offset at which a `func` body opens lets those be
     skipped, while members declared directly in the type are still compared.
+
+    The kind is kept beside the name because `protocol P { func f() }` and
+    `extension P { func f() { … } }` share a scope name while being a contract and
+    its default implementation — not two declarations of one member.
     """
-    open_types: list[tuple[str, int]] = []
+    open_types: list[tuple[str, str, int]] = []
     depth = 0
     func_body_depth: int | None = None
-    info: dict[int, tuple[str, bool]] = {}
+    info: dict[int, tuple[tuple[str, str], bool]] = {}
 
     for lineno, line in enumerate(clean_lines, start=1):
         m = ENCLOSING_RE.match(line)
         if m and not line.lstrip().startswith("case "):
-            open_types.append((m.group(2).strip("`"), depth))
+            open_types.append((m.group(2).strip("`"), m.group(1), depth))
         in_body = func_body_depth is not None and depth >= func_body_depth
-        info[lineno] = (open_types[-1][0] if open_types else "<file>", in_body)
+        scope = (open_types[-1][0], open_types[-1][1]) if open_types else ("<file>", "<file>")
+        info[lineno] = (scope, in_body)
 
         opens = line.count("{")
         closes = line.count("}")
@@ -192,10 +199,39 @@ def enclosing_types(clean_lines):
         depth += opens - closes
         if func_body_depth is not None and depth < func_body_depth:
             func_body_depth = None
-        while open_types and depth <= open_types[-1][1]:
+        while open_types and depth <= open_types[-1][2]:
             open_types.pop()
 
     return info
+
+
+def same_type(a: str, b: str) -> bool:
+    """`RoomCreation` and `HermesCall.RoomCreation` name the same nested type.
+
+    A nested declaration is captured bare, while an extension of it carries the
+    qualification; without this the protocol/extension exemption would miss every
+    nested protocol, and two extensions of different nested types would collide.
+    """
+    if a == b:
+        return True
+    return a.endswith("." + b) or b.endswith("." + a)
+
+
+def is_requirement_default_pair(
+    first: tuple[str, str], second: tuple[str, str]
+) -> bool:
+    """A protocol requirement and its default implementation in that protocol's extension.
+
+    `protocol P { func f() … }` plus `extension P { func f() { … } }` is one contract
+    and the default that satisfies it — the ordinary Swift way to make a requirement
+    optional (this fork uses it for `KanbanDataClient`). Only that exact pair is
+    exempt: two implementations, two requirements, or an extension of a *different*
+    type stay reported, because those are the shapes that mean a real duplicate.
+    """
+    (name_a, kind_a), (name_b, kind_b) = first, second
+    if name_a == "<file>" or not same_type(name_a, name_b):
+        return False
+    return {kind_a, kind_b} == {"protocol", "extension"}
 
 
 def find_duplicates(path: Path) -> list[str]:
@@ -203,7 +239,7 @@ def find_duplicates(path: Path) -> list[str]:
     lines = clean.splitlines()
     owner = enclosing_types(lines)
 
-    seen: dict[tuple[str, str, str], int] = {}
+    seen: dict[tuple[str, str, str], tuple[int, tuple[str, str]]] = {}
     report: list[str] = []
 
     for lineno, line in enumerate(lines, start=1):
@@ -211,11 +247,11 @@ def find_duplicates(path: Path) -> list[str]:
         if not m:
             continue
         indent, kind, name = m.group(1), m.group(2), m.group(3).strip("`")
-        scope, in_body = owner.get(lineno, ("<file>", False))
+        (scope_name, scope_kind), in_body = owner.get(lineno, (("<file>", "<file>"), False))
         if in_body:
             continue  # a local inside a function body is not a type member
         is_static = " static " in f" {line} " or "class " in line.split("func")[0]
-        scope = f"{scope}{' (static)' if is_static and kind == 'func' else ''}"
+        scope = f"{scope_name}{' (static)' if is_static and kind == 'func' else ''}"
 
         # A property and a static func of the same name are different decls;
         # funcs differing only by parameter list are overloads, which is legal.
@@ -228,11 +264,14 @@ def find_duplicates(path: Path) -> list[str]:
             label = f"{kind} {name}"
 
         if key in seen:
+            first_line, first_scope = seen[key]
+            if is_requirement_default_pair(first_scope, (scope_name, scope_kind)):
+                continue
             report.append(
-                f"{path.name}:{lineno} duplicates :{seen[key]} — {label} in {scope}"
+                f"{path.name}:{lineno} duplicates :{first_line} — {label} in {scope}"
             )
         else:
-            seen[key] = lineno
+            seen[key] = (lineno, (scope_name, scope_kind))
     return report
 
 
@@ -258,10 +297,10 @@ def cross_scope_duplicates(path: Path) -> list[str]:
         if not m:
             continue
         indent, kind, name = m.group(1), m.group(2), m.group(3).strip("`")
-        scope, in_body = info.get(lineno, ("<file>", False))
+        (scope_name, _scope_kind), in_body = info.get(lineno, (("<file>", "<file>"), False))
         if in_body or kind == "func":
             continue
-        props[(scope, name)] = lineno
+        props[(scope_name, name)] = lineno
 
     # which types does each scope own?  `let composer = ChatComposerState()`
     OWNED_RE = re.compile(r"\blet\s+\w+\s*=\s*([A-Z]\w*)\s*\(")
@@ -269,7 +308,7 @@ def cross_scope_duplicates(path: Path) -> list[str]:
     for line in lines:
         m_own = OWNED_RE.search(line)
         if m_own:
-            owner = info.get(lines.index(line) + 1, ("<file>", False))[0]
+            owner = info.get(lines.index(line) + 1, (("<file>", "<file>"), False))[0][0]
             owns.setdefault(owner, set()).add(m_own.group(1))
 
     report: list[str] = []
@@ -285,6 +324,16 @@ def cross_scope_duplicates(path: Path) -> list[str]:
     return report
 
 
+def _is_product_swift(path: str) -> bool:
+    """True for app sources only.
+
+    ``scripts/tests/fixtures`` holds deliberately broken files that exercise this very
+    gate: adding one to a branch made the gate report its own fixture as a merge defect
+    and block the push. They are not shipped code, so they never belong in the scan.
+    """
+    return not ("scripts/tests/" in path or "/fixtures/" in path)
+
+
 def changed_swift() -> list[str]:
     files: set[str] = set()
     for args in (["--name-only", "HEAD"], ["--name-only", "--cached"]):
@@ -298,7 +347,7 @@ def changed_swift() -> list[str]:
             out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
                                  cwd=ROOT, capture_output=True, text=True, check=False).stdout
             files |= {f for f in out.split("\n") if f.endswith(".swift")}
-    return sorted(files)
+    return sorted(f for f in files if _is_product_swift(f))
 
 
 def main() -> int:
