@@ -454,6 +454,8 @@ private struct ChatMarkdownView: View {
     let colorScheme: ColorScheme
     let isStreaming: Bool
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         // HERMEX-FORK: #920 — parse here rather than inside `Markdown(_: String)`
         // so the parse alone is timed (same shape as upstream).
@@ -470,7 +472,11 @@ private struct ChatMarkdownView: View {
         PhaseTelemetry.shared.end(splitPhase, context: ["chars": content.count])
 
         return Markdown(parsedContent)
-            .markdownTheme(MarkdownUI.Theme.chat(colorScheme: colorScheme, isStreaming: isStreaming))
+            .markdownTheme(MarkdownUI.Theme.chat(
+                colorScheme: colorScheme,
+                isStreaming: isStreaming,
+                bodySize: ChatTypography(dynamicTypeSize: dynamicTypeSize).bodySize
+            ))
             .markdownTextStyle {
                 ForegroundColor(.primary)
                 BackgroundColor(nil)
@@ -686,6 +692,8 @@ private struct ChatCodeBlock: View {
 
 private struct PlainCodeBlockText: View {
     let content: String
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// When `true`, each line's 500-char segments are concatenated into a single
     /// `Text` so SwiftUI soft-wraps the line; when `false`, they stay side by side
     /// in an `HStack` for the horizontal-scroll layout.
@@ -714,7 +722,7 @@ private struct PlainCodeBlockText: View {
                 }
             }
         }
-        .font(.system(size: 13, weight: .regular, design: .monospaced))
+        .font(ChatTypography(dynamicTypeSize: dynamicTypeSize).codeFont())
         .foregroundStyle(.primary)
     }
 
@@ -1301,13 +1309,53 @@ private struct PlainMarkdownFallbackView: View {
     }
 }
 
+// MARK: - Typography
+
+/// Rendered Markdown text sizes for a Dynamic Type size: 16 pt prose and 13 pt code at
+/// `.large`, scaled like body text and capped at 2.2x. Ported from upstream 2.2, where the
+/// theme received `FontSize(bodySize)` instead of a literal.
+///
+/// The fork passed literal sizes (`FontSize(16)`, `system(size: 13)`), so the chat ignored the
+/// system text size in both directions: below `.large` it stayed at 16 pt and lost the density
+/// the user asked for, above it stayed at 16 pt and ignored accessibility.
+struct ChatTypography: Equatable {
+    static let maximumScale: CGFloat = 2.2
+
+    let bodySize: CGFloat
+    let codeSize: CGFloat
+
+    /// Resolved once per size, so scrolling cells never re-run font metrics.
+    private static let bySize: [DynamicTypeSize: ChatTypography] = Dictionary(
+        uniqueKeysWithValues: DynamicTypeSize.allCases.map { ($0, ChatTypography(resolving: $0)) }
+    )
+
+    init(dynamicTypeSize: DynamicTypeSize) {
+        self = Self.bySize[dynamicTypeSize] ?? ChatTypography(resolving: dynamicTypeSize)
+    }
+
+    private init(resolving dynamicTypeSize: DynamicTypeSize) {
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+        let metrics = UIFontMetrics(forTextStyle: .body)
+        func scaled(_ base: CGFloat) -> CGFloat {
+            min(metrics.scaledValue(for: base, compatibleWith: traits), base * Self.maximumScale)
+        }
+        bodySize = scaled(16)
+        codeSize = scaled(13)
+    }
+
+    /// Monospaced font for code bodies, scaled by the same rule as the prose.
+    func codeFont() -> SwiftUI.Font {
+        .system(size: codeSize, weight: .regular, design: .monospaced)
+    }
+}
+
 private extension MarkdownUI.Theme {
-    static func chat(colorScheme: ColorScheme, isStreaming: Bool) -> MarkdownUI.Theme {
+    static func chat(colorScheme: ColorScheme, isStreaming: Bool, bodySize: CGFloat) -> MarkdownUI.Theme {
         MarkdownUI.Theme.gitHub
             .text {
                 ForegroundColor(.primary)
                 BackgroundColor(nil)
-                FontSize(16)
+                FontSize(bodySize)
             }
             .paragraph { configuration in
                 configuration.label

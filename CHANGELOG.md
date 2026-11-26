@@ -1,3 +1,22 @@
+## 4.2.11 — chat text follows the system text size
+
+The chat passed literal font sizes to MarkdownUI (`FontSize(16)`, `system(size: 13)`),
+so the transcript ignored the iOS text size in both directions: below the default
+setting it stayed at 16 pt and lost the density a smaller setting buys, above it
+stayed at 16 pt and ignored accessibility.
+
+- **`ChatTypography`.** Ported from upstream 2.2: 16 pt prose and 13 pt code at
+  `.large`, resolved through `UIFontMetrics(forTextStyle: .body)` against the view's
+  `dynamicTypeSize`, capped at 2.2×, and cached per size so scrolling cells never
+  re-run font metrics.
+- **The theme takes the size, not a literal.** `Theme.chat` receives `bodySize` and
+  applies `FontSize(bodySize)`; headings and inline code were already relative
+  (`FontSize(.em(...))`), so they follow the same scale.
+- **Code blocks** use `ChatTypography.codeFont()` instead of a fixed 13 pt.
+
+No layout, padding or control was touched: at the default text size every value
+resolves exactly to what the app rendered before.
+
 ## 4.2.10 — one context menu for both authors
 
 4.2.8 opened the message menu with two different mechanisms: a UIKit interaction
