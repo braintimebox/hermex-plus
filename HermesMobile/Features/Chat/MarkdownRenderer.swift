@@ -735,6 +735,8 @@ private struct PlainCodeBlockText: View {
 
 private struct HighlightedCodeBlockText: View {
     let content: NSAttributedString
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// See `PlainCodeBlockText.wraps`; the concatenated `Text` preserves each
     /// segment's syntax-highlight attributes.
     var wraps = false
@@ -762,6 +764,7 @@ private struct HighlightedCodeBlockText: View {
                 }
             }
         }
+        .font(ChatTypography(dynamicTypeSize: dynamicTypeSize).codeFont())
     }
 
     private func combinedText(for line: MarkdownAttributedCodeLine) -> Text {
@@ -1210,6 +1213,27 @@ enum MarkdownCodeHighlightResult {
 }
 
 enum MarkdownCodeHighlighter {
+    /// Drops the engines' fixed-size fonts (Splash 13 pt, Highlightr Courier 14) so the code
+    /// view's `ChatTypography.codeFont` sizes every token and the highlight cache stays
+    /// size-independent. Bold and italic survive as relative presentation intents.
+    /// Ported from upstream 2.2.
+    static func removingAbsoluteFonts(from highlighted: NSAttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: highlighted)
+        let range = NSRange(location: 0, length: result.length)
+        result.enumerateAttribute(.font, in: range) { value, runRange, _ in
+            guard let font = value as? UIFont else { return }
+            result.removeAttribute(.font, range: runRange)
+            let traits = font.fontDescriptor.symbolicTraits
+            var intent: InlinePresentationIntent = []
+            if traits.contains(.traitBold) { intent.insert(.stronglyEmphasized) }
+            if traits.contains(.traitItalic) { intent.insert(.emphasized) }
+            if !intent.isEmpty {
+                result.addAttribute(.inlinePresentationIntent, value: intent.rawValue, range: runRange)
+            }
+        }
+        return result.copy() as? NSAttributedString ?? result
+    }
+
     @MainActor
     static func highlightedCode(for request: MarkdownCodeHighlightRequest) -> MarkdownCodeHighlightResult {
         let decision = MarkdownHighlightPolicy.decision(
@@ -1221,9 +1245,11 @@ enum MarkdownCodeHighlighter {
         switch decision {
         case .highlight(_, .splashSwift):
             return .highlighted(
-                SplashSwiftCodeHighlighter.highlightedAttributedString(
-                    for: request.code,
-                    colorScheme: request.colorScheme
+                removingAbsoluteFonts(
+                    from: SplashSwiftCodeHighlighter.highlightedAttributedString(
+                        for: request.code,
+                        colorScheme: request.colorScheme
+                    )
                 )
             )
         case .highlight(let normalizedLanguage, .highlightr):
@@ -1235,7 +1261,7 @@ enum MarkdownCodeHighlighter {
                 return .plain(reason: .highlighterUnavailable, normalizedLanguage: normalizedLanguage)
             }
 
-            return .highlighted(highlighted)
+            return .highlighted(removingAbsoluteFonts(from: highlighted))
         case .plain(let reason, let normalizedLanguage):
             return .plain(reason: reason, normalizedLanguage: normalizedLanguage)
         }

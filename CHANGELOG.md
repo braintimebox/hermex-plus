@@ -12,7 +12,10 @@ stayed at 16 pt and ignored accessibility.
 - **The theme takes the size, not a literal.** `Theme.chat` receives `bodySize` and
   applies `FontSize(bodySize)`; headings and inline code were already relative
   (`FontSize(.em(...))`), so they follow the same scale.
-- **Code blocks** use `ChatTypography.codeFont()` instead of a fixed 13 pt.
+- **Code blocks** use `ChatTypography.codeFont()` instead of a fixed 13 pt, and the
+  highlighted path drops the engines' absolute fonts (Splash 13 pt, Highlightr Courier 14)
+  the way upstream does, keeping bold/italic as presentation intents — otherwise a
+  highlighted block stayed at the engine's size whatever the system setting was.
 
 No layout, padding or control was touched: at the default text size every value
 resolves exactly to what the app rendered before.
