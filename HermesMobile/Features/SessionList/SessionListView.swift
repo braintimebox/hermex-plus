@@ -436,11 +436,11 @@ struct SessionListView: View {
                 selectedProjectID = nil
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // The dock belongs to the section root. It used to be attached to the
-                // container that owns the NavigationStack, so it stayed on every pushed
-                // screen — including a chat, where its height plus the keyboard left the
-                // composer no room. Hidden as soon as a destination is open.
-                if navigationState.destination == nil {
+                // The dock IS the navigation, so it is drawn exactly where it navigates:
+                // the Chats root and the utility sections (Kanban, Settings). It is absent
+                // in the bots branch and inside a conversation — there its height plus the
+                // keyboard left the composer no room, which is the bug 4.3.0 shipped.
+                if showsAppDock {
                     AppDock(selection: $navigationState.selectedTab, available: availableTabs)
                 }
             }
@@ -522,6 +522,15 @@ struct SessionListView: View {
         BotModeGate.showsBotsInbox(isEnabled: isBotModeEnabled, userPickedBots: showsBots)
     }
 
+    /// The dock is drawn only where it is the navigation: the Chats root and the utility
+    /// sections (Kanban, Settings). Not in the bots branch, not inside a conversation.
+    private var showsAppDock: Bool {
+        guard !showsBots else { return false }
+        if case .session = navigationState.destination { return false }
+        if case .newChat = navigationState.destination { return false }
+        return true
+    }
+
     /// Sections that exist for this server: Bots behind its gate, Kanban behind its flag.
     private var availableTabs: [AppTab] {
         var tabs: [AppTab] = [.groups, .chats]
@@ -576,9 +585,9 @@ struct SessionListView: View {
 
             if !isSearchingSessions {
                 newSessionButton
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 22)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 16)
+                    .zIndex(1)
             }
         }
     }

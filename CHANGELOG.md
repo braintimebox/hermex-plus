@@ -1,3 +1,16 @@
+## 4.3.2 — the dock goes where it navigates, and the default profile is first
+
+- **One rule for the dock.** It is drawn on the Chats root and on the utility sections
+  (Kanban, Settings) — the places it navigates to — and nowhere else. 4.3.1 hid it for
+  *any* open destination, which left Kanban as a screen with no dock and no way back;
+  it also still showed inside the bots branch, so the group and profile composers were
+  as squeezed as the regular chat in 4.3.0. Both are the same rule now.
+- **Default profile is the first row.** The server marks it with `is_default` but sends
+  the roster in directory order, so `administrator` sat on top. Both profile pickers
+  (Settings and the chat composer) sort default-first, then by name.
+- **New Chat button normalised.** 20 pt trailing, 16 pt above the dock, no slide
+  transition, drawn above the list — it no longer shifts when the dock appears.
+
 ## 4.3.1 — the four things 4.3 got wrong
 
 - **Groups and Bots are different screens now.** 4.3 mapped both tabs to the same bots

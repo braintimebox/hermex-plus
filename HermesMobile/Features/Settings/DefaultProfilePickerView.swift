@@ -149,6 +149,17 @@ struct DefaultProfilePickerView: View {
         Self.filteredProfiles(profiles, query: trimmedSearchQuery)
     }
 
+    /// Default profile first, then the rest by name. The first row is what the user reads
+    /// as "the profile in use", so it must be the default one, not `administrator`.
+    static func defaultFirst(_ profiles: [ProfileSummary]) -> [ProfileSummary] {
+        profiles.sorted { lhs, rhs in
+            let l = lhs.isDefault == true ? 0 : 1
+            let r = rhs.isDefault == true ? 0 : 1
+            if l != r { return l < r }
+            return (lhs.name ?? "").localizedCaseInsensitiveCompare(rhs.name ?? "") == .orderedAscending
+        }
+    }
+
     /// `profiles` narrowed to `query`. Static so tests can pin the predicate
     /// without driving SwiftUI.
     static func filteredProfiles(_ profiles: [ProfileSummary], query: String) -> [ProfileSummary] {
@@ -275,7 +286,9 @@ struct DefaultProfilePickerView: View {
 
         do {
             let response = try await APIClient(baseURL: server).profiles()
-            profiles = response.profiles ?? []
+            // The default profile is the first row: the server marks it with `is_default`
+            // but the list arrives in directory order, which put `administrator` on top.
+            profiles = Self.defaultFirst(response.profiles ?? [])
             activeProfileName = response.effectiveDefaultProfileName ?? currentDefaultProfileName
             isSingleProfileMode = response.singleProfileMode ?? false
         } catch {

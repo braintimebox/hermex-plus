@@ -132,7 +132,7 @@ struct ChatComposerConfigLoader {
 
         do {
             let profilesResponse = try await client.profiles()
-            state.profileOptions = profilesResponse.profiles ?? []
+            state.profileOptions = DefaultProfilePickerView.defaultFirst(profilesResponse.profiles ?? [])
             state.isSingleProfileMode = profilesResponse.singleProfileMode ?? false
             state.selectedProfileName = Self.nonEmpty(state.currentProfile)
                 ?? Self.nonEmpty(profilesResponse.active)
