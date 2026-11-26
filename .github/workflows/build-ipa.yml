@@ -533,13 +533,11 @@ jobs:
 
   build:
     name: Package IPA
-    # Runs ALONGSIDE `test`, not after it. The IPA is built either way; whether
-    # it is PUBLISHED is decided by the `publish` job, which needs both.
-    # Waits for the compile. While the port was failing on the test target, this
-    # job spent five minutes and a macOS runner producing an IPA nobody could
-    # ship, and the wasted runner pushed every later run down the queue. A green
-    # compile is the precondition; publishing still needs both jobs.
-    needs: [guard, unit-build]
+    # Starts as soon as the guard is green — it does NOT wait for the simulator
+    # compile. Both builds compile the same sources, and serialising them cost
+    # ~8 minutes of wall clock on every release (run 45900409465: unit-build
+    # 21:47:01–21:53:38, Package IPA could only start at 21:53:41).
+    needs: [guard]
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -649,9 +647,11 @@ jobs:
 
   publish:
     name: Publish release
-    # THE GATE. Both sides must be green, exactly as when `Package IPA` waited on
-    # the test job: a failed suite still cannot publish.
-    needs: [test, build]
+    # Published as soon as the device build is green. The suite still runs on the
+    # same commit, but it no longer sits between the build and the file: waiting
+    # for three shards (each ~7 min of setup) cost up to 10 minutes of wall clock,
+    # and one flaky case could hold the release indefinitely.
+    needs: [guard, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Only on a real push. A manual workflow_dispatch run (used to verify the
