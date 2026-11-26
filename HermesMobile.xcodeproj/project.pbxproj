@@ -516,7 +516,6 @@
 		5C28C476F8557FFB34BBE31E /* BotRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7546E0B84641762CE6F25A /* BotRoomView.swift */; };
 F0740C1D2FFC918C936DBFFC /* RoomScheduledDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175F3E41950511B27F712D39 /* RoomScheduledDelivery.swift */; };
 0979A440A793A48689554BC0 /* RoomScheduledDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */; };
-0979A440A793A48689554BC0 /* RoomScheduledDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */; };
 A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */; };
 		4D57044F5A72A989A96B2423 /* BotSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2151C61191916592AFD8B5C1 /* BotSearchView.swift */; };
 		B152C3DFC84AEE80A4525FF6 /* BotSlashAutocompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */; };
@@ -1109,7 +1108,6 @@ A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */ = {isa = PB
 		7F7546E0B84641762CE6F25A /* BotRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotRoomView.swift"; sourceTree = "<group>"; };
 175F3E41950511B27F712D39 /* RoomScheduledDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduledDelivery.swift"; sourceTree = "<group>"; };
 A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomScheduledDeliveryTests.swift"; sourceTree = "<group>"; };
-A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomScheduledDeliveryTests.swift"; sourceTree = "<group>"; };
 D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomAttachmentPicker.swift"; sourceTree = "<group>"; };
 		2151C61191916592AFD8B5C1 /* BotSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotSearchView.swift"; sourceTree = "<group>"; };
 		383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/BotSlashAutocompleteView.swift"; sourceTree = "<group>"; };
@@ -1415,6 +1413,7 @@ D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */ = {isa = PBXFileRefere
 				A04500000000000000000018 /* LiveActivityTests.swift */,
 				1A2B3C4D5E6F700000000340 /* AppIntentNewChatTests.swift */,
 				1A2B3C4D5E6F700000000344 /* AppIntentNewChatInProfileTests.swift */,
+				A50671770B6390C55A18EE9E /* RoomScheduledDeliveryTests.swift */,
 			);
 			path = HermesMobileTests;
 			sourceTree = "<group>";
@@ -2544,9 +2543,8 @@ D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */,
 				5B26469E55161783CD699C43 /* BotRoomProfileView.swift in Sources */,
 				C38092DC800EE151FC806A59 /* BotRoomReader.swift in Sources */,
 				5C28C476F8557FFB34BBE31E /* BotRoomView.swift in Sources */,
-F0740C1D2FFC918C936DBFFC /* RoomScheduledDelivery.swift in Sources */,
-0979A440A793A48689554BC0 /* RoomScheduledDeliveryTests.swift in Sources */,
-A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */,
+				F0740C1D2FFC918C936DBFFC /* RoomScheduledDelivery.swift in Sources */,
+				A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */,
 				4D57044F5A72A989A96B2423 /* BotSearchView.swift in Sources */,
 				B152C3DFC84AEE80A4525FF6 /* BotSlashAutocompleteView.swift in Sources */,
 				7143B31BE2DFA76390DC152A /* BotSlashCommands.swift in Sources */,
@@ -2740,6 +2738,7 @@ A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */,
 				C0DE3400000000000000000B /* TranscriptMediaPreviewViewModelTests.swift in Sources */,
 				C0DE12000000000000000003 /* TranscriptLinkPreviewTests.swift in Sources */,
 				A04500000000000000000008 /* LiveActivityTests.swift in Sources */,
+				0979A440A793A48689554BC0 /* RoomScheduledDeliveryTests.swift in Sources */,
 				1A2B3C4D5E6F700000000341 /* AppIntentNewChatTests.swift in Sources */,
 				1A2B3C4D5E6F700000000345 /* AppIntentNewChatInProfileTests.swift in Sources */,
 			
