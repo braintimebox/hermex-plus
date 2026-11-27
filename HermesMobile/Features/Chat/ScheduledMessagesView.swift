@@ -471,7 +471,7 @@ fileprivate struct EditScheduledMessageSheet: View {
 
                 if !attachments.isEmpty {
                     Section("Attachments") {
-                        ForEach(attachments) { attachment in
+                        ForEach(attachments, id: \.self) { attachment in
                             HStack {
                                 Image(systemName: attachment.isImage ? "photo" : "doc")
                                     .font(.body)

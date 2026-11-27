@@ -125,7 +125,7 @@ final class PendingScheduledMessage {
 /// `ChatDraftAttachmentStore` — тот же стор, что и у черновиков, поэтому копию
 /// не дублируем; вместо этого имя файла обязано попадать в `keepingReferenced`
 /// при уборке (иначе sweep удалит вложение как осиротевшее).
-struct ScheduledMessageAttachment: Codable, Equatable, Sendable {
+struct ScheduledMessageAttachment: Codable, Equatable, Hashable, Sendable {
     var name: String
     var path: String
     var mime: String
