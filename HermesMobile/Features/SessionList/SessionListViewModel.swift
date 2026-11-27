@@ -1501,6 +1501,9 @@ final class SessionListViewModel {
             let sessionTitle: String?
             let draftText: String
             let scheduleKey: String
+            /// The stored manifest, as JSON. Carried as a string because a SwiftData
+            /// object must not cross the actor boundary.
+            let attachmentsJSON: String?
         }
 
         let dueItems: [DueItem] = await Task.detached(priority: .utility) {
@@ -1533,7 +1536,8 @@ final class SessionListViewModel {
                     sessionId: message.sessionId,
                     sessionTitle: message.sessionTitle,
                     draftText: message.draftText,
-                    scheduleKey: message.scheduleKey
+                    scheduleKey: message.scheduleKey,
+                    attachmentsJSON: message.attachmentsJSON
                 ))
             }
             if deletedStale {
@@ -1568,6 +1572,10 @@ final class SessionListViewModel {
             }
 
             do {
+                // The attachments were uploaded when the message was scheduled, so the
+                // manifest already names server-side paths. Dropping it here is what made
+                // a scheduled message arrive without its files.
+                let scheduled = PendingScheduledMessage.decodeAttachments(from: item.attachmentsJSON)
                 _ = try await apiClient.startChat(
                     sessionID: targetSessionId,
                     message: item.draftText,
@@ -1576,6 +1584,8 @@ final class SessionListViewModel {
                     // The schedule key is stable across retries, so a repeat that
                     // follows a timeout is recognised by the server instead of
                     // starting a second turn.
+                    explicitModelPick: false,
+                    attachments: scheduled.isEmpty ? nil : scheduled.map { $0.toJSONValue() },
                     clientMessageId: item.scheduleKey
                 )
                 // Delete the dispatched row off-main, then cancel the server timer

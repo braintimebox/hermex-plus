@@ -1,3 +1,14 @@
+## 4.3.5 — a scheduled message carries its files
+
+- **The chat's scheduled delivery sent the text and dropped the attachments.** The row's
+  `attachmentsJSON` was written when the message was scheduled and uploaded, but the
+  dispatcher carried only scalars (server, session, text, schedule key) and called
+  `startChat` without `attachments`, so the files never left the device. The manifest is
+  now decoded from the same one helper the model uses and passed to the send.
+- Verified unchanged: an immediate chat send, the offline outbox, bot prompts (attachments
+  travel as `@file:` / image references) and room sends (both immediate and scheduled) all
+  already carry their attachments.
+
 ## 4.3.4 — the dock stays in every section, the button clears it, Kanban finds the dashboard
 
 - **The dock no longer disappears in Groups/Bots.** It is drawn on every section root and

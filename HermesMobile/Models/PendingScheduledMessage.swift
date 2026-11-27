@@ -68,7 +68,14 @@ final class PendingScheduledMessage {
     /// Расшифрованные вложения. Пустой массив, если поле пустое или битое —
     /// отложенное сообщение без читаемых вложений должно остаться отправляемым.
     var attachments: [ScheduledMessageAttachment] {
-        guard let attachmentsJSON, let data = attachmentsJSON.data(using: .utf8) else { return [] }
+        Self.decodeAttachments(from: attachmentsJSON)
+    }
+
+    /// Decodes the stored manifest. One helper for the model's computed `attachments`
+    /// and for the delivery path, which only carries the JSON string across an actor
+    /// boundary (a SwiftData object must not outlive its context).
+    static func decodeAttachments(from json: String?) -> [ScheduledMessageAttachment] {
+        guard let json, let data = json.data(using: .utf8) else { return [] }
         return (try? JSONDecoder().decode([ScheduledMessageAttachment].self, from: data)) ?? []
     }
 
