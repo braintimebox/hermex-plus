@@ -212,6 +212,12 @@ final class OnboardingViewModelIdentityTests: XCTestCase {
             return LoginResponse(ok: true, message: nil, error: nil)
         }
 
+        func dashboardLogin(username: String, password: String) async throws -> LoginResponse {
+            // Dashboard sign-in follows the gateway login; not gated here.
+            configuredPasswords.append(password)
+            return LoginResponse(ok: true, message: nil, error: nil)
+        }
+
         func logout() async throws -> LoginResponse {
             LoginResponse(ok: true, message: nil, error: nil)
         }
