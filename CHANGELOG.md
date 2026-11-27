@@ -1,4 +1,4 @@
-## 4.3.9 — Groups opens from the last saved list
+## 4.3.9 — Groups opens from the last saved list, and typing does not wait for the agent
 
 - **The room list is painted from disk before the socket answers**, the same contract Chats
   has had: the previous `groups.list` snapshot is drawn at once and replaced by the live
@@ -10,6 +10,12 @@
 - The snapshot stores the raw `groups.list` payloads and is parsed by the same initializer
   as the wire, keyed by server and connection, so a cache cannot invent a shape the server
   does not use.
+- **A streamed word no longer invalidates the screen that holds the composer.** The scroll,
+  haptic and completion counters moved out of `ChatViewModel` into `ChatStreamState`, and
+  the chat screen passes the object down instead of reading the values in its own body.
+  Only a leaf view and the transcript observe them now. Before, every tick re-evaluated the
+  whole screen — which is why typing stuttered and the keyboard lagged while the agent was
+  working. Tests read the pulses through the stream state.
 
 ## 4.3.8 — the layout you set is the layout you get
 

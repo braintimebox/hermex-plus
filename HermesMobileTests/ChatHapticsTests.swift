@@ -90,17 +90,17 @@ final class ChatHapticsTests: XCTestCase {
 
         viewModel.streamCoordinatorDidStartConnection(isReplay: false)
         XCTAssertTrue(viewModel.streamCoordinatorAppendToken("Hello"))
-        XCTAssertEqual(viewModel.streamingHapticPulseTrigger, 1)
+        XCTAssertEqual(viewModel.stream.streamingHapticPulseTrigger, 1)
         XCTAssertTrue(viewModel.streamCoordinatorAppendToken(" world"))
-        XCTAssertEqual(viewModel.streamingHapticPulseTrigger, 1, "second token inside the window stays quiet")
+        XCTAssertEqual(viewModel.stream.streamingHapticPulseTrigger, 1, "second token inside the window stays quiet")
 
         viewModel.streamCoordinatorDidStartConnection(isReplay: false)
         XCTAssertTrue(viewModel.streamCoordinatorAppendToken("Again"))
-        XCTAssertEqual(viewModel.streamingHapticPulseTrigger, 2, "a new connection re-arms the first pulse")
+        XCTAssertEqual(viewModel.stream.streamingHapticPulseTrigger, 2, "a new connection re-arms the first pulse")
 
         viewModel.streamCoordinatorDidStartConnection(isReplay: true)
         XCTAssertTrue(viewModel.streamCoordinatorAppendToken(" continued"))
-        XCTAssertEqual(viewModel.streamingHapticPulseTrigger, 2, "a replay continues the same reply and keeps its window")
+        XCTAssertEqual(viewModel.stream.streamingHapticPulseTrigger, 2, "a replay continues the same reply and keeps its window")
     }
 
     @MainActor

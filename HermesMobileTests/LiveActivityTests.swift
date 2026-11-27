@@ -278,7 +278,7 @@ final class LiveActivityTests: XCTestCase {
             errorSummary: nil
         ))
         XCTAssertNil(viewModel.activeStreamID)
-        XCTAssertEqual(viewModel.responseCompletionHapticTrigger, 1)
+        XCTAssertEqual(viewModel.stream.responseCompletionHapticTrigger, 1)
     }
 
     func testChatViewModelSuppressesLiveActivityResponseExcerptsByDefault() async throws {
@@ -650,7 +650,7 @@ final class LiveActivityTests: XCTestCase {
         ])
         XCTAssertNil(viewModel.activeStreamID)
         XCTAssertEqual(streamClient.stopCount, 1)
-        XCTAssertEqual(viewModel.responseCompletionHapticTrigger, 1)
+        XCTAssertEqual(viewModel.stream.responseCompletionHapticTrigger, 1)
         XCTAssertEqual(viewModel.messages.compactMap(\.content), [
             "Keep working",
             "Completed from transcript refresh."
@@ -724,7 +724,7 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertTrue(manager.ends.isEmpty)
         XCTAssertEqual(viewModel.activeStreamID, "stream-123")
         XCTAssertEqual(streamClient.stopCount, 0)
-        XCTAssertEqual(viewModel.responseCompletionHapticTrigger, 0)
+        XCTAssertEqual(viewModel.stream.responseCompletionHapticTrigger, 0)
     }
 
     func testForegroundReconnectCompletionEndsLiveActivityAndAllowsFollowupStream() async throws {

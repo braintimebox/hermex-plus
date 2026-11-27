@@ -2145,7 +2145,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.compactMap(\.role), ["user", "assistant"])
         XCTAssertEqual(viewModel.messages.last?.content, "First live token.")
         XCTAssertNotNil(viewModel.streamingAssistantMessageID)
-        XCTAssertFalse(viewModel.responseCompletionHapticTrigger > 0)
+        XCTAssertFalse(viewModel.stream.responseCompletionHapticTrigger > 0)
     }
 
     @MainActor
@@ -2223,7 +2223,7 @@ final class ChatViewModelSendTests: XCTestCase {
         // streaming bursts — this is the task that used to race the real 16ms window
         // before the synchronous assertion ran.
         await viewModel.awaitPendingStreamingScrollTriggerForTesting()
-        let initialTrigger = viewModel.streamingScrollTrigger
+        let initialTrigger = viewModel.stream.streamingScrollTrigger
 
         // Burst 1: 20 rapid tokens batch behind a single coalesced flush. Nothing has
         // scrolled yet at this synchronous point — no await has elapsed since the
@@ -2231,15 +2231,15 @@ final class ChatViewModelSendTests: XCTestCase {
         for index in 0..<20 {
             streamClient.emit(.token("token-\(index) "))
         }
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger)
 
         // Flushing the batch schedules exactly one (still-deferred) scroll trigger;
         // draining it advances the trigger by exactly one — not 20 — proving the
         // 20-token burst coalesced into a single scroll.
         viewModel.flushPendingStreamingContent()
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger)
         await viewModel.awaitPendingStreamingScrollTriggerForTesting()
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger + 1)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger + 1)
         XCTAssertTrue(viewModel.messages.last?.content?.hasPrefix("token-0 token-1") == true)
 
         // Burst 2: a distinct, heterogeneous reasoning + tool-start burst. Flushing
@@ -2256,11 +2256,11 @@ final class ChatViewModelSendTests: XCTestCase {
             duration: nil,
             isError: nil
         )))
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger + 1)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger + 1)
         viewModel.flushPendingStreamingContent()
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger + 1)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger + 1)
         await viewModel.awaitPendingStreamingScrollTriggerForTesting()
-        XCTAssertEqual(viewModel.streamingScrollTrigger, initialTrigger + 2)
+        XCTAssertEqual(viewModel.stream.streamingScrollTrigger, initialTrigger + 2)
     }
 
     @MainActor
@@ -2332,7 +2332,7 @@ final class ChatViewModelSendTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.compactMap(\.role), ["user", "assistant"])
         XCTAssertEqual(viewModel.messages.last?.content, "Inspecting repo structure.")
         XCTAssertNotNil(viewModel.streamingAssistantMessageID)
-        XCTAssertFalse(viewModel.responseCompletionHapticTrigger > 0)
+        XCTAssertFalse(viewModel.stream.responseCompletionHapticTrigger > 0)
     }
 
     @MainActor
@@ -3132,7 +3132,7 @@ final class ChatViewModelSendTests: XCTestCase {
             streamClient.emit(.done(DoneStreamEvent(session: completedSession)))
 
             XCTAssertNil(viewModel.activeStreamID)
-            XCTAssertEqual(viewModel.responseCompletionHapticTrigger, 1)
+            XCTAssertEqual(viewModel.stream.responseCompletionHapticTrigger, 1)
             XCTAssertFalse(viewModel.responseCompletionNeedsTranscriptRefresh)
             XCTAssertEqual(viewModel.messages.compactMap(\.content), ["Summarize", "Done."])
         }
@@ -3158,7 +3158,7 @@ final class ChatViewModelSendTests: XCTestCase {
             streamClient.emit(.done(DoneStreamEvent(session: nil)))
 
             XCTAssertNil(viewModel.activeStreamID)
-            XCTAssertEqual(viewModel.responseCompletionHapticTrigger, 1)
+            XCTAssertEqual(viewModel.stream.responseCompletionHapticTrigger, 1)
             XCTAssertTrue(viewModel.responseCompletionNeedsTranscriptRefresh)
             XCTAssertEqual(viewModel.messages.compactMap(\.content), ["Summarize", "Done."])
         }
