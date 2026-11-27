@@ -1037,6 +1037,9 @@ extension NavigationPreferences {
     /// ("kanban") cannot overwrite each other's label.
     static let titlesKey = "navigation.titles"
 
+    /// Owner-added rows. JSON array of `CustomRow`, so one @AppStorage can observe it.
+    static let customRowsKey = "navigation.customRows"
+
     static func titles(from raw: String) -> [String: String] {
         guard let data = raw.data(using: .utf8),
               let map = try? JSONDecoder().decode([String: String].self, from: data)
