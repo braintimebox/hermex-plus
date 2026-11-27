@@ -1,3 +1,10 @@
+## 4.3.6 — New Chat belongs to the list, not to a chat
+
+- **The floating Chat button is gone inside a conversation.** It is a list affordance: on
+  the section root it starts a new chat; inside a chat the send button is the only action,
+  and the floating one covered the composer's corner. It also no longer appears on the
+  utility sections (Kanban, Settings), where a new chat is not the next step.
+
 ## 4.3.5 — a scheduled message carries its files
 
 - **The chat's scheduled delivery sent the text and dropped the attachments.** The row's

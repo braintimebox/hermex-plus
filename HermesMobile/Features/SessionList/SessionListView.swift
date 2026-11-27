@@ -135,8 +135,11 @@ struct SessionListView: View {
             // dock's own measured height. It used to live inside the list, where the
             // full-screen background made its 16 pt count from the screen edge and the
             // dock clipped it (owner screenshot, 4.3.2).
+            // New Chat is a list affordance: on the section root only. Inside a chat it
+            // covered the composer's corner and had nothing to do — the chat's own send
+            // button is the action there.
             .overlay(alignment: .bottomTrailing) {
-                if !isSearchingSessions, !showsBots {
+                if !isSearchingSessions, !showsBots, navigationState.destination == nil {
                     newSessionButton
                         .padding(.trailing, 20)
                         .padding(.bottom, (showsAppDock ? dockHeight : 0) + 16)
