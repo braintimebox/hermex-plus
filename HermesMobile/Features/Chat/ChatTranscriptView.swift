@@ -88,7 +88,10 @@ struct ChatTranscriptView: View {
     let latestTranscriptMessageRole: String?
     let isScrolledNearBottom: Bool
     let activeStreamID: String?
-    let streamingScrollTrigger: Int
+    /// The stream's own state object. Read inside this view, so the counter that ticks
+    /// on every streamed word invalidates the transcript only — not the screen holding
+    /// the composer.
+    let stream: ChatStreamState
     let transcriptRelayoutScrollToken: Int
     let bottomAnchorID: String
     let transcriptSpacing: CGFloat
@@ -319,7 +322,7 @@ struct ChatTranscriptView: View {
                 guard shouldFollowLatestMessage else { return }
                 onScrollToLatestContent(proxy, false, "cacheReconcile")
             }
-            .onChange(of: streamingScrollTrigger) {
+            .onChange(of: stream.streamingScrollTrigger) {
                 if isFollowingLatestContent {
                     // HERMEX-FORK: 3.9.41 — count programmatic follow-scrolls
                     // during streaming (hypothesis G1). Diagnostic only.

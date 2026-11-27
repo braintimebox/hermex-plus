@@ -943,11 +943,16 @@ struct ChatView: View {
                     }
                 }
             }
-            .onChange(of: viewModel.responseCompletionHapticTrigger) {
-                guard viewModel.responseCompletionHapticTrigger > 0 else { return }
-                handleResponseCompletionSideEffects()
-            }
-            .onChange(of: viewModel.streamingHapticPulseTrigger, handleStreamingHapticPulse)
+            // The pulses are read inside this bridge's own body, so ChatView's body no
+            // longer depends on them: one streaming tick re-evaluates an empty view
+            // instead of the whole screen (composer and keyboard included).
+            .background(
+                ChatStreamPulseBridge(
+                    stream: viewModel.stream,
+                    onCompletion: handleResponseCompletionSideEffects,
+                    onStreamingPulse: handleStreamingHapticPulse
+                )
+            )
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     ChatToolbarTitleLabel(
@@ -1691,7 +1696,7 @@ struct ChatView: View {
             latestTranscriptMessageRole: latestTranscriptMessageRole,
             isScrolledNearBottom: isScrolledNearBottom,
             activeStreamID: viewModel.activeStreamID,
-            streamingScrollTrigger: viewModel.streamingScrollTrigger,
+            stream: viewModel.stream,
             transcriptRelayoutScrollToken: viewModel.transcriptRelayoutScrollToken,
             bottomAnchorID: bottomAnchorID,
             transcriptSpacing: transcriptSpacing,
@@ -3264,7 +3269,7 @@ struct ChatView: View {
             activeStreamStatusRefreshTask = nil
 
             if responseCompletionNotificationTracker.shouldEndBackgroundTaskOnStreamInactive(
-                completionTrigger: viewModel.responseCompletionHapticTrigger
+                completionTrigger: viewModel.stream.responseCompletionHapticTrigger
             ) {
                 endResponseCompletionBackgroundTask()
             }
@@ -3313,7 +3318,7 @@ struct ChatView: View {
         }
 
         guard let completionContext = responseCompletionNotificationTracker.completionContext(
-            completionTrigger: viewModel.responseCompletionHapticTrigger,
+            completionTrigger: viewModel.stream.responseCompletionHapticTrigger,
             sceneIsActive: scenePhase == .active
         ) else {
             return
@@ -4717,6 +4722,28 @@ private struct ChatDraftSyncModifier: ViewModifier {
             }
             .onChange(of: composerSettings) { _, newSettings in
                 onSettingsChange(newSettings)
+            }
+    }
+}
+
+/// Reads the stream's pulse counters in its own body, so the screen that owns the
+/// composer never depends on them. One tick re-evaluates this empty view instead of
+/// the whole chat — which is what made the keyboard stutter while the agent typed.
+private struct ChatStreamPulseBridge: View {
+    let stream: ChatStreamState
+    let onCompletion: () -> Void
+    let onStreamingPulse: () -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+            .onChange(of: stream.responseCompletionHapticTrigger) { _, trigger in
+                guard trigger > 0 else { return }
+                onCompletion()
+            }
+            .onChange(of: stream.streamingHapticPulseTrigger) { _, _ in
+                onStreamingPulse()
             }
     }
 }

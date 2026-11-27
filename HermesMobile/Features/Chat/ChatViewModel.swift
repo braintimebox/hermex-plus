@@ -336,7 +336,9 @@ final class ChatViewModel {
     private(set) var isClearingConversation = false
     private(set) var displayTitle: String
     private(set) var listeningMessageID: String?
-    private(set) var streamingScrollTrigger = 0
+    /// Scroll and haptic pulses live on `stream` (ChatStreamState). They used to be
+    /// mirrored here, and because ChatView read them in its own body, every streaming
+    /// tick invalidated the whole screen — composer and keyboard included.
     /// Bumped when a cache-first cold open (#289) finishes reconciling the network
     /// transcript over the instantly-rendered cached one. The richer server content
     /// (tool-call / reasoning cards, content parts) is taller than the lighter cached
@@ -521,10 +523,8 @@ final class ChatViewModel {
     }
     private(set) var hasOlderMessages = false
     private(set) var contextWindowSnapshot: ContextWindowSnapshot?
-    private(set) var responseCompletionHapticTrigger = 0
     /// Bumps at most once per throttle interval while live (non-replay) assistant
     /// text arrives; the view turns each bump into one streaming pulse haptic.
-    private(set) var streamingHapticPulseTrigger = 0
     private var streamingHapticPulseThrottle = ChatHaptics.StreamingPulseThrottle()
     private(set) var responseCompletionNeedsTranscriptRefresh = false
     /// The same skills in the shape the chip tokenizer needs, kept beside the
@@ -1056,7 +1056,7 @@ final class ChatViewModel {
             self.pendingStreamingScrollTriggerTask = nil
             guard !Task.isCancelled, self.sessionID == expectedSessionID else { return }
 
-            self.streamingScrollTrigger += 1
+            self.stream.streamingScrollTrigger += 1
         }
     }
 
@@ -5988,7 +5988,7 @@ final class ChatViewModel {
         // stream must not pulse for every token that already happened.
         if !isActiveStreamReplayConnection,
            streamingHapticPulseThrottle.shouldPulse(at: Date().timeIntervalSinceReferenceDate) {
-            streamingHapticPulseTrigger += 1
+            stream.streamingHapticPulseTrigger += 1
         }
         return true
     }
@@ -6701,7 +6701,7 @@ extension ChatViewModel: ChatStreamCoordinatorDelegate {
 
     func streamCoordinatorDidCompleteCurrentResponse(needsTranscriptRefresh: Bool) {
         responseCompletionNeedsTranscriptRefresh = needsTranscriptRefresh
-        responseCompletionHapticTrigger += 1
+        stream.responseCompletionHapticTrigger += 1
     }
 
     func streamCoordinatorDidFinishStream() {
@@ -7820,6 +7820,10 @@ final class ChatStreamState {
     var liveToolCalls: [ToolCall] = []
     var liveReasoningText = ""
     var streamingScrollTrigger = 0
+    /// Bumped at most once per throttle interval while live assistant text arrives; the
+    /// pulse listener turns each bump into one haptic. Kept here with the other stream
+    /// pulses so no view that is not about streaming observes them.
+    var streamingHapticPulseTrigger = 0
     var cacheFirstReconcileScrollToken = 0
     var responseCompletionHapticTrigger = 0
     var responseCompletionNeedsTranscriptRefresh = false
