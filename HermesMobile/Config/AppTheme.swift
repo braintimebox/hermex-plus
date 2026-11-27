@@ -896,3 +896,117 @@ extension ResponseCompletionNotificationService {
         return true
     }
 }
+
+
+// MARK: - Manual navigation layout
+// Lives beside the other visibility settings so the layout has one home. Kept in this
+// file because a new file would need a project.pbxproj registration, and a missed one
+// is a build break that compiles nowhere.
+
+/// Manual layout of the two navigations the owner actually looks at: the bottom dock
+/// and the session list's utility rows.
+///
+/// The point is *control*, not automatic hiding. Nothing here decides that a section
+/// "should" disappear: the stored order is the whole truth, and a section the owner
+/// switched off is simply not in it. Feature gates (Bot Mode, the Kanban section flag)
+/// are still reported, so the editor can explain why an entry cannot be used instead
+/// of letting it open a screen that does nothing.
+enum NavigationPreferences {
+    // MARK: Dock
+
+    static let dockOrderKey = "navigation.dockOrder"
+
+    enum DockSection: String, CaseIterable, Identifiable {
+        case groups, bots, chats, kanban, settings
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .groups: "Groups"
+            case .bots: "Bots"
+            case .chats: "Chats"
+            case .kanban: "Kanban"
+            case .settings: "Settings"
+            }
+        }
+
+        var tab: AppTab {
+            switch self {
+            case .groups: .groups
+            case .bots: .bots
+            case .chats: .chats
+            case .kanban: .kanban
+            case .settings: .settings
+            }
+        }
+    }
+
+    /// The pre-customisation order: what an install that never opened the editor sees.
+    static let defaultDockOrder: [DockSection] = [.groups, .bots, .chats, .kanban, .settings]
+
+    static func dockOrder(in defaults: UserDefaults = .standard) -> [DockSection] {
+        guard let raw = defaults.string(forKey: dockOrderKey) else { return defaultDockOrder }
+        let stored = raw.split(separator: ",").compactMap { DockSection(rawValue: String($0)) }
+        // An empty or fully unknown value must not leave the app without a dock.
+        return stored.isEmpty ? defaultDockOrder : stored
+    }
+
+    static func setDockOrder(_ order: [DockSection], in defaults: UserDefaults = .standard) {
+        defaults.set(order.map(\.rawValue).joined(separator: ","), forKey: dockOrderKey)
+    }
+
+    /// Which dock sections can actually be used right now. A section whose feature is
+    /// switched off is dropped, so the dock never carries a button that opens nothing —
+    /// that was the dead Groups tab. Chats is the floor: at least one section stays.
+    static func availableSections(
+        in defaults: UserDefaults = .standard,
+        botModeEnabled: Bool,
+        kanbanEnabled: Bool
+    ) -> [DockSection] {
+        let usable = dockOrder(in: defaults).filter { section in
+            switch section {
+            case .bots: botModeEnabled
+            case .kanban: kanbanEnabled
+            default: true
+            }
+        }
+        return usable.isEmpty ? [.chats] : usable
+    }
+
+    // MARK: Session-list utility rows
+
+    static let sidebarOrderKey = "navigation.sidebarOrder"
+
+    enum SidebarRow: String, CaseIterable, Identifiable {
+        case tasks, kanban, skills, plugins, memory, usage, saved
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .tasks: "Tasks"
+            case .kanban: "Kanban"
+            case .skills: "Skills"
+            case .plugins: "Plugins / Hooks"
+            case .memory: "Memory"
+            case .usage: "Usage"
+            case .saved: "Saved"
+            }
+        }
+    }
+
+    static let defaultSidebarOrder: [SidebarRow] = [
+        .tasks, .kanban, .skills, .plugins, .memory, .usage, .saved
+    ]
+
+    static func sidebarOrder(in defaults: UserDefaults = .standard) -> [SidebarRow] {
+        guard let raw = defaults.string(forKey: sidebarOrderKey) else { return defaultSidebarOrder }
+        let stored = raw.split(separator: ",").compactMap { SidebarRow(rawValue: String($0)) }
+        return stored.isEmpty ? defaultSidebarOrder : stored
+    }
+
+    static func setSidebarOrder(_ order: [SidebarRow], in defaults: UserDefaults = .standard) {
+        defaults.set(order.map(\.rawValue).joined(separator: ","), forKey: sidebarOrderKey)
+    }
+}

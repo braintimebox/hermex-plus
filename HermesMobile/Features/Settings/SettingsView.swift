@@ -352,6 +352,19 @@ struct SettingsView: View {
                 }
 
                 SettingsCard(title: String(localized: "Main Page")) {
+                    NavigationLink {
+                        NavigationCustomizationView()
+                    } label: {
+                        SettingsAccessoryRow(
+                            title: String(localized: "Dock & order"),
+                            systemImage: "square.grid.2x2"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the customisation of the dock and the session-list rows.")
+
+                    SettingsDivider()
+
                     SettingsToggleRow(
                         title: String(localized: "Tasks"),
                         systemImage: "calendar.badge.clock",
@@ -2558,5 +2571,155 @@ struct AddServerView: View {
 #Preview {
     NavigationStack {
         SettingsView(authManager: AuthManager(), server: URL(staticString: "https://webui.example.test"))
+    }
+}
+
+
+// MARK: - Navigation customisation
+
+/// The owner's own layout: which sections the dock carries, in which order, and which
+/// utility rows the session list shows, in which order. Everything here is a manual
+/// switch — nothing is hidden on the app's own initiative.
+///
+/// Two rules keep it honest:
+/// - a section whose feature is off is still listed, with the reason, instead of
+///   silently disappearing (the dead Groups tab came from the opposite);
+/// - the dock keeps at least one section, because an empty navigation is not a layout.
+struct NavigationCustomizationView: View {
+    @AppStorage(BotModeGate.isEnabledKey) private var botModeEnabled = false
+    @AppStorage(SectionVisibilitySettings.kanbanKey) private var kanbanEnabled = true
+
+    @State private var dock: [NavigationPreferences.DockSection] = NavigationPreferences.dockOrder()
+    @State private var sidebar: [NavigationPreferences.SidebarRow] = NavigationPreferences.sidebarOrder()
+
+    var body: some View {
+        List {
+            dockSection
+            sidebarSection
+        }
+        .navigationTitle("Navigation")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { EditButton() }
+        .onChange(of: dock) { _, order in NavigationPreferences.setDockOrder(order) }
+        .onChange(of: sidebar) { _, order in NavigationPreferences.setSidebarOrder(order) }
+    }
+
+    // MARK: Dock
+
+    private var dockSection: some View {
+        Section {
+            ForEach(dock) { section in
+                HStack {
+                    Label(section.title, systemImage: section.tab.systemImage)
+                    Spacer()
+                    if let blocker = dockBlocker(section) {
+                        Text(blocker).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onMove { from, to in dock.move(fromOffsets: from, toOffset: to) }
+            .onDelete(perform: removeDock)
+
+            ForEach(addableDockSections) { section in
+                Button {
+                    dock.append(section)
+                } label: {
+                    Label("Add \(section.title)", systemImage: "plus.circle")
+                }
+            }
+        } header: {
+            Text("Dock")
+        } footer: {
+            Text("Drag to reorder, swipe to remove. A section whose feature is off stays listed here but cannot be added until the feature is on.")
+        }
+    }
+
+    private var addableDockSections: [NavigationPreferences.DockSection] {
+        NavigationPreferences.DockSection.allCases.filter { candidate in
+            !dock.contains(candidate) && dockBlocker(candidate) == nil
+        }
+    }
+
+    private func removeDock(at offsets: IndexSet) {
+        let remaining = dock.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        // An empty dock would remove the only way between sections.
+        dock = remaining.isEmpty ? [.chats] : remaining
+    }
+
+    /// Why a section cannot be used right now, or nil when it can. Shown in the row so
+    /// the owner sees the cause instead of tapping a button that does nothing.
+    private func dockBlocker(_ section: NavigationPreferences.DockSection) -> String? {
+        switch section {
+        case .bots: botModeEnabled ? nil : "Needs Bot Mode"
+        case .kanban: kanbanEnabled ? nil : "Section is off"
+        default: nil
+        }
+    }
+
+    // MARK: Session list rows
+
+    private var sidebarSection: some View {
+        Section {
+            ForEach(sidebar) { row in
+                Toggle(isOn: visibility(for: row)) {
+                    Label(row.title, systemImage: sidebarIcon(row))
+                }
+            }
+            .onMove { from, to in sidebar.move(fromOffsets: from, toOffset: to) }
+            .onDelete(perform: removeSidebar)
+
+            ForEach(addableSidebarRows) { row in
+                Button {
+                    sidebar.append(row)
+                    visibility(for: row).wrappedValue = true
+                } label: {
+                    Label("Add \(row.title)", systemImage: "plus.circle")
+                }
+            }
+        } header: {
+            Text("Session list")
+        } footer: {
+            Text("These rows sit above the sessions. Swipe a row to take it off the list; drag to reorder. Plugins / Hooks shares the Skills switch, as it always has.")
+        }
+    }
+
+    private var addableSidebarRows: [NavigationPreferences.SidebarRow] {
+        NavigationPreferences.SidebarRow.allCases.filter { !sidebar.contains($0) }
+    }
+
+    private func removeSidebar(at offsets: IndexSet) {
+        let removed = offsets.map { sidebar[$0] }
+        sidebar.remove(atOffsets: offsets)
+        for row in removed { visibility(for: row).wrappedValue = false }
+    }
+
+    private func sidebarIcon(_ row: NavigationPreferences.SidebarRow) -> String {
+        switch row {
+        case .tasks: "checklist"
+        case .kanban: "rectangle.split.3x1"
+        case .skills: "hammer"
+        case .plugins: "puzzlepiece"
+        case .memory: "brain"
+        case .usage: "chart.bar"
+        case .saved: "bookmark"
+        }
+    }
+
+    /// Visibility lives in the keys the rest of the app already reads, so this screen
+    /// adds an order and a single place — not a second source of truth.
+    private func visibility(for row: NavigationPreferences.SidebarRow) -> Binding<Bool> {
+        let key: String
+        switch row {
+        case .tasks: key = SectionVisibilitySettings.tasksKey
+        case .kanban: key = SectionVisibilitySettings.kanbanKey
+        case .skills, .plugins: key = SectionVisibilitySettings.skillsKey
+        case .memory: key = SectionVisibilitySettings.memoryKey
+        case .usage: key = SectionVisibilitySettings.insightsKey
+        case .saved: key = "sidebar_shows_saved_section"
+        }
+        return Binding(
+            get: { UserDefaults.standard.object(forKey: key) as? Bool ?? true },
+            set: { UserDefaults.standard.set($0, forKey: key) }
+        )
     }
 }

@@ -185,45 +185,56 @@ struct SessionSidebarUtilityRows: View {
     }
 
     private var utilityLinks: some View {
+        // Manual layout: the owner's order and switches, not the app's guess. The rows
+        // are the same views as before — only the sequence comes from the stored order.
         VStack(alignment: .leading, spacing: Self.rowSpacing) {
-            if sectionVisibility.tasks {
-                SidebarNavButton(title: String(localized: "Tasks"), assetImage: "LucideCalendarClock") {
-                    openDestination(.tasks)
-                }
+            ForEach(NavigationPreferences.sidebarOrder().filter { isRowVisible($0) }) { row in
+                utilityRow(row)
             }
+        }
+        .padding(.horizontal, 24)
+    }
 
-            if sectionVisibility.kanban {
-                SidebarNavButton(title: String(localized: "Kanban"), assetImage: "LucideColumns3") {
-                    openDestination(.kanban)
-                }
+    private func isRowVisible(_ row: NavigationPreferences.SidebarRow) -> Bool {
+        switch row {
+        case .tasks: sectionVisibility.tasks
+        case .kanban: sectionVisibility.kanban
+        case .skills, .plugins: sectionVisibility.skills
+        case .memory: sectionVisibility.memory
+        case .usage: sectionVisibility.insights
+        case .saved: sectionVisibility.saved
+        }
+    }
+
+    @ViewBuilder
+    private func utilityRow(_ row: NavigationPreferences.SidebarRow) -> some View {
+        switch row {
+        case .tasks:
+            SidebarNavButton(title: String(localized: "Tasks"), assetImage: "LucideCalendarClock") {
+                openDestination(.tasks)
             }
-
-            if sectionVisibility.skills {
-                SidebarNavButton(title: String(localized: "Skills"), assetImage: "LucideHammer") {
-                    openDestination(.skills)
-                }
+        case .kanban:
+            SidebarNavButton(title: String(localized: "Kanban"), assetImage: "LucideColumns3") {
+                openDestination(.kanban)
             }
-
-            if sectionVisibility.skills {
-                SidebarNavButton(title: String(localized: "Plugins / Hooks"), assetImage: "LucidePuzzle") {
-                    openDestination(.pluginsHooks)
-                }
+        case .skills:
+            SidebarNavButton(title: String(localized: "Skills"), assetImage: "LucideHammer") {
+                openDestination(.skills)
             }
-
-            if sectionVisibility.memory {
-                SidebarNavButton(title: String(localized: "Memory"), assetImage: "LucideBrain") {
-                    openDestination(.memory)
-                }
+        case .plugins:
+            SidebarNavButton(title: String(localized: "Plugins / Hooks"), assetImage: "LucidePuzzle") {
+                openDestination(.pluginsHooks)
             }
-
-            if sectionVisibility.insights {
-                SidebarNavButton(title: String(localized: "Usage"), assetImage: "LucideChartColumnIncreasing") {
-                    openDestination(.insights)
-                }
+        case .memory:
+            SidebarNavButton(title: String(localized: "Memory"), assetImage: "LucideBrain") {
+                openDestination(.memory)
             }
-
-            if sectionVisibility.saved {
-                HapticButton(action: { openDestination(.saved) }) {
+        case .usage:
+            SidebarNavButton(title: String(localized: "Usage"), assetImage: "LucideChartColumnIncreasing") {
+                openDestination(.insights)
+            }
+        case .saved:
+            HapticButton(action: { openDestination(.saved) }) {
                 HStack(spacing: 18) {
                     Image(systemName: "bookmark.fill")
                         .font(.body)
@@ -243,9 +254,7 @@ struct SessionSidebarUtilityRows: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Saved")
-            }
         }
-        .padding(.horizontal, 24)
     }
 
     private var activeProfileHeader: some View {

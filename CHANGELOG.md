@@ -1,3 +1,16 @@
+## 4.3.7 — the dock and the main page are yours to lay out
+
+- **Dock customisation.** Settings → Main Page → “Dock & order”: every section can be
+  switched on or off and dragged into place, and that order is the dock's order. The app
+  no longer decides on its own. A section whose feature is off (Bots needs Bot Mode,
+  Kanban needs its section) stays listed with the reason and cannot be added until the
+  feature is on — so the dock never carries a button that opens nothing.
+- **Main page rows follow your order.** The utility rows above the sessions are drawn from
+  a stored order plus the existing switches, and the same screen edits both. Removing a row
+  turns its switch off: one source of truth, not two.
+- Defaults equal the pre-4.3.7 layout, so an install that never opens the editor looks
+  exactly as it did.
+
 ## 4.3.6 — New Chat belongs to the list, not to a chat
 
 - **The floating Chat button is gone inside a conversation.** It is a list affordance: on

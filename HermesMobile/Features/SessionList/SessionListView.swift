@@ -551,13 +551,13 @@ struct SessionListView: View {
         return true
     }
 
-    /// Sections that exist for this server: Bots behind its gate, Kanban behind its flag.
+    /// The dock's composition is the owner's, not the app's: the stored order decides
+    /// which sections appear and in what sequence. A section whose feature is off is
+    /// dropped here (its editor row says why), so the dock never carries a dead button.
     private var availableTabs: [AppTab] {
-        var tabs: [AppTab] = [.groups, .chats]
-        if isBotModeEnabled { tabs.insert(.bots, at: 1) }
-        if showsKanbanSection { tabs.append(.kanban) }
-        tabs.append(.settings)
-        return tabs
+        NavigationPreferences
+            .availableSections(botModeEnabled: isBotModeEnabled, kanbanEnabled: showsKanbanSection)
+            .map(\.tab)
     }
 
     @ViewBuilder
