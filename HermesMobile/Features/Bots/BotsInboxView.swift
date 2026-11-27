@@ -138,6 +138,17 @@ struct BotsInboxHome {
     /// own expression: together they were too much for the CI type-checker.
     private var list: some View {
         List {
+            if inbox.isViewingCachedRooms {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath").imageScale(.small)
+                    Text("Showing the last saved list").font(.subheadline).fontWeight(.semibold)
+                    Spacer()
+                }
+                .foregroundStyle(.orange)
+                .listRowSeparator(.hidden)
+                .accessibilityElement(children: .combine)
+            }
+
             if inbox.connection != nil {
                 if let message = inbox.errorMessage ?? inbox.routeAdvice {
                     Text(message).font(.callout)

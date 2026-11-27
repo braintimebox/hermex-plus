@@ -170,6 +170,10 @@ import UIKit
     private(set) var connection: BotConnection?
     private(set) var profiles: [BotProfile] = []
     private(set) var rooms: [BotGroupRoom] = []
+    /// True while the room list on screen came from disk, not from the live socket.
+    /// Groups paints that snapshot first (the way Chats paints cached sessions), so the
+    /// screen opens instead of waiting on the network.
+    private(set) var isViewingCachedRooms = false
     private var hasRoomList = false
     private(set) var roomCapabilities = BotRoomCapabilities(.null)
     /// Rooms pinned or hidden on this phone. The host has no such fields for
@@ -320,6 +324,19 @@ import UIKit
             if connection != saved { needsSignIn = false }
             connection = saved
             guard let saved else { link = .idle; return }
+            // Cache-first, the same contract Chats has: the last good room list is on
+            // screen before the socket is asked anything. The live read below replaces
+            // it and clears the flag; a failed read leaves it in place.
+            if rooms.isEmpty,
+               let cached = BotInboxCache.load(server: server, connectionID: saved.id) {
+                let painted = cached.rooms.compactMap(BotGroupRoom.init).filter { !$0.disbanded }
+                if !painted.isEmpty {
+                    rooms = painted
+                    roomCapabilities = BotRoomCapabilities(cached.capabilities)
+                    hasRoomList = true
+                    isViewingCachedRooms = true
+                }
+            }
             if seen.isEmpty { seen = unread.load(connectionID: saved.id) }
             if roomFlags == BotRoomOrganizeStore.Flags() { roomFlags = roomStore.load(connectionID: saved.id) }
             if sectionOrder.isEmpty { sectionOrder = sectionOrderStore.load(server: server, connectionID: saved.id) }
@@ -445,7 +462,10 @@ import UIKit
     /// True until the first roster lands: the inbox shows a skeleton instead of a
     /// connection message while it connects, or quietly retries, with nothing to show.
     var isLoadingRoster: Bool {
-        connection != nil && profiles.isEmpty && errorMessage == nil && routeAdvice == nil && link != .live
+        // A painted room list is content, not a placeholder: without the rooms check the
+        // Groups scope showed skeletons over the cache it had just drawn.
+        connection != nil && profiles.isEmpty && rooms.isEmpty
+            && errorMessage == nil && routeAdvice == nil && link != .live
     }
 
     func mayEdit(_ profile: BotProfile) -> Bool { link == .live && !editing.contains(profile.id) }
@@ -803,13 +823,18 @@ import UIKit
             guard wire === client, !Task.isCancelled else { return }
             let capabilities = BotRoomCapabilities(value)
             roomCapabilities = capabilities
-            guard capabilities.enabled else { rooms = []; hasRoomList = true; return }
+            guard capabilities.enabled else {
+                rooms = []; hasRoomList = true; isViewingCachedRooms = false
+                return
+            }
             var found: [BotGroupRoom] = []
+            var raw: [BotJSON] = []
             var offset = 0
             while true {
                 let page = try await client.call(.groupsList(offset: offset))
                 guard wire === client, !Task.isCancelled else { return }
                 guard let rows = page["rooms"].list else { throw BotFailure.unsupported }
+                raw += rows
                 found += rows.compactMap(BotGroupRoom.init).filter { !$0.disbanded }
                 guard let next = page["next_offset"].integer else { break }
                 guard next > offset else { throw BotFailure.unsupported }
@@ -817,6 +842,12 @@ import UIKit
             }
             var ids = Set<String>()
             rooms = found.filter { ids.insert($0.id).inserted }; hasRoomList = true
+            // The live list replaces the painted snapshot, so the next launch and this
+            // screen agree; the flag goes back to "live" only after rows have arrived.
+            isViewingCachedRooms = false
+            if let connectionID = connection?.id {
+                BotInboxCache.save(rooms: raw, capabilities: value, server: server, connectionID: connectionID)
+            }
             let pruned = BotRoomOrganizeStore.Flags(pinned: roomFlags.pinned.intersection(ids),
                                                    hidden: roomFlags.hidden.intersection(ids))
             if pruned != roomFlags { roomFlags = pruned; persistRoomFlags() }
@@ -825,7 +856,14 @@ import UIKit
             }
         } catch {
             guard wire === client, !Task.isCancelled else { return }
-            rooms = []; hasRoomList = false; roomCapabilities = BotRoomCapabilities(.null)
+            // A failed read must not erase a list the owner can still use: keep the
+            // painted snapshot and let the banner say it is not live.
+            if !rooms.isEmpty {
+                hasRoomList = true
+                isViewingCachedRooms = true
+            } else {
+                rooms = []; hasRoomList = false; roomCapabilities = BotRoomCapabilities(.null)
+            }
             // Method absence is the expected gate on older Hermes hosts.
             if let failure = error as? BotRoomFailure, failure.code != -32601 {
                 notice = failure.localizedDescription

@@ -1,3 +1,16 @@
+## 4.3.9 — Groups opens from the last saved list
+
+- **The room list is painted from disk before the socket answers**, the same contract Chats
+  has had: the previous `groups.list` snapshot is drawn at once and replaced by the live
+  read. While it is a snapshot, a banner says “Showing the last saved list”.
+- **A failed read no longer empties the screen.** The painted list stays and the banner
+  appears; before, one failed `groups.list` replaced a usable list with nothing.
+- **Skeletons no longer cover the cache.** `isLoadingRoster` treated “no bots” as “nothing
+  to show”, so the Groups scope drew placeholder rows over the rooms it had just painted.
+- The snapshot stores the raw `groups.list` payloads and is parsed by the same initializer
+  as the wire, keyed by server and connection, so a cache cannot invent a shape the server
+  does not use.
+
 ## 4.3.8 — the layout you set is the layout you get
 
 - **Reorder applies immediately.** Both lists now read their order through `@AppStorage`, a

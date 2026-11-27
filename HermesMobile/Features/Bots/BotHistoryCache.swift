@@ -461,3 +461,56 @@ private extension JSONValue {
         }
     }
 }
+
+/// The room list painted from disk before the socket answers, so Groups opens as fast as
+/// Chats: the list is drawn from the last successful `groups.list` and replaced when the
+/// live read lands. Raw `BotJSON` rows are stored rather than a decoded model, so the
+/// cached render is parsed by exactly the same initializer as the served one — a cache
+/// can never invent a shape the wire does not use.
+struct BotInboxCache: Sendable {
+    struct Snapshot: Codable, Sendable {
+        let rooms: [BotJSON]
+        let capabilities: BotJSON
+        let savedAt: Date
+    }
+
+    enum StoreError: Error { case noDirectory }
+
+    static func load(server: URL, connectionID: UUID) -> Snapshot? {
+        guard let url = fileURL(server: server, connectionID: connectionID),
+              let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data)
+        else { return nil }
+        return snapshot
+    }
+
+    static func save(rooms: [BotJSON], capabilities: BotJSON,
+                     server: URL, connectionID: UUID) {
+        guard let url = fileURL(server: server, connectionID: connectionID) else { return }
+        // A room list that failed to load must not overwrite a good snapshot with nothing.
+        guard !rooms.isEmpty else { return }
+        let snapshot = Snapshot(rooms: rooms, capabilities: capabilities, savedAt: Date())
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            // The cache is an optimisation: a failed write leaves the screen on the live
+            // path, which is exactly what happens without this file at all.
+        }
+    }
+
+    static func clear(server: URL, connectionID: UUID) {
+        guard let url = fileURL(server: server, connectionID: connectionID) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private static func fileURL(server: URL, connectionID: UUID) -> URL? {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                  in: .userDomainMask).first else { return nil }
+        let key = BotHistoryCache.Scope.key(server)
+        return base.appendingPathComponent("BotInboxCache", isDirectory: true)
+            .appendingPathComponent("\(key)-\(connectionID.uuidString).json")
+    }
+}
