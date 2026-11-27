@@ -95,7 +95,8 @@ struct SessionNavigationState: Equatable {
     mutating func restoreIfNeeded(
         from sessions: [SessionSummary],
         clearsMissingSelection: Bool = true,
-        pendingDeepLinkedSessionID: String? = nil
+        pendingDeepLinkedSessionID: String? = nil,
+        activeProfileName: String? = nil
     ) {
         guard destination == nil,
               deepLinkedSessionLoadID == nil,
@@ -109,6 +110,23 @@ struct SessionNavigationState: Equatable {
             if clearsMissingSelection {
                 self.lastSelectedSessionID = nil
             }
+            return
+        }
+
+        // Never restore a session pinned to a different profile than the server's
+        // active one. Otherwise opening the app throws the user into a session
+        // under @administrator (or any other profile) while the server expects
+        // @default — and there is no visible way back.
+        //
+        // If we don't know the active profile (loadActiveProfile failed, e.g. the
+        // dashboard token isn't configured yet), don't restore anything: show the
+        // session list and let the user pick, rather than silently opening a
+        // session under the wrong profile.
+        guard let activeProfileName else { return }
+
+        if let sessionProfile = session.profile,
+           sessionProfile != activeProfileName
+        {
             return
         }
 

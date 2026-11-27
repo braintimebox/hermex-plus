@@ -1732,7 +1732,8 @@ struct SessionListView: View {
         navigationState.restoreIfNeeded(
             from: viewModel.sessions,
             clearsMissingSelection: viewModel.sessionLoadError == nil,
-            pendingDeepLinkedSessionID: pendingDeepLinkedSessionID
+            pendingDeepLinkedSessionID: pendingDeepLinkedSessionID,
+            activeProfileName: viewModel.activeProfileName
         )
         persistLastSelectedSession()
     }
