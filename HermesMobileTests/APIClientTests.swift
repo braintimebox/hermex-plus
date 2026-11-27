@@ -237,6 +237,11 @@ final class MockAuthAPIClient: AuthAPIClient, @unchecked Sendable {
         return loginResponse
     }
 
+    func dashboardLogin(username: String, password: String) async throws -> LoginResponse {
+        loginPasswords.append(password)
+        return loginResponse
+    }
+
     func logout() async throws -> LoginResponse {
         logoutCallCount += 1
         switch logoutBehavior {
