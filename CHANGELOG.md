@@ -1,3 +1,18 @@
+## 4.3.8 — the layout you set is the layout you get
+
+- **Reorder applies immediately.** Both lists now read their order through `@AppStorage`, a
+  real SwiftUI dependency; a plain `UserDefaults` read inside a function left the change
+  invisible until relaunch. The dock had a second cause: it drew
+  `allCases.filter(available)` and only checked membership, so the stored order was never
+  drawn at all.
+- **“Session list” is now “Main page rows”.**
+- **Rename any entry.** A Rename section gives every dock section and every row its own
+  field; an empty field restores the built-in name. Dock and row labels are separate keys,
+  so “Kanban” in the dock and in the list can read differently.
+- **Your own rows.** Title plus link, added and deleted on the same screen, drawn under the
+  built-in rows. A row whose link does not parse stays in the editor and is not drawn: the
+  list never carries a dead button.
+
 ## 4.3.7 — the dock and the main page are yours to lay out
 
 - **Dock customisation.** Settings → Main Page → “Dock & order”: every section can be

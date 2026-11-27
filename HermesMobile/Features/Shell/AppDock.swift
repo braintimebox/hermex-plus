@@ -55,12 +55,20 @@ struct DockHeightKey: PreferenceKey {
 
 struct AppDock: View {
     @Binding var selection: AppTab
-    /// Sections that exist right now: Bots behind its gate, Kanban behind its flag.
+    /// Sections that exist right now, in the order the owner put them in.
     let available: [AppTab]
+    @AppStorage(NavigationPreferences.titlesKey) private var titlesRaw = ""
+
+    private func title(for tab: AppTab) -> String {
+        NavigationPreferences.titles(from: titlesRaw)["dock.\(tab.rawValue)"] ?? tab.title
+    }
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(AppTab.allCases.filter(available.contains)) { tab in
+            // `available` carries the owner's order. The old shape — `allCases.filter(
+            // available.contains)` — iterated the enum and only checked membership, so a
+            // reorder was stored and never drawn.
+            ForEach(available) { tab in
                 Button {
                     selection = tab
                 } label: {
@@ -68,7 +76,7 @@ struct AppDock: View {
                         Image(systemName: tab.systemImage)
                             .font(.system(size: 20, weight: selection == tab ? .semibold : .regular))
                             .frame(height: 24)
-                        Text(tab.title)
+                        Text(title(for: tab))
                             .font(.caption2)
                             .lineLimit(1)
                     }
@@ -78,7 +86,7 @@ struct AppDock: View {
                     .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text(tab.title))
+                .accessibilityLabel(Text(title(for: tab)))
                 .accessibilityAddTraits(selection == tab ? [.isButton, .isSelected] : .isButton)
             }
         }

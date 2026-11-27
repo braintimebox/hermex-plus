@@ -112,6 +112,11 @@ struct SessionSidebarUtilityRows: View {
     private static let rowSpacing: CGFloat = 2
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Observed keys: a reorder or a new row in Settings must redraw this list at once.
+    @AppStorage(NavigationPreferences.sidebarOrderKey) private var sidebarOrderRaw = ""
+    @AppStorage(NavigationPreferences.customRowsKey) private var customRowsRaw = ""
+    @AppStorage(NavigationPreferences.titlesKey) private var titlesRaw = ""
+    @Environment(\.openURL) private var openURL
     let viewModel: SessionListViewModel
     let topPadding: CGFloat
     let automatedVisibility: AutomatedSessionVisibility
@@ -133,7 +138,7 @@ struct SessionSidebarUtilityRows: View {
     // driven by a value-based .animation on the List in SessionListView, which
     // works even though the disclosure booleans are @AppStorage-backed.
     var body: some View {
-        if sectionVisibility.showsAnyUtilityLink {
+        if sectionVisibility.showsAnyUtilityLink || !NavigationPreferences.customRows(from: customRowsRaw).isEmpty {
             utilityLinks
                 .padding(.top, topPadding)
                 .sessionsScreenListRow()
@@ -187,9 +192,17 @@ struct SessionSidebarUtilityRows: View {
     private var utilityLinks: some View {
         // Manual layout: the owner's order and switches, not the app's guess. The rows
         // are the same views as before — only the sequence comes from the stored order.
+        // Both keys are @AppStorage, so a change in Settings redraws this list at once;
+        // reading UserDefaults through a function left the reorder invisible until relaunch.
         VStack(alignment: .leading, spacing: Self.rowSpacing) {
-            ForEach(NavigationPreferences.sidebarOrder().filter { isRowVisible($0) }) { row in
+            ForEach(NavigationPreferences.sidebarOrder(from: sidebarOrderRaw).filter { isRowVisible($0) }) { row in
                 utilityRow(row)
+            }
+
+            ForEach(NavigationPreferences.customRows(from: customRowsRaw)) { row in
+                SidebarSystemNavButton(title: row.title, systemImage: row.systemImage) {
+                    if let url = row.url { openURL(url) }
+                }
             }
         }
         .padding(.horizontal, 24)
@@ -206,31 +219,37 @@ struct SessionSidebarUtilityRows: View {
         }
     }
 
+    /// The owner's label if they typed one, else the built-in name. Same key shape the
+    /// dock uses, so one screen renames both.
+    private func title(_ row: NavigationPreferences.SidebarRow, fallback: String) -> String {
+        NavigationPreferences.titles(from: titlesRaw)["row.\(row.rawValue)"] ?? fallback
+    }
+
     @ViewBuilder
     private func utilityRow(_ row: NavigationPreferences.SidebarRow) -> some View {
         switch row {
         case .tasks:
-            SidebarNavButton(title: String(localized: "Tasks"), assetImage: "LucideCalendarClock") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Tasks")), assetImage: "LucideCalendarClock") {
                 openDestination(.tasks)
             }
         case .kanban:
-            SidebarNavButton(title: String(localized: "Kanban"), assetImage: "LucideColumns3") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Kanban")), assetImage: "LucideColumns3") {
                 openDestination(.kanban)
             }
         case .skills:
-            SidebarNavButton(title: String(localized: "Skills"), assetImage: "LucideHammer") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Skills")), assetImage: "LucideHammer") {
                 openDestination(.skills)
             }
         case .plugins:
-            SidebarNavButton(title: String(localized: "Plugins / Hooks"), assetImage: "LucidePuzzle") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Plugins / Hooks")), assetImage: "LucidePuzzle") {
                 openDestination(.pluginsHooks)
             }
         case .memory:
-            SidebarNavButton(title: String(localized: "Memory"), assetImage: "LucideBrain") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Memory")), assetImage: "LucideBrain") {
                 openDestination(.memory)
             }
         case .usage:
-            SidebarNavButton(title: String(localized: "Usage"), assetImage: "LucideChartColumnIncreasing") {
+            SidebarNavButton(title: title(row, fallback: String(localized: "Usage")), assetImage: "LucideChartColumnIncreasing") {
                 openDestination(.insights)
             }
         case .saved:
@@ -242,7 +261,7 @@ struct SessionSidebarUtilityRows: View {
                         .frame(width: 28)
                         .accessibilityHidden(true)
 
-                    Text("Saved")
+                    Text(title(row, fallback: "Saved"))
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -253,7 +272,7 @@ struct SessionSidebarUtilityRows: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Saved")
+            .accessibilityLabel(title(row, fallback: "Saved"))
         }
     }
 
@@ -1097,6 +1116,38 @@ struct SidebarNavButton: View {
         HapticButton(action: action) {
             HStack(spacing: 18) {
                 SidebarUtilityIcon(assetImage: assetImage)
+
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+}
+
+/// A row the owner added themselves: an SF Symbol and a link out. Kept apart from
+/// `SidebarNavButton` because that one draws asset icons from the bundled set, and an
+/// owner-typed row has no asset to point at.
+struct SidebarSystemNavButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        HapticButton(action: action) {
+            HStack(spacing: 18) {
+                Image(systemName: systemImage)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
 
                 Text(title)
                     .font(.body.weight(.semibold))

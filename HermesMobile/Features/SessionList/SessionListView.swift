@@ -551,12 +551,17 @@ struct SessionListView: View {
         return true
     }
 
+    /// Observed, not read through a function: a plain `UserDefaults` read is invisible to
+    /// SwiftUI, so reordering in Settings left the dock unchanged until relaunch. The
+    /// @AppStorage wrapper makes the order a real dependency of this view.
+    @AppStorage(NavigationPreferences.dockOrderKey) private var dockOrderRaw = ""
+
     /// The dock's composition is the owner's, not the app's: the stored order decides
     /// which sections appear and in what sequence. A section whose feature is off is
     /// dropped here (its editor row says why), so the dock never carries a dead button.
     private var availableTabs: [AppTab] {
         NavigationPreferences
-            .availableSections(botModeEnabled: isBotModeEnabled, kanbanEnabled: showsKanbanSection)
+            .availableSections(from: dockOrderRaw, botModeEnabled: isBotModeEnabled, kanbanEnabled: showsKanbanSection)
             .map(\.tab)
     }
 

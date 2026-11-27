@@ -945,11 +945,14 @@ enum NavigationPreferences {
     /// The pre-customisation order: what an install that never opened the editor sees.
     static let defaultDockOrder: [DockSection] = [.groups, .bots, .chats, .kanban, .settings]
 
-    static func dockOrder(in defaults: UserDefaults = .standard) -> [DockSection] {
-        guard let raw = defaults.string(forKey: dockOrderKey) else { return defaultDockOrder }
+    static func dockOrder(from raw: String) -> [DockSection] {
         let stored = raw.split(separator: ",").compactMap { DockSection(rawValue: String($0)) }
         // An empty or fully unknown value must not leave the app without a dock.
         return stored.isEmpty ? defaultDockOrder : stored
+    }
+
+    static func dockOrder(in defaults: UserDefaults = .standard) -> [DockSection] {
+        dockOrder(from: defaults.string(forKey: dockOrderKey) ?? "")
     }
 
     static func setDockOrder(_ order: [DockSection], in defaults: UserDefaults = .standard) {
@@ -960,11 +963,11 @@ enum NavigationPreferences {
     /// switched off is dropped, so the dock never carries a button that opens nothing —
     /// that was the dead Groups tab. Chats is the floor: at least one section stays.
     static func availableSections(
-        in defaults: UserDefaults = .standard,
+        from raw: String,
         botModeEnabled: Bool,
         kanbanEnabled: Bool
     ) -> [DockSection] {
-        let usable = dockOrder(in: defaults).filter { section in
+        let usable = dockOrder(from: raw).filter { section in
             switch section {
             case .bots: botModeEnabled
             case .kanban: kanbanEnabled
@@ -972,6 +975,18 @@ enum NavigationPreferences {
             }
         }
         return usable.isEmpty ? [.chats] : usable
+    }
+
+    static func availableSections(
+        in defaults: UserDefaults = .standard,
+        botModeEnabled: Bool,
+        kanbanEnabled: Bool
+    ) -> [DockSection] {
+        availableSections(
+            from: defaults.string(forKey: dockOrderKey) ?? "",
+            botModeEnabled: botModeEnabled,
+            kanbanEnabled: kanbanEnabled
+        )
     }
 
     // MARK: Session-list utility rows
@@ -1000,13 +1015,83 @@ enum NavigationPreferences {
         .tasks, .kanban, .skills, .plugins, .memory, .usage, .saved
     ]
 
-    static func sidebarOrder(in defaults: UserDefaults = .standard) -> [SidebarRow] {
-        guard let raw = defaults.string(forKey: sidebarOrderKey) else { return defaultSidebarOrder }
+    static func sidebarOrder(from raw: String) -> [SidebarRow] {
         let stored = raw.split(separator: ",").compactMap { SidebarRow(rawValue: String($0)) }
         return stored.isEmpty ? defaultSidebarOrder : stored
     }
 
+    static func sidebarOrder(in defaults: UserDefaults = .standard) -> [SidebarRow] {
+        sidebarOrder(from: defaults.string(forKey: sidebarOrderKey) ?? "")
+    }
+
     static func setSidebarOrder(_ order: [SidebarRow], in defaults: UserDefaults = .standard) {
         defaults.set(order.map(\.rawValue).joined(separator: ","), forKey: sidebarOrderKey)
+    }
+}
+
+// MARK: - Owner-named and owner-added entries
+
+extension NavigationPreferences {
+    /// Owner-typed labels, JSON so one @AppStorage can observe them. Keys are
+    /// "dock.<section>" and "row.<row>", so a section and a row that share a name
+    /// ("kanban") cannot overwrite each other's label.
+    static let titlesKey = "navigation.titles"
+
+    static func titles(from raw: String) -> [String: String] {
+        guard let data = raw.data(using: .utf8),
+              let map = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return map.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    static func encode(titles: [String: String]) -> String {
+        guard let data = try? JSONEncoder().encode(titles),
+              let text = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return text
+    }
+
+    struct CustomRow: Codable, Identifiable, Hashable {
+        var id: UUID
+        var title: String
+        var systemImage: String
+        var urlString: String
+
+        init(id: UUID = UUID(), title: String, systemImage: String = "link", urlString: String) {
+            self.id = id
+            self.title = title
+            self.systemImage = systemImage
+            self.urlString = urlString
+        }
+
+        var url: URL? {
+            let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme != nil else { return nil }
+            return url
+        }
+    }
+
+    static func customRows(from raw: String) -> [CustomRow] {
+        guard let data = raw.data(using: .utf8),
+              let rows = try? JSONDecoder().decode([CustomRow].self, from: data)
+        else { return [] }
+        // A row without a usable URL would be a dead button, which is the one thing this
+        // screen must not produce; keep it in the editor, do not draw it on the list.
+        return rows.filter { $0.url != nil }
+    }
+
+    /// Every stored row, including the ones with a broken link, for the editor.
+    static func allCustomRows(from raw: String) -> [CustomRow] {
+        guard let data = raw.data(using: .utf8),
+              let rows = try? JSONDecoder().decode([CustomRow].self, from: data)
+        else { return [] }
+        return rows
+    }
+
+    static func encode(_ rows: [CustomRow]) -> String {
+        guard let data = try? JSONEncoder().encode(rows),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
     }
 }

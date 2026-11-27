@@ -2588,20 +2588,31 @@ struct AddServerView: View {
 struct NavigationCustomizationView: View {
     @AppStorage(BotModeGate.isEnabledKey) private var botModeEnabled = false
     @AppStorage(SectionVisibilitySettings.kanbanKey) private var kanbanEnabled = true
+    @AppStorage(NavigationPreferences.titlesKey) private var titlesRaw = ""
+    @AppStorage(NavigationPreferences.customRowsKey) private var customRowsRaw = ""
 
     @State private var dock: [NavigationPreferences.DockSection] = NavigationPreferences.dockOrder()
     @State private var sidebar: [NavigationPreferences.SidebarRow] = NavigationPreferences.sidebarOrder()
+    @State private var customRows: [NavigationPreferences.CustomRow] = []
 
     var body: some View {
         List {
             dockSection
             sidebarSection
+            renameSection
+            customRowsSection
         }
         .navigationTitle("Navigation")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
         .onChange(of: dock) { _, order in NavigationPreferences.setDockOrder(order) }
         .onChange(of: sidebar) { _, order in NavigationPreferences.setSidebarOrder(order) }
+        .onChange(of: customRows) { _, rows in customRowsRaw = NavigationPreferences.encode(rows) }
+        .onAppear {
+            dock = NavigationPreferences.dockOrder()
+            sidebar = NavigationPreferences.sidebarOrder()
+            customRows = NavigationPreferences.allCustomRows(from: customRowsRaw)
+        }
     }
 
     // MARK: Dock
@@ -2677,9 +2688,9 @@ struct NavigationCustomizationView: View {
                 }
             }
         } header: {
-            Text("Session list")
+            Text("Main page rows")
         } footer: {
-            Text("These rows sit above the sessions. Swipe a row to take it off the list; drag to reorder. Plugins / Hooks shares the Skills switch, as it always has.")
+            Text("The rows above the sessions. Swipe a row to take it off the list; drag to reorder. Plugins / Hooks shares the Skills switch, as it always has.")
         }
     }
 
@@ -2721,5 +2732,69 @@ struct NavigationCustomizationView: View {
             get: { UserDefaults.standard.object(forKey: key) as? Bool ?? true },
             set: { UserDefaults.standard.set($0, forKey: key) }
         )
+    }
+
+    // MARK: Rename
+
+    private var titles: [String: String] { NavigationPreferences.titles(from: titlesRaw) }
+
+    /// Empty text means "use the built-in name", so clearing a field restores the default
+    /// instead of leaving a nameless row.
+    private func titleBinding(_ key: String) -> Binding<String> {
+        Binding(
+            get: { titles[key] ?? "" },
+            set: { newValue in
+                var map = titles
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { map.removeValue(forKey: key) } else { map[key] = trimmed }
+                titlesRaw = NavigationPreferences.encode(titles: map)
+            }
+        )
+    }
+
+    private var renameSection: some View {
+        Section {
+            ForEach(NavigationPreferences.DockSection.allCases) { section in
+                TextField(section.title, text: titleBinding("dock.\(section.rawValue)"))
+                    .textInputAutocapitalization(.words)
+            }
+            ForEach(NavigationPreferences.SidebarRow.allCases) { row in
+                TextField(row.title, text: titleBinding("row.\(row.rawValue)"))
+                    .textInputAutocapitalization(.words)
+            }
+        } header: {
+            Text("Rename")
+        } footer: {
+            Text("Leave a field empty to keep the built-in name. Dock and row labels are separate, so “Kanban” in the dock and in the list can read differently.")
+        }
+    }
+
+    // MARK: Owner-added rows
+
+    private var customRowsSection: some View {
+        Section {
+            ForEach($customRows) { $row in
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Name", text: $row.title)
+                    TextField("https://…", text: $row.urlString)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.footnote)
+                        .foregroundStyle(row.url == nil ? Color.red : Color.secondary)
+                }
+            }
+            .onDelete { offsets in customRows.remove(atOffsets: offsets) }
+
+            Button {
+                customRows.append(NavigationPreferences.CustomRow(title: "", urlString: "https://"))
+            } label: {
+                Label("Add row", systemImage: "plus.circle")
+            }
+        } header: {
+            Text("Your rows")
+        } footer: {
+            Text("Your own links under the built-in rows. A row without a working link is kept here but not drawn on the list — the list never carries a dead button.")
+        }
     }
 }
