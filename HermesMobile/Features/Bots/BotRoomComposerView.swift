@@ -152,16 +152,30 @@ struct BotRoomComposerView: View {
 
     private func schedule() {
         let text = reader.draft(in: threadID)
+        let scheduledAttachments = attachments.map { upload in
+            ScheduledMessageAttachment(
+                name: upload.name,
+                path: upload.sourceURL?.path ?? "",
+                mime: upload.mime,
+                size: upload.byteCount,
+                isImage: upload.kind == "image",
+                draftFileName: nil,
+                uploadID: upload.uploadID,
+                attachmentID: nil
+            )
+        }
         RoomScheduleQueue.enqueue(
             room: reader.key,
             roomName: reader.room.name,
             threadID: threadID,
             text: text,
+            attachments: scheduledAttachments,
             dueAt: scheduledAt,
             serverURLString: reader.key.server.absoluteString,
             in: modelContext
         )
         reader.setDraft("", in: threadID)
+        attachments = []
         isScheduling = false
         ChatHaptics.autocompleteAccepted(isEnabled: isHapticsEnabled)
     }

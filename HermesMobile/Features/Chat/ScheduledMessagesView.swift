@@ -245,7 +245,8 @@ extension PendingScheduledMessage {
         scheduledAt: Double,
         sessionId: String,
         sessionTitle: String? = nil,
-        serverURLString: String
+        serverURLString: String,
+        attachments: [ScheduledMessageAttachment] = []
     ) async {
         guard !serverURLString.isEmpty,
               let serverURL = URL(string: serverURLString) else { return }
@@ -261,6 +262,9 @@ extension PendingScheduledMessage {
         ]
         if let sessionTitle, !sessionTitle.isEmpty {
             payload["sessionTitle"] = sessionTitle
+        }
+        if !attachments.isEmpty {
+            payload["attachments"] = attachments.map { $0.toJSONValue() }
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
         request.timeoutInterval = 10
@@ -415,6 +419,8 @@ fileprivate struct EditScheduledMessageSheet: View {
     @State private var sessions: [SessionListItem] = []
     @State private var showSessionPicker = false
     @State private var pickedSession: SessionListItem?
+    @State private var attachments: [ScheduledMessageAttachment] = []
+    @State private var isPickingAttachments = false
 
     var body: some View {
         NavigationStack {
@@ -462,6 +468,45 @@ fileprivate struct EditScheduledMessageSheet: View {
                     .datePickerStyle(.wheel)
                     .labelsHidden()
                 }
+
+                if !attachments.isEmpty {
+                    Section("Attachments") {
+                        ForEach(attachments) { attachment in
+                            HStack {
+                                Image(systemName: attachment.isImage ? "photo" : "doc")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(attachment.name)
+                                        .font(.body)
+                                        .lineLimit(1)
+                                    Text(attachment.mime)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button {
+                                    attachments.removeAll { $0.name == attachment.name && $0.mime == attachment.mime }
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    isPickingAttachments = true
+                } label: {
+                    HStack {
+                        Image(systemName: "paperclip")
+                            .font(.body)
+                        Text("Add Attachment")
+                            .font(.body)
+                    }
+                    .foregroundStyle(.blue)
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Scheduled Message")
@@ -481,11 +526,26 @@ fileprivate struct EditScheduledMessageSheet: View {
                     destinationIsExistingChat = true
                 }
             }
+            .sheet(isPresented: $isPickingAttachments) {
+                roomAttachmentPicker(isPresented: $isPickingAttachments) { urls in
+                    guard !urls.isEmpty else { return }
+                    for url in urls {
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        do {
+                            try attachmentFrom(url: url)
+                        } catch {
+                            print("Add attachment failed: \(error)")
+                        }
+                    }
+                }
+            }
             .onAppear {
                 text = message.draftText
                 scheduledAt = message.scheduledAt
                 sessionTitle = message.sessionTitle ?? ""
                 destinationIsExistingChat = !message.sessionId.isEmpty
+                attachments = message.attachments
             }
             .task {
                 await loadSessions()
@@ -515,6 +575,28 @@ fileprivate struct EditScheduledMessageSheet: View {
                 lastMessagePreview: nil
             )
         }
+    }
+
+    private func attachmentFrom(url: URL) throws {
+        let name = url.lastPathComponent
+        let data: Data
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            data = try handle.read(upToCount: 15_000_000) ?? Data()
+        } catch {
+            throw RoomAttachmentFailure.unreadable(name: name)
+        }
+        let mime = RoomAttachmentUpload.mime(for: url)
+        let attachment = ScheduledMessageAttachment(
+            name: name,
+            path: url.path,
+            mime: mime,
+            size: data.count,
+            isImage: RoomAttachmentUpload.kind(forMIME: mime) == "image",
+            draftFileName: nil
+        )
+        attachments.append(attachment)
     }
 
     private func save() {
@@ -550,6 +632,7 @@ fileprivate struct EditScheduledMessageSheet: View {
         message.scheduledAt = scheduledAt
         message.sessionId = sid
         message.sessionTitle = title
+        message.setAttachments(attachments)
         try? modelContext.save()
 
         let key = message.scheduleKey
@@ -562,7 +645,8 @@ fileprivate struct EditScheduledMessageSheet: View {
                 scheduledAt: ts,
                 sessionId: sid,
                 sessionTitle: title,
-                serverURLString: sURL
+                serverURLString: sURL,
+                attachments: attachments
             )
         }
         onSaved()
