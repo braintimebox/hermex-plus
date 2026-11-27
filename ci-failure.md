@@ -1,9 +1,8 @@
 # Compile failure
 
-Run: https://github.com/braintimebox/hermex-plus/actions/runs/45972353077
-Commit: 530dab90b703474719f4bdb2ac9fa8f50db2eeaf
+Run: https://github.com/braintimebox/hermex-plus/actions/runs/46048971320
+Commit: 1901a105a7edc748c7537fb3f1e676c16a6b166a
 
 ```
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/SessionList/SessionListComponents.swift:117:39: error: type 'NavigationPreferences' has no member 'customRowsKey'
-/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Settings/SettingsView.swift:2592:39: error: type 'NavigationPreferences' has no member 'customRowsKey'
+/Users/runner/work/hermex-plus/hermex-plus/HermesMobile/Features/Chat/ScheduledMessagesView.swift:474:25: error: referencing initializer 'init(_:content:)' on 'ForEach' requires that 'ScheduledMessageAttachment' conform to 'Identifiable'
 ```
