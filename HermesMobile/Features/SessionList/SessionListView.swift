@@ -38,6 +38,11 @@ struct SessionListView: View {
     @State private var showsBots = false
     /// Groups opens the inbox filtered to rooms; Bots opens it filtered to bots.
     @State private var botsScope: BotInbox.Scope = .bots
+    /// True while a bot chat or a room is open inside the bots stack. The dock stays on
+    /// the section roots (Groups/Bots lists) and leaves only for a conversation.
+    @State private var botsInConversation = false
+    /// The dock's measured height, so the floating button clears it exactly.
+    @State private var dockHeight: CGFloat = 0
     @State private var isSearchVisible = false
     @State private var isSearchFocused = false
     @State private var searchChromeIsExpanded = false
@@ -126,6 +131,18 @@ struct SessionListView: View {
 
     var body: some View {
         navigationContainer
+            // The floating New Chat button sits on the container, above the dock, by the
+            // dock's own measured height. It used to live inside the list, where the
+            // full-screen background made its 16 pt count from the screen edge and the
+            // dock clipped it (owner screenshot, 4.3.2).
+            .overlay(alignment: .bottomTrailing) {
+                if !isSearchingSessions, !showsBots {
+                    newSessionButton
+                        .padding(.trailing, 20)
+                        .padding(.bottom, (showsAppDock ? dockHeight : 0) + 16)
+                }
+            }
+            .onPreferenceChange(DockHeightKey.self) { dockHeight = $0 }
             .onChange(of: pendingSharedImport?.reservationID) { if pendingSharedImport != nil { showsBots = false } }
             .onChange(of: isBotModeEnabled) { if !isBotModeEnabled { showsBots = false } }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -522,10 +539,10 @@ struct SessionListView: View {
         BotModeGate.showsBotsInbox(isEnabled: isBotModeEnabled, userPickedBots: showsBots)
     }
 
-    /// The dock is drawn only where it is the navigation: the Chats root and the utility
-    /// sections (Kanban, Settings). Not in the bots branch, not inside a conversation.
+    /// The dock is drawn on every section root — Chats, Groups, Bots, Kanban, Settings —
+    /// and leaves only for a conversation, where its height would fight the composer.
     private var showsAppDock: Bool {
-        guard !showsBots else { return false }
+        if botsInConversation { return false }
         if case .session = navigationState.destination { return false }
         if case .newChat = navigationState.destination { return false }
         return true
@@ -547,7 +564,7 @@ struct SessionListView: View {
                 // The ported inbox owns its own navigation, but it is this stack's root, so
                 // iOS draws no back chevron for it and the picker that got us here lives on
                 // the other side of the switch. The leading button it renders calls this.
-                BotsInboxView(server: server, scope: botsScope, onClose: { showsBots = false })
+                BotsInboxView(server: server, scope: botsScope, isInConversation: $botsInConversation, onClose: { showsBots = false })
             }
         } else if horizontalSizeClass == .regular {
             NavigationSplitView {
@@ -586,13 +603,6 @@ struct SessionListView: View {
                     // return to the foreground; the callback decides whether a staged
                     // share still has its destination dialog.
                     .background(SceneActivationObserver { reaskShareDestinationIfActive() })
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if !isSearchingSessions {
-                    newSessionButton
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 16)
-                }
             }
     }
 

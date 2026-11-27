@@ -627,7 +627,14 @@ enum Endpoint {
         case let .kanbanUnblockCard(request):
             url = kanbanTaskURL(relativeTo: baseURL, cardID: request.cardID, suffix: "/unblock")
         default:
-            url = baseURL.appending(path: path)
+            // Kanban is a dashboard plugin, mounted under `<host>/dash/api/plugins/kanban`.
+            // The app's base URL is the Hermes/webui root, where the same path answers with
+            // the SPA's HTML instead of JSON — the decode then fails and the screen looks
+            // dead. Unless the base already carries the proxy prefix, ask for the dashboard.
+            let mounted = path.hasPrefix("api/plugins/kanban")
+                ? Self.kanbanMount(in: baseURL) + path
+                : path
+            url = baseURL.appending(path: mounted)
         }
         guard !queryItems.isEmpty else {
             return url
@@ -638,8 +645,14 @@ enum Endpoint {
         return components?.url ?? url
     }
 
+    /// The dashboard's proxy prefix for plugin routes: empty when the base already ends
+    /// in `/dash` (a link that opens the dashboard directly), `dash/` for the plain host.
+    static func kanbanMount(in baseURL: URL) -> String {
+        baseURL.path.contains("/dash") ? "" : "dash/"
+    }
+
     private func kanbanTaskURL(relativeTo baseURL: URL, cardID: String, suffix: String = "") -> URL {
-        let root = baseURL.appending(path: "api/plugins/kanban/tasks")
+        let root = baseURL.appending(path: Self.kanbanMount(in: baseURL) + "api/plugins/kanban/tasks")
         guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false),
               let encodedCardID = cardID.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed)
         else {
@@ -650,7 +663,7 @@ enum Endpoint {
     }
 
     private func kanbanBoardURL(relativeTo baseURL: URL, slug: String, suffix: String = "") -> URL {
-        let root = baseURL.appending(path: "api/plugins/kanban/boards")
+        let root = baseURL.appending(path: Self.kanbanMount(in: baseURL) + "api/plugins/kanban/boards")
         guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false),
               let encodedSlug = slug.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed)
         else {

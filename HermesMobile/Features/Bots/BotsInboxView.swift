@@ -23,6 +23,9 @@ struct BotsInboxHome {
     /// Which slice of the inbox this entry point shows: Groups passes `.rooms`,
     /// Bots passes `.bots`, and the server home leaves it `.all`.
     private let scope: BotInbox.Scope
+    /// Reports whether a bot chat or a room is open, so the section dock hides only for a
+    /// conversation and stays on the Groups/Bots lists.
+    @Binding private var isInConversation: Bool
     /// The bot a deep link named, resolved here because this is where the live roster
     /// is. Cleared once this inbox has settled, whether or not it matched (#554).
     @Binding private var pendingDestination: BotDestination?
@@ -60,10 +63,12 @@ struct BotsInboxHome {
     init(
         server: URL,
         scope: BotInbox.Scope = .all,
+        isInConversation: Binding<Bool> = .constant(false),
         pendingDestination: Binding<BotDestination?> = .constant(nil),
         onClose: (() -> Void)? = nil
     ) where HomeControl == EmptyView {
-        self.init(server: server, scope: scope, pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
+        self.init(server: server, scope: scope, isInConversation: isInConversation,
+                  pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
     }
 
     /// A Hermes server's home. Its sign-in form is reached through Settings there, so
@@ -71,6 +76,7 @@ struct BotsInboxHome {
     init(
         server: URL,
         scope: BotInbox.Scope = .all,
+        isInConversation: Binding<Bool> = .constant(false),
         pendingDestination: Binding<BotDestination?>,
         home: BotsInboxHome?,
         onClose: (() -> Void)? = nil,
@@ -81,6 +87,7 @@ struct BotsInboxHome {
         self.homeControl = homeControl()
         self.onClose = onClose
         self.scope = scope
+        _isInConversation = isInConversation
         _pendingDestination = pendingDestination
         let inbox = BotInbox(server: server)
         inbox.scope = scope
@@ -94,6 +101,7 @@ struct BotsInboxHome {
         homeControl = EmptyView()
         self.onClose = onClose
         scope = inbox.scope
+        _isInConversation = .constant(false)
         _pendingDestination = .constant(nil)
         _inbox = State(initialValue: inbox)
     }
@@ -117,6 +125,12 @@ struct BotsInboxHome {
             .onChange(of: scope) { _, newValue in
                 inbox.scope = newValue
             }
+            // The section dock lives above this view; it must know when a conversation
+            // opens so it can leave the screen to the composer.
+            .onChange(of: selection.profile != nil || selection.room != nil) { _, open in
+                isInConversation = open
+            }
+            .onAppear { isInConversation = selection.profile != nil || selection.room != nil }
         attachPresentations(to: toasted)
     }
 

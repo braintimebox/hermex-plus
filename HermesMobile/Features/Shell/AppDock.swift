@@ -44,6 +44,15 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// It is attached as a bottom safe-area inset rather than drawn over the content, which is
 /// what keeps the composer — itself a bottom inset — above the dock instead of underneath
 /// it.
+/// Reports the dock's own height so a floating control can sit above it instead of
+/// guessing a constant that goes stale when Dynamic Type or the safe area changes.
+struct DockHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct AppDock: View {
     @Binding var selection: AppTab
     /// Sections that exist right now: Bots behind its gate, Kanban behind its flag.
@@ -75,6 +84,11 @@ struct AppDock: View {
         }
         .padding(.horizontal, 4)
         .background(.bar)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: DockHeightKey.self, value: proxy.size.height)
+            }
+        }
         .overlay(alignment: .top) {
             Divider()
         }

@@ -1,3 +1,16 @@
+## 4.3.4 — the dock stays in every section, the button clears it, Kanban finds the dashboard
+
+- **The dock no longer disappears in Groups/Bots.** It is drawn on every section root and
+  leaves only for a conversation — a chat or a room — where its height fought the composer.
+  The bot inbox now reports when a conversation is open, so the dock leaves exactly there.
+- **New Chat sits above the dock by measurement, not by guess.** The dock publishes its own
+  height through a preference; the button pads by that height + 16. Its old 16 pt were
+  measured from the screen edge, which is why the dock clipped it.
+- **Kanban asks the dashboard.** The plugin is mounted at `<host>/dash/api/plugins/kanban/*`;
+  the app asked the webui root, which answers with the SPA's HTML — the decode failed and
+  the screen looked dead. Kanban endpoints now carry the `dash/` mount unless the base
+  address already has it.
+
 ## 4.3.3 — the FAB clears the dock, and the bot composer matches the chat
 
 - **New Chat button no longer clipped by the dock.** The floating button was a sibling
