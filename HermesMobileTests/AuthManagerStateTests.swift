@@ -207,6 +207,7 @@ final class AuthManagerStateTests: XCTestCase {
         )
         await manager.configure(
             serverURLString: "https://a.test",
+            username: "",
             password: "",
             customHeaders: [CustomHeader(name: "X-A", value: "a-token")]
         )
@@ -269,7 +270,7 @@ final class AuthManagerStateTests: XCTestCase {
             clientFactory: { _ in MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false)) },
             serverRegistry: registry
         )
-        await manager.configure(serverURLString: "https://a.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
         let aAccount = try XCTUnwrap(registry.servers.first { $0.id == "https://a.test" })
 
         await manager.removeServer(aAccount)
@@ -347,8 +348,8 @@ final class AuthManagerStateTests: XCTestCase {
             serverRegistry: registry
         )
 
-        await manager.configure(serverURLString: "https://a.test", password: "")
-        await manager.configure(serverURLString: "https://b.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
+        await manager.configure(serverURLString: "https://b.test", username: "", password: "")
 
         XCTAssertEqual(Set(manager.servers.map(\.id)), ["https://a.test", "https://b.test"])
         XCTAssertEqual(manager.activeServerID, "https://b.test")
@@ -362,7 +363,7 @@ final class AuthManagerStateTests: XCTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        let outcome = await manager.addServer(serverURLString: "https://needs-pw.test", password: "")
+        let outcome = await manager.addServer(serverURLString: "https://needs-pw.test", username: "", password: "")
 
         XCTAssertEqual(outcome, .needsPassword)
         XCTAssertEqual(manager.state, .unconfigured)
@@ -377,9 +378,9 @@ final class AuthManagerStateTests: XCTestCase {
             clientFactory: { _ in MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false)) },
             serverRegistry: registry
         )
-        await manager.configure(serverURLString: "https://a.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
 
-        let outcome = await manager.addServer(serverURLString: "https://a.test", password: "")
+        let outcome = await manager.addServer(serverURLString: "https://a.test", username: "", password: "")
 
         XCTAssertEqual(outcome, .failed)
         XCTAssertEqual(manager.lastErrorMessage, "This server is already configured.")
@@ -396,9 +397,9 @@ final class AuthManagerStateTests: XCTestCase {
             probeClientFactory: { _, _ in MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false)) },
             serverRegistry: registry
         )
-        await manager.configure(serverURLString: "https://a.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
 
-        let outcome = await manager.addServer(serverURLString: "https://b.test", password: "")
+        let outcome = await manager.addServer(serverURLString: "https://b.test", username: "", password: "")
 
         XCTAssertEqual(outcome, .added(try XCTUnwrap(URL(string: "https://b.test"))))
         XCTAssertEqual(manager.state, .loggedIn(server: try XCTUnwrap(URL(string: "https://b.test"))))
@@ -423,6 +424,7 @@ final class AuthManagerStateTests: XCTestCase {
         )
         await manager.configure(
             serverURLString: "https://a.test",
+            username: "",
             password: "secret",
             customHeaders: [CustomHeader(name: "X-A", value: "a-token")]
         )
@@ -430,6 +432,7 @@ final class AuthManagerStateTests: XCTestCase {
 
         let outcome = await manager.addServer(
             serverURLString: "https://b.test",
+            username: "",
             password: "wrong",
             customHeaders: [CustomHeader(name: "X-B", value: "b-token")]
         )
@@ -460,7 +463,7 @@ final class AuthManagerStateTests: XCTestCase {
             clientFactory: { _ in MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false)) },
             serverRegistry: registry
         )
-        await manager.configure(serverURLString: "https://a.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
         let aAccount = try XCTUnwrap(registry.servers.first { $0.id == "https://a.test" })
 
         manager.updateServerIdentity(
@@ -492,7 +495,7 @@ final class AuthManagerStateTests: XCTestCase {
             clientFactory: { _ in MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false)) },
             serverRegistry: registry
         )
-        await manager.configure(serverURLString: "https://a.test", password: "")
+        await manager.configure(serverURLString: "https://a.test", username: "", password: "")
 
         guard case .loggedIn = manager.state else {
             XCTFail("Expected loggedIn after configure, got \(manager.state)")
@@ -519,7 +522,7 @@ final class AuthManagerStateTests: XCTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        await manager.configure(serverURLString: serverURLString, password: "secret")
+        await manager.configure(serverURLString: serverURLString, username: "", password: "secret")
 
         guard case .loggedIn = manager.state else {
             XCTFail("Expected loggedIn state after configure, got \(manager.state)")

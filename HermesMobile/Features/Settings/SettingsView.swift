@@ -2423,6 +2423,7 @@ struct AddServerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var serverURLString = ""
+    @State private var username = ""
     @State private var password = ""
     @State private var customHeaders: [CustomHeader] = []
     @State private var needsPassword = false
@@ -2461,6 +2462,14 @@ struct AddServerView: View {
 
                         if needsPassword {
                             SettingsDivider()
+
+                            SettingsTextFieldRow(
+                                title: String(localized: "Username"),
+                                text: $username,
+                                placeholder: String(localized: "Dashboard username"),
+                                autocapitalization: .never,
+                                submitLabel: .next
+                            )
 
                             SettingsTextFieldRow(
                                 title: String(localized: "Password"),
@@ -2551,6 +2560,7 @@ struct AddServerView: View {
         isWorking = true
         let outcome = await authManager.addServer(
             serverURLString: serverURLString,
+            username: username,
             password: password,
             customHeaders: customHeaders
         )

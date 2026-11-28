@@ -376,6 +376,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
 
         await manager.configure(
             serverURLString: "https://proxy.test",
+            username: "",
             password: "",
             customHeaders: [CustomHeader(name: "Authorization", value: "Bearer abc")]
         )
@@ -393,7 +394,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         let client = MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: true, passwordAuthEnabled: false))
         let manager = makeManager(keychain: keychain, store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "secret")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "secret")
 
         XCTAssertEqual(manager.lastErrorMessage, AuthManager.passkeyOnlyMessage)
         XCTAssertEqual(manager.state, .unconfigured)
@@ -415,7 +416,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         ))
         let manager = makeManager(keychain: keychain, store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         XCTAssertNil(manager.lastErrorMessage)
         XCTAssertEqual(client.loginPasswords, [], "There is no credential to send.")
@@ -434,7 +435,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         ))
         let manager = makeManager(keychain: InMemoryKeychainStore(), store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         XCTAssertEqual(
             manager.lastErrorMessage,
@@ -455,7 +456,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         ))
         let manager = makeManager(keychain: InMemoryKeychainStore(), store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         XCTAssertEqual(manager.lastErrorMessage, AuthManager.trustedAuthNotSignedInMessage)
         XCTAssertEqual(manager.state, .unconfigured)
@@ -476,7 +477,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        let outcome = await manager.addServer(serverURLString: "https://example.test", password: "")
+        let outcome = await manager.addServer(serverURLString: "https://example.test", username: "", password: "")
 
         XCTAssertEqual(outcome, .added(try XCTUnwrap(URL(string: "https://example.test"))))
         XCTAssertEqual(client.loginPasswords, [])
@@ -489,7 +490,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         let client = MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: true, loggedIn: false))
         let manager = makeManager(keychain: keychain, store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "secret")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "secret")
 
         XCTAssertEqual(client.loginPasswords, ["secret"])
         XCTAssertEqual(manager.state, .loggedIn(server: try XCTUnwrap(URL(string: "https://example.test"))))
@@ -501,7 +502,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         let client = MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: true, loggedIn: false))
         let manager = makeManager(keychain: keychain, store: CustomHeaderStore(), client: client)
 
-        await manager.configure(serverURLString: "https://example.test", password: "secret")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "secret")
 
         XCTAssertEqual(manager.state, .loggedIn(server: try XCTUnwrap(URL(string: "https://example.test"))))
         XCTAssertNil(keychain.scopedValue(.customHeaders, scope: "https://example.test"))
@@ -518,6 +519,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
 
         await manager.configure(
             serverURLString: "https://proxy.test",
+            username: "",
             password: "",
             customHeaders: [CustomHeader(name: "Authorization", value: "Bearer abc")]
         )
@@ -544,7 +546,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
         )
         // The editor is reachable only while signed in, so establish an active
         // server first; headers then persist under that server's scoped key (#16).
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         manager.updateCustomHeaders([
             CustomHeader(name: "X-Keep", value: "1"),
@@ -568,7 +570,7 @@ final class CustomHeaderAuthManagerTests: XCTestCase {
             store: store,
             client: MockAuthAPIClient(authStatus: AuthStatusResponse(authEnabled: false))
         )
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         // persist:false → live store refresh but no (slow) Keychain write.
         manager.updateCustomHeaders([CustomHeader(name: "X-Live", value: "1")], persist: false)

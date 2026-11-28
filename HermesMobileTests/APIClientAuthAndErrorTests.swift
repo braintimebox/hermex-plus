@@ -44,7 +44,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        await manager.configure(serverURLString: "100.96.12.34:9119", password: "")
+        await manager.configure(serverURLString: "100.96.12.34:9119", username: "", password: "")
 
         let expectedURL = try XCTUnwrap(URL(string: "http://100.96.12.34:9119"))
         XCTAssertEqual(requestedURLs, [expectedURL])
@@ -79,7 +79,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        await manager.configure(serverURLString: "https://example.test", password: "")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "")
 
         XCTAssertEqual(client.loginPasswords, [])
         XCTAssertNil(keychain.savedValues[.serverURL])
@@ -97,7 +97,7 @@ final class APIClientAuthAndErrorTests: APIClientTestCase {
             serverRegistry: ServerRegistry.inMemory()
         )
 
-        await manager.configure(serverURLString: "https://example.test", password: "secret")
+        await manager.configure(serverURLString: "https://example.test", username: "", password: "secret")
 
         let expectedURL = try XCTUnwrap(URL(string: "https://example.test"))
         XCTAssertEqual(client.loginPasswords, ["secret"])

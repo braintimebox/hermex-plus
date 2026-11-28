@@ -19,6 +19,7 @@
     "FileBrowserRow",
     "GitToolbarStatusDot",
     "GitTurnDiffSheet",
+    "LoginRequest",
     "LucideBrainIcon",
     "ModelBreakdownRow",
     "ModelPickerButton",
@@ -171,6 +172,7 @@
     "ToolCallCardView": "superseded by ToolCallLogRowView (ToolCallLogRowView.swift:6) built on the shared TranscriptLogRowView: the tool call is now a dense log row instead of a bordered card.",
     "ToolCallStatusDisplay": "superseded by ToolCallLogRow.Status (ToolCallSummaryFormatter.swift:5) with statusText and ToolCallDetailBodyView.statusText (ToolCallLogRowView.swift:98): the same Completed/Failed/Running verdicts.",
     "TranscriptStatusPill": "superseded by the status glyph slot in TranscriptLogRowView (TranscriptLogRowView.swift:156) drawn by ToolCallLogRowView.statusGlyph (:37): a symbol, not a capsule text pill.",
-    "DashboardLoginRequest": "Removed deliberately in 4.3.12: the dashboard password login was the wrong auth path. The app knows the WebUI password (22 chars), while the dashboard basic-auth password is a different secret (49 chars), so POST /dash/auth/password-login always refused it and /api/profiles and /api/plugins/kanban kept answering 401 no_cookie. Dashboard access now uses the X-Hermes-Session-Token request header, which the server accepts without a cookie or password."
+    "DashboardLoginRequest": "Removed deliberately in 4.3.12: the dashboard password login was the wrong auth path. The app knows the WebUI password (22 chars), while the dashboard basic-auth password is a different secret (49 chars), so POST /dash/auth/password-login always refused it and /api/profiles and /api/plugins/kanban kept answering 401 no_cookie. Dashboard access now uses the X-Hermes-Session-Token request header, which the server accepts without a cookie or password.",
+    "LoginRequest": "Removed in 4.4.0 (direct-Hermes migration): the main client no longer logs in through the legacy webui /api/auth/login (password-only body). It now posts {provider, username, password} to /auth/password-login via DashboardLoginRequest, so the old password-only LoginRequest is dead."
   }
 }

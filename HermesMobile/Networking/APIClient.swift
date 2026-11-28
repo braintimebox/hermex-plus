@@ -80,11 +80,18 @@ actor APIClient {
         try await send(endpoint: .authStatus, method: "GET")
     }
 
-    func login(password: String) async throws -> LoginResponse {
+    /// Discovers how the server authenticates — `GET /api/auth/providers`, public.
+    func authProviders() async throws -> AuthProvidersResponse {
+        try await send(endpoint: .authProviders, method: "GET")
+    }
+
+    /// Signs into the dashboard's password provider (`POST /auth/password-login`).
+    /// This is the direct Hermes auth path, not the legacy webui `/api/auth/login`.
+    func login(username: String, password: String) async throws -> LoginResponse {
         try await send(
-            endpoint: .login,
+            endpoint: .dashboardLogin,
             method: "POST",
-            body: LoginRequest(password: password)
+            body: DashboardLoginRequest(username: username, password: password)
         )
     }
 
@@ -360,7 +367,9 @@ private extension APIClient {
     }
 }
 
-private struct LoginRequest: Encodable {
+private struct DashboardLoginRequest: Encodable {
+    let provider: String = "basic"
+    let username: String
     let password: String
 }
 

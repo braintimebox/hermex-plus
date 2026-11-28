@@ -20,39 +20,17 @@ final class AuthManager {
     }
 
 
-    /// Shown when a server has auth on but explicitly reports password auth off,
-    /// i.e. it signs in with passkeys (which we can't do yet). See issue #255.
-    nonisolated static let passkeyOnlyMessage =
-        String(localized: "This server signs in with passkeys, which Hermex doesn't support yet.")
-
-    /// Single sign-on. Hermex cannot run the OIDC redirect flow yet, and an
-    /// external browser's session is not shared with the app.
-    nonisolated static let oidcOnlyMessage =
-        String(localized: "This server signs in with single sign-on, which Hermex doesn't support yet.")
-
-    /// Trusted-header mode where the proxy did *not* authenticate this request,
-    /// so the server reports the mode but not a session.
-    nonisolated static let trustedAuthNotSignedInMessage =
-        String(localized: "This server signs in through an identity proxy, which didn't authorize this request. Open the server in a browser, or check the custom headers.")
-
     /// Why the app can't complete sign-in on its own, or nil when it can —
-    /// either there's no auth, the server already signed this client in, or a
-    /// password login is available.
+    /// either there's no auth or a password login is available.
     ///
-    /// Replaces the "auth on and password auth off ⇒ passkeys" inference that
-    /// used to live in three places. `is_auth_enabled()` upstream
-    /// (`api/auth.py:563`) also covers OIDC and trusted-header, so that
-    /// inference locked out working deployments and told them the wrong reason
-    /// (#3).
-    nonisolated static func unsupportedSignInMessage(for status: AuthStatusResponse) -> String? {
-        guard status.authEnabled == true, !status.isAlreadySignedIn else { return nil }
-        // A missing value means an older server that doesn't report it; fall
-        // through to the password path rather than block a working user.
-        guard status.passwordAuthEnabled == false else { return nil }
-
-        if status.oidcEnabled == true { return oidcOnlyMessage }
-        if status.trustedAuthEnabled == true { return trustedAuthNotSignedInMessage }
-        return passkeyOnlyMessage
+    /// Returns a user-facing message when the server offers no password sign-in,
+    /// or nil when password login is available.
+    nonisolated static func unsupportedSignInMessage(for providers: AuthProvidersResponse) -> String? {
+        if providers.passwordProvider != nil { return nil }
+        if providers.providers.isEmpty {
+            return String(localized: "This server does not advertise an authentication provider.")
+        }
+        return String(localized: "This server does not support password sign-in.")
     }
 
     private(set) var state: State = .unconfigured
@@ -113,10 +91,10 @@ final class AuthManager {
     func testConnection(
         serverURLString: String,
         customHeaders: [CustomHeader]? = nil
-    ) async throws -> AuthStatusResponse {
+    ) async throws -> AuthProvidersResponse {
         // Apply the in-progress headers before the very first probe so the health
-        // and auth-status calls already traverse the proxy. Passing nil leaves the
-        // current headers untouched (#255).
+        // and auth-providers calls already traverse the proxy. Passing nil leaves
+        // the current headers untouched (#255).
         if let customHeaders {
             headerStore.replace(with: customHeaders.sanitizedForStorage())
         }
@@ -127,17 +105,35 @@ final class AuthManager {
         return try await testConnection(client: client)
     }
 
-    private func testConnection(client: any AuthAPIClient) async throws -> AuthStatusResponse {
+    private func testConnection(client: any AuthAPIClient) async throws -> AuthProvidersResponse {
         let health = try await client.health()
         guard health.status == "ok" else {
             throw APIError.http(statusCode: 200, body: "Unexpected health status.")
         }
 
-        return try await client.authStatus()
+        return try await client.authProviders()
+    }
+
+    /// Resolves the dashboard credentials for a server. A typed username/password
+    /// wins; a blank field falls back to the already-stored bot connection (the
+    /// credentials the owner used to sign into the dashboard), so the main client
+    /// and Bots/Groups share one credential set and no re-entry is needed.
+    private func resolvedCredentials(
+        username: String, password: String, for server: URL
+    ) -> (username: String, password: String) {
+        var resolvedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        var resolvedPassword = password
+        if resolvedUsername.isEmpty || resolvedPassword.isEmpty,
+           let connection = try? BotConnectionStore(keychain: keychain).load(server: server) {
+            if resolvedUsername.isEmpty { resolvedUsername = connection.username }
+            if resolvedPassword.isEmpty { resolvedPassword = connection.password }
+        }
+        return (resolvedUsername, resolvedPassword)
     }
 
     func configure(
         serverURLString: String,
+        username: String,
         password: String,
         customHeaders: [CustomHeader]? = nil
     ) async {
@@ -150,29 +146,31 @@ final class AuthManager {
         do {
             let serverURL = try Self.normalizedServerURL(from: serverURLString)
             let client = clientFactory(serverURL)
-            let authStatus = try await testConnection(client: client)
+            let providers = try await testConnection(client: client)
 
-            if let message = Self.unsupportedSignInMessage(for: authStatus) {
+            if let message = Self.unsupportedSignInMessage(for: providers) {
                 lastErrorMessage = message
                 return
             }
 
-            // `logged_in` means the server already authenticated this client —
-            // trusted-header mode does it at the proxy — so there is nothing to
-            // log in with and the server is saved as signed in (#3).
-            if authStatus.authEnabled == true, !authStatus.isAlreadySignedIn {
-                guard !password.isEmpty else {
+            // A password provider means we sign in with the dashboard credentials.
+            if providers.passwordProvider != nil {
+                let credentials = resolvedCredentials(username: username, password: password, for: serverURL)
+                guard !credentials.username.isEmpty else {
+                    lastErrorMessage = String(localized: "Enter the server username.")
+                    return
+                }
+                guard !credentials.password.isEmpty else {
                     lastErrorMessage = String(localized: "Enter the server password.")
                     return
                 }
 
-                let loginResponse = try await client.login(password: password)
+                let loginResponse = try await client.login(username: credentials.username, password: credentials.password)
                 guard loginResponse.ok == true else {
                     state = .loggedOut(server: serverURL)
                     lastErrorMessage = APIError.unauthorized.localizedDescription
                     return
                 }
-
             }
 
             // Persist only on success: the server URL and the headers that reached it.
@@ -213,6 +211,7 @@ final class AuthManager {
     @discardableResult
     func addServer(
         serverURLString: String,
+        username: String,
         password: String,
         customHeaders: [CustomHeader] = []
     ) async -> AddServerOutcome {
@@ -237,25 +236,25 @@ final class AuthManager {
         let client = probeClientFactory(serverURL, newHeaders)
 
         do {
-            let authStatus = try await testConnection(client: client)
+            let providers = try await testConnection(client: client)
 
-            if let message = Self.unsupportedSignInMessage(for: authStatus) {
+            if let message = Self.unsupportedSignInMessage(for: providers) {
                 lastErrorMessage = message
                 return .failed
             }
 
-            if authStatus.authEnabled == true, !authStatus.isAlreadySignedIn {
-                guard !password.isEmpty else {
-                    // Not an error — the UI reveals the password field and retries.
+            if providers.passwordProvider != nil {
+                let credentials = resolvedCredentials(username: username, password: password, for: serverURL)
+                guard !credentials.username.isEmpty, !credentials.password.isEmpty else {
+                    // Not an error — the UI reveals the credential form and retries.
                     return .needsPassword
                 }
 
-                let loginResponse = try await client.login(password: password)
+                let loginResponse = try await client.login(username: credentials.username, password: credentials.password)
                 guard loginResponse.ok == true else {
                     lastErrorMessage = APIError.unauthorized.localizedDescription
                     return .failed
                 }
-
             }
 
             // Commit only now that the add succeeded: the new server becomes
@@ -630,8 +629,8 @@ final class AuthManager {
 
 protocol AuthAPIClient: Sendable {
     func health() async throws -> HealthResponse
-    func authStatus() async throws -> AuthStatusResponse
-    func login(password: String) async throws -> LoginResponse
+    func authProviders() async throws -> AuthProvidersResponse
+    func login(username: String, password: String) async throws -> LoginResponse
     func logout() async throws -> LoginResponse
 }
 

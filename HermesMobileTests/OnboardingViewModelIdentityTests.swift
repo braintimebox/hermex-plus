@@ -205,7 +205,21 @@ final class OnboardingViewModelIdentityTests: XCTestCase {
             }
         }
 
-        func login(password: String) async throws -> LoginResponse {
+        func authProviders() async throws -> AuthProvidersResponse {
+            await gatekeeper.gate(.authStatus)
+            switch outcome {
+            case .succeed(let status):
+                return status.authEnabled == true
+                    ? AuthProvidersResponse(providers: [
+                        AuthProviderInfo(name: "basic", displayName: nil, supportsPassword: true)
+                    ])
+                    : AuthProvidersResponse(providers: [])
+            case .fail(let message):
+                throw URLError(.badServerResponse, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+        }
+
+        func login(username: String, password: String) async throws -> LoginResponse {
             // Login is deliberately UNGATED: it is the third call of the
             // configure password path and carries no schedule decision.
             configuredPasswords.append(password)

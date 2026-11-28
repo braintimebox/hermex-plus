@@ -3,7 +3,9 @@ import Foundation
 enum Endpoint {
     case health
     case authStatus
+    case authProviders
     case login
+    case dashboardLogin
     case logout
     case sessions(includeArchived: Bool = false, archivedLimit: Int? = nil)
     case sessionsSearch(query: String, content: Bool, depth: Int)
@@ -156,13 +158,21 @@ enum Endpoint {
     var path: String {
         switch self {
         case .health:
-            return "/health"
+            return "/api/health"
         case .authStatus:
             return "/api/auth/status"
+        case .authProviders:
+            return "/api/auth/providers"
         case .login:
             return "/api/auth/login"
+        case .dashboardLogin:
+            // The dashboard's password login. It is NOT a legacy webui endpoint:
+            // it lives under the dashboard and is mounted with the proxy prefix
+            // (see the `isDashboardRoute` handling in `url(relativeTo:)`).
+            return "auth/password-login"
         case .logout:
-            return "/api/auth/logout"
+            // Dashboard logout, mounted like the password login (proxy prefix).
+            return "auth/logout"
         case .sessions:
             return "/api/sessions"
         case .sessionsSearch:
@@ -632,7 +642,9 @@ enum Endpoint {
             // The app's base URL is the Hermes/webui root, where the same path answers with
             // the SPA's HTML instead of JSON — the decode then fails and the screen looks
             // dead. Unless the base already carries the proxy prefix, ask for the dashboard.
-            let isDashboardRoute = path.hasPrefix("api/plugins/kanban") || path == "auth/password-login"
+            let isDashboardRoute = path.hasPrefix("api/plugins/kanban")
+                || path == "auth/password-login"
+                || path == "auth/logout"
             let mounted = isDashboardRoute
                 ? Self.kanbanMount(in: baseURL) + path
                 : path

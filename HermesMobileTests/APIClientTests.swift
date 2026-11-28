@@ -209,6 +209,7 @@ final class MockAuthAPIClient: AuthAPIClient, @unchecked Sendable {
     }
 
     private let authStatusResponse: AuthStatusResponse
+    private let authProvidersResponse: AuthProvidersResponse
     private let loginResponse: LoginResponse
     private let logoutBehavior: LogoutBehavior
     private(set) var loginPasswords: [String] = []
@@ -220,8 +221,23 @@ final class MockAuthAPIClient: AuthAPIClient, @unchecked Sendable {
         logoutBehavior: LogoutBehavior = .succeed
     ) {
         self.authStatusResponse = authStatus
+        self.authProvidersResponse = Self.providers(for: authStatus)
         self.loginResponse = loginResponse
         self.logoutBehavior = logoutBehavior
+    }
+
+    /// Maps the legacy `authStatus` probe onto the provider model: auth enabled →
+    /// a password provider; disabled → none. Keeps the existing test matrix
+    /// (`authEnabled: true/false`) meaningful without rewriting every case.
+    private static func providers(for status: AuthStatusResponse) -> AuthProvidersResponse {
+        guard status.authEnabled == true else {
+            return AuthProvidersResponse(providers: [])
+        }
+        return AuthProvidersResponse(
+            providers: [
+                AuthProviderInfo(name: "basic", displayName: nil, supportsPassword: true)
+            ]
+        )
     }
 
     func health() async throws -> HealthResponse {
@@ -232,7 +248,11 @@ final class MockAuthAPIClient: AuthAPIClient, @unchecked Sendable {
         authStatusResponse
     }
 
-    func login(password: String) async throws -> LoginResponse {
+    func authProviders() async throws -> AuthProvidersResponse {
+        authProvidersResponse
+    }
+
+    func login(username: String, password: String) async throws -> LoginResponse {
         loginPasswords.append(password)
         return loginResponse
     }

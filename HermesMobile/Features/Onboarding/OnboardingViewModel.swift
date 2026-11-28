@@ -5,25 +5,27 @@ import Observation
 @Observable
 final class OnboardingViewModel {
     nonisolated static let emptyPasswordMessage = String(localized: "Enter the server password.")
+    nonisolated static let emptyUsernameMessage = String(localized: "Enter the server username.")
 
     var serverURLString = "" {
-        didSet { invalidateProbedAuthStatusIfNeeded() }
+        didSet { invalidateProbeIfNeeded() }
     }
+    var username = ""
     var password = ""
     var customHeaders: [CustomHeader] = [] {
-        didSet { invalidateProbedAuthStatusIfNeeded() }
+        didSet { invalidateProbeIfNeeded() }
     }
-    var authStatus: AuthStatusResponse?
+    var authProviders: AuthProvidersResponse?
     var connectionMessage: String?
     var errorMessage: String?
     var isWorking = false
-    /// True while an operation owns the form: views disable the URL/password
+    /// True while an operation owns the form: views disable the URL/username/password
     /// fields, header editor, and Return-key submission so a side effect that
     /// has already run (AuthManager.configure persists and activates server
     /// state) cannot be superseded by mid-flight edits (PR #294 re-gate).
     var isConnectionLocked = false
 
-    // Identity + generation of the probe that produced `authStatus`.
+    // Identity + generation of the probe that produced `authProviders`.
     @ObservationIgnored private var probedConnectionIdentity: String?
     @ObservationIgnored private var operationGeneration = 0
 
@@ -44,13 +46,8 @@ final class OnboardingViewModel {
     }
 
     var isPasswordRequired: Bool {
-        // No auth → no password. Already signed in (trusted-header proxy) → no
-        // password either. Passkey/OIDC-only → hide the field; connect()
-        // surfaces the specific unsupported message instead. Unknown (nil)
-        // keeps today's "show the field" default.
-        guard authStatus?.authEnabled != false else { return false }
-        guard authStatus?.isAlreadySignedIn != true else { return false }
-        return authStatus?.passwordAuthEnabled != false
+        // The server advertises a password provider → ask for username + password.
+        authProviders?.passwordProvider != nil
     }
 
     // MARK: - Connection identity (issue #285)
@@ -100,7 +97,7 @@ final class OnboardingViewModel {
         return out
     }
 
-    private func invalidateProbedAuthStatusIfNeeded() {
+    private func invalidateProbeIfNeeded() {
         guard let probed = probedConnectionIdentity else {
             // No probe yet, but an inherited banner (re-login error) still has no
             // owner — clear it on any edit so stale copy can't survive.
@@ -112,7 +109,7 @@ final class OnboardingViewModel {
         }
         let current = currentConnectionIdentity()
         if current != probed {
-            authStatus = nil
+            authProviders = nil
             connectionMessage = nil
             errorMessage = nil
             probedConnectionIdentity = nil
@@ -142,29 +139,27 @@ final class OnboardingViewModel {
         }
 
         do {
-            let status = try await authManager.testConnection(
+            let providers = try await authManager.testConnection(
                 serverURLString: serverURLString,
                 customHeaders: customHeaders
             )
             guard token == operationGeneration else { return }
             guard identityAtStart == currentConnectionIdentity() else { return }
             probedConnectionIdentity = identityAtStart
-            authStatus = status
-            if let message = AuthManager.unsupportedSignInMessage(for: status) {
+            authProviders = providers
+            if let message = AuthManager.unsupportedSignInMessage(for: providers) {
                 errorMessage = message
-            } else if status.isAlreadySignedIn {
-                connectionMessage = String(localized: "Connection ok. Already signed in by this server.")
+            } else if providers.passwordProvider != nil {
+                connectionMessage = String(localized: "Connection ok. Username and password required.")
             } else {
-                connectionMessage = status.authEnabled == true
-                    ? String(localized: "Connection ok. Password required.")
-                    : String(localized: "Connection ok. Password not required.")
+                connectionMessage = String(localized: "Connection ok. No sign-in required.")
             }
         } catch {
             guard token == operationGeneration else { return }
             guard identityAtStart == currentConnectionIdentity() else { return }
-            // A failed re-probe invalidates the prior successful status: the old
+            // A failed re-probe invalidates the prior successful result: the old
             // capability result no longer describes this identity.
-            authStatus = nil
+            authProviders = nil
             probedConnectionIdentity = nil
             errorMessage = error.localizedDescription
         }
@@ -175,7 +170,9 @@ final class OnboardingViewModel {
         errorMessage = nil
         connectionMessage = nil
 
-        if let validationMessage = Self.passwordValidationMessage(authStatus: authStatus, password: password) {
+        if let validationMessage = Self.passwordValidationMessage(
+            providers: authProviders, username: username, password: password
+        ) {
             errorMessage = validationMessage
             return
         }
@@ -194,27 +191,29 @@ final class OnboardingViewModel {
             }
         }
 
-        if authStatus == nil {
+        if authProviders == nil {
             let identityAtStart = currentConnectionIdentity()
             do {
-                let status = try await authManager.testConnection(
+                let providers = try await authManager.testConnection(
                     serverURLString: serverURLString,
                     customHeaders: customHeaders
                 )
                 guard token == operationGeneration else { return }
                 guard identityAtStart == currentConnectionIdentity() else { return }
                 probedConnectionIdentity = identityAtStart
-                authStatus = status
+                authProviders = providers
             } catch {
                 guard token == operationGeneration else { return }
                 guard identityAtStart == currentConnectionIdentity() else { return }
-                authStatus = nil
+                authProviders = nil
                 probedConnectionIdentity = nil
                 errorMessage = error.localizedDescription
                 return
             }
 
-            if let validationMessage = Self.passwordValidationMessage(authStatus: authStatus, password: password) {
+            if let validationMessage = Self.passwordValidationMessage(
+                providers: authProviders, username: username, password: password
+            ) {
                 errorMessage = validationMessage
                 return
             }
@@ -227,6 +226,7 @@ final class OnboardingViewModel {
         let configureIdentity = currentConnectionIdentity()
         await authManager.configure(
             serverURLString: serverURLString,
+            username: username,
             password: password,
             customHeaders: customHeaders
         )
@@ -245,15 +245,13 @@ final class OnboardingViewModel {
         probedConnectionIdentity = currentConnectionIdentity()
     }
 
-    nonisolated static func passwordValidationMessage(authStatus: AuthStatusResponse?, password: String) -> String? {
-        guard authStatus?.authEnabled == true else { return nil }
-        // A server that already signed this client in (trusted-header proxy)
-        // has no password to demand (#3).
-        guard authStatus?.isAlreadySignedIn != true else { return nil }
-        // Passkey/OIDC-only servers don't take a password either — let
-        // configure() report the specific unsupported message instead of
-        // demanding one here (#255, #3).
-        guard authStatus?.passwordAuthEnabled != false else { return nil }
+    nonisolated static func passwordValidationMessage(
+        providers: AuthProvidersResponse?, username: String, password: String
+    ) -> String? {
+        guard providers?.passwordProvider != nil else { return nil }
+
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedUsername.isEmpty { return emptyUsernameMessage }
 
         let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedPassword.isEmpty ? emptyPasswordMessage : nil

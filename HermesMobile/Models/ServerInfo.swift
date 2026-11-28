@@ -55,3 +55,26 @@ struct LoginResponse: Decodable {
     let message: String?
     let error: String?
 }
+
+/// One auth provider the dashboard advertises via `GET /api/auth/providers`.
+/// Public (no session needed): this is how the app discovers how to sign in.
+struct AuthProviderInfo: Decodable, Equatable {
+    let name: String
+    let displayName: String?
+    let supportsPassword: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case displayName = "display_name"
+        case supportsPassword = "supports_password"
+    }
+}
+
+struct AuthProvidersResponse: Decodable {
+    let providers: [AuthProviderInfo]
+
+    /// The password provider (e.g. ``basic``), if the server offers one.
+    var passwordProvider: AuthProviderInfo? {
+        providers.first { $0.supportsPassword == true }
+    }
+}
