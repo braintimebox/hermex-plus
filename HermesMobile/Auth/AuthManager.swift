@@ -19,11 +19,6 @@ final class AuthManager {
         }
     }
 
-    /// The dashboard's basic-auth username. The WebUI and the dashboard share one
-    /// basic-auth principal, but only the dashboard requires the username on its
-    /// own `/auth/password-login` route (the gateway login is password-only). This
-    /// is the account the owner signs into the dashboard with.
-    nonisolated static let dashboardUsername = "oleksandr"
 
     /// Shown when a server has auth on but explicitly reports password auth off,
     /// i.e. it signs in with passkeys (which we can't do yet). See issue #255.
@@ -178,22 +173,10 @@ final class AuthManager {
                     return
                 }
 
-                // The dashboard (profiles + the Kanban plugin) is a separate auth
-                // surface behind its own `/auth/password-login`. Sign in there too
-                // so `/dash/api/profiles` and `/dash/api/plugins/kanban` carry a
-                // session cookie instead of answering 401 no_cookie. Non-fatal: the
-                // chat surface keeps working even if this step is refused.
-                _ = try? await client.dashboardLogin(
-                    username: Self.dashboardUsername,
-                    password: password
-                )
             }
 
             // Persist only on success: the server URL and the headers that reached it.
             try keychain.save(serverURL.absoluteString, forKey: .serverURL)
-            // Keep the password too, scoped to this server, so a relaunch can
-            // re-sign into the dashboard (profiles + Kanban) without asking again.
-            try? keychain.save(password, forKey: .password, scope: serverURL.absoluteString)
             // Record (or re-activate) this server in the multi-server registry,
             // shadowing the Keychain `server_url` write above (#15). Dedupes by
             // normalized URL.
@@ -273,12 +256,6 @@ final class AuthManager {
                     return .failed
                 }
 
-                // Same as `configure`: sign into the dashboard too, so profiles and
-                // the Kanban plugin get a session instead of a 401. Non-fatal.
-                _ = try? await client.dashboardLogin(
-                    username: Self.dashboardUsername,
-                    password: password
-                )
             }
 
             // Commit only now that the add succeeded: the new server becomes
@@ -289,7 +266,6 @@ final class AuthManager {
             // Do the throwing Keychain write first so a write failure leaves the
             // live header store (and the active server) completely untouched.
             try keychain.save(serverURL.absoluteString, forKey: .serverURL)
-            try? keychain.save(password, forKey: .password, scope: serverURL.absoluteString)
             headerStore.replace(with: newHeaders)
             serverRegistry.activate(url: serverURL)
             persistCustomHeaders(for: serverURL)
@@ -591,21 +567,6 @@ final class AuthManager {
         hydrateCustomHeaders(for: savedURL)
         state = .loggedIn(server: savedURL)
 
-        // Re-sign into the dashboard so profiles and the Kanban plugin carry a
-        // session cookie across relaunches. The dashboard login is non-fatal and
-        // asynchronous: the chat list paints immediately and this only upgrades
-        // the gated surfaces once the cookie lands.
-        if let savedPassword = try? keychain.load(.password, scope: savedURL.absoluteString),
-           !savedPassword.isEmpty
-        {
-            let client = clientFactory(savedURL)
-            Task { @MainActor in
-                _ = try? await client.dashboardLogin(
-                    username: Self.dashboardUsername,
-                    password: savedPassword
-                )
-            }
-        }
     }
 
     nonisolated static func normalizedServerURL(from rawValue: String) throws -> URL {
@@ -671,7 +632,6 @@ protocol AuthAPIClient: Sendable {
     func health() async throws -> HealthResponse
     func authStatus() async throws -> AuthStatusResponse
     func login(password: String) async throws -> LoginResponse
-    func dashboardLogin(username: String, password: String) async throws -> LoginResponse
     func logout() async throws -> LoginResponse
 }
 

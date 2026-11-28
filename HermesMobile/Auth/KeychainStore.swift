@@ -18,9 +18,6 @@ protocol KeychainStoring {
 struct KeychainStore: KeychainStoring {
     enum Key: String {
         case serverURL = "server_url"
-        // The dashboard/gateway password, scoped per server, so a relaunch can
-        // sign into the dashboard (profiles + Kanban) without asking again.
-        case password = "password"
         // JSON-encoded [{name, value}] of user-supplied request headers (#255).
         // Values may be secrets, so the list lives in the Keychain, not defaults.
         case customHeaders = "custom_headers"
