@@ -76,6 +76,18 @@ struct OnboardingConnectPage: View {
                 }
 
                 DisclosureGroup(isExpanded: $isShowingAdvanced) {
+                    Button {
+                        viewModel.customHeaders.append(CustomHeader(name: "X-Hermes-Session-Token", value: ""))
+                    } label: {
+                        Label("Add Dashboard Session Token", systemImage: "key")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add dashboard session token")
+                    .disabled(viewModel.isConnectionLocked)
+                    .padding(.top, 10)
+
                     CustomHeadersEditor(headers: $viewModel.customHeaders, style: .onboarding)
                         .disabled(viewModel.isConnectionLocked)
                         .padding(.top, 10)

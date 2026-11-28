@@ -1906,6 +1906,17 @@ private struct CustomHeadersSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 CustomHeadersEditor(headers: $headers)
+
+                Button {
+                    headers.append(CustomHeader(name: "X-Hermes-Session-Token", value: ""))
+                } label: {
+                    Label("Add Dashboard Session Token", systemImage: "key")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add dashboard session token")
+                .padding(.top, 10)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2465,6 +2476,17 @@ struct AddServerView: View {
 
                     SettingsCard(title: String(localized: "Connection Headers")) {
                         CustomHeadersEditor(headers: $customHeaders)
+
+                        Button {
+                            customHeaders.append(CustomHeader(name: "X-Hermes-Session-Token", value: ""))
+                        } label: {
+                            Label("Add Dashboard Session Token", systemImage: "key")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add dashboard session token")
+                        .padding(.top, 10)
                     }
 
                     SettingsCard(title: String(localized: "Identity")) {

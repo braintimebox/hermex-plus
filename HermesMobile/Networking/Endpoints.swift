@@ -4,7 +4,6 @@ enum Endpoint {
     case health
     case authStatus
     case login
-    case dashboardLogin
     case logout
     case sessions(includeArchived: Bool = false, archivedLimit: Int? = nil)
     case sessionsSearch(query: String, content: Bool, depth: Int)
@@ -162,11 +161,6 @@ enum Endpoint {
             return "/api/auth/status"
         case .login:
             return "/api/auth/login"
-        case .dashboardLogin:
-            // The dashboard's password login, which the gateway does not proxy on
-            // its own `/api/auth/*` surface. It is mounted under `/dash` like the
-            // plugin routes, so `url(relativeTo:)` adds the proxy prefix.
-            return "auth/password-login"
         case .logout:
             return "/api/auth/logout"
         case .sessions:

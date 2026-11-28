@@ -88,19 +88,6 @@ actor APIClient {
         )
     }
 
-    /// Logs in against the dashboard's password provider, which the gateway's own
-    /// `/api/auth/login` does not cover. The dashboard serves profiles and the
-    /// Kanban plugin, and both reject requests without the session cookie this call
-    /// sets. `username` is the dashboard basic-auth user (the gateway auth may be a
-    /// different principal).
-    func dashboardLogin(username: String, password: String) async throws -> LoginResponse {
-        try await send(
-            endpoint: .dashboardLogin,
-            method: "POST",
-            body: DashboardLoginRequest(username: username, password: password)
-        )
-    }
-
     func logout() async throws -> LoginResponse {
         try await send(endpoint: .logout, method: "POST", body: EmptyBody())
     }
@@ -374,12 +361,6 @@ private extension APIClient {
 }
 
 private struct LoginRequest: Encodable {
-    let password: String
-}
-
-private struct DashboardLoginRequest: Encodable {
-    let provider: String = "basic"
-    let username: String
     let password: String
 }
 

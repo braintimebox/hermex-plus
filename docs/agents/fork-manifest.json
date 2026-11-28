@@ -13,6 +13,7 @@
     "ComposerSecondaryBarLabel",
     "CronJobMetadataRow",
     "DailyTokenRow",
+    "DashboardLoginRequest",
     "DiffLineRow",
     "FileBreadcrumb",
     "FileBrowserRow",
@@ -169,6 +170,7 @@
     "SessionListNewChatReturn": "renamed SessionListDestinationReturn (SessionListView.swift:1619): the same helper with the same run(from:to:suppressEmptyPlaceholders:refreshSessions:) signature, generalized to refresh on any destination change.",
     "ToolCallCardView": "superseded by ToolCallLogRowView (ToolCallLogRowView.swift:6) built on the shared TranscriptLogRowView: the tool call is now a dense log row instead of a bordered card.",
     "ToolCallStatusDisplay": "superseded by ToolCallLogRow.Status (ToolCallSummaryFormatter.swift:5) with statusText and ToolCallDetailBodyView.statusText (ToolCallLogRowView.swift:98): the same Completed/Failed/Running verdicts.",
-    "TranscriptStatusPill": "superseded by the status glyph slot in TranscriptLogRowView (TranscriptLogRowView.swift:156) drawn by ToolCallLogRowView.statusGlyph (:37): a symbol, not a capsule text pill."
+    "TranscriptStatusPill": "superseded by the status glyph slot in TranscriptLogRowView (TranscriptLogRowView.swift:156) drawn by ToolCallLogRowView.statusGlyph (:37): a symbol, not a capsule text pill.",
+    "DashboardLoginRequest": "Removed deliberately in 4.3.12: the dashboard password login was the wrong auth path. The app knows the WebUI password (22 chars), while the dashboard basic-auth password is a different secret (49 chars), so POST /dash/auth/password-login always refused it and /api/profiles and /api/plugins/kanban kept answering 401 no_cookie. Dashboard access now uses the X-Hermes-Session-Token request header, which the server accepts without a cookie or password."
   }
 }

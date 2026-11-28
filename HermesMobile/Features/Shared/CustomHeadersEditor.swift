@@ -50,7 +50,7 @@ struct CustomHeadersEditor: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Add header")
 
-            Text("Sent with every request to your server, including media and live streams. Use for a reverse proxy (e.g. Authentik) or token auth, such as an Authorization header.")
+            Text("Sent with every request to your server, including media and live streams. Use for a reverse proxy (e.g. Authentik) or token auth, such as an Authorization header. For the Hermes dashboard (profiles, Kanban) add X-Hermes-Session-Token with your dashboard session token.")
                 .font(.caption)
                 .foregroundStyle(style.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
