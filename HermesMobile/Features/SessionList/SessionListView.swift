@@ -38,6 +38,15 @@ struct SessionListView: View {
     @State private var showsBots = false
     /// Groups opens the inbox filtered to rooms; Bots opens it filtered to bots.
     @State private var botsScope: BotInbox.Scope = .bots
+    /// The 4 × 3 workspace launcher's tiles, per server. Built on first appearance
+    /// because it needs the active server URL.
+    @State private var launcherStore: LauncherStore?
+    /// Set while the "add an existing object" picker is open, with the slot to fill.
+    @State private var launcherAddSlot: LauncherAddSlot?
+    /// A bot tile that has to wait for the bot roster before it can be opened.
+    @State private var launcherPendingBot: BotDestination?
+    /// A group tile, resolved the same way once the roster is live.
+    @State private var launcherPendingRoom: BotRoomKey?
     /// True while a bot chat or a room is open inside the bots stack. The dock stays on
     /// the section roots (Groups/Bots lists) and leaves only for a conversation.
     @State private var botsInConversation = false
@@ -146,6 +155,21 @@ struct SessionListView: View {
                 }
             }
             .onPreferenceChange(DockHeightKey.self) { dockHeight = $0 }
+            .task(id: server) {
+                if launcherStore == nil {
+                    launcherStore = LauncherStore(server: server)
+                }
+            }
+            .sheet(item: $launcherAddSlot) { request in
+                if let launcherStore {
+                    LauncherAddSheet(
+                        slot: request.slot,
+                        server: server,
+                        sessions: viewModel.sessions,
+                        store: launcherStore
+                    )
+                }
+            }
             .onChange(of: pendingSharedImport?.reservationID) { if pendingSharedImport != nil { showsBots = false } }
             .onChange(of: isBotModeEnabled) { if !isBotModeEnabled { showsBots = false } }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -572,7 +596,14 @@ struct SessionListView: View {
                 // The ported inbox owns its own navigation, but it is this stack's root, so
                 // iOS draws no back chevron for it and the picker that got us here lives on
                 // the other side of the switch. The leading button it renders calls this.
-                BotsInboxView(server: server, scope: botsScope, isInConversation: $botsInConversation, onClose: { showsBots = false })
+                BotsInboxView(
+                    server: server,
+                    scope: botsScope,
+                    isInConversation: $botsInConversation,
+                    pendingDestination: $launcherPendingBot,
+                    pendingRoom: $launcherPendingRoom,
+                    onClose: { showsBots = false }
+                )
             }
         } else if horizontalSizeClass == .regular {
             NavigationSplitView {
@@ -729,10 +760,83 @@ struct SessionListView: View {
         )
     }
 
+    /// Opens what a launcher tile names. The tile is a shortcut, so this only
+    /// switches to the owning section and points it at the existing object — it
+    /// never creates anything.
+    private func openLauncherItem(_ item: LauncherItem) {
+        switch item.kind {
+        case .chat:
+            guard let session = viewModel.sessions.first(where: { $0.sessionId == item.objectID }) else {
+                // The chat is not in the loaded list (deleted, or under another
+                // profile). Leaving the owner where they are is honest; opening a
+                // guess would not be.
+                return
+            }
+            // No tab switch here: the launcher is drawn on the Chats root, so the
+            // section is already `.chats`. Switching would fire the dock's
+            // `onChange`, which clears the destination we are about to set.
+            showsBots = false
+            navigationState.select(session)
+        case .bot:
+            showsBots = true
+            botsScope = .bots
+            navigationState.select(tab: .bots)
+            Task { await prepareLauncherBot(profileID: item.objectID) }
+        case .group:
+            showsBots = true
+            botsScope = .rooms
+            navigationState.select(tab: .groups)
+            Task { await prepareLauncherRoom(roomID: item.objectID) }
+        }
+    }
+
+    /// Resolves the bot connection the tile's profile belongs to, then hands the
+    /// inbox a destination it can open once its roster is live.
+    private func prepareLauncherBot(profileID: String) async {
+        let inbox = BotInbox(server: server)
+        inbox.scope = .all
+        await inbox.open()
+        guard let connection = inbox.connection,
+              inbox.profiles.contains(where: { $0.id == profileID })
+        else { return }
+        launcherPendingBot = BotDestination(
+            server: server,
+            connectionID: connection.id,
+            profile: profileID
+        )
+    }
+
+    /// Same for a group: identity is the room id inside the live connection.
+    private func prepareLauncherRoom(roomID: String) async {
+        let inbox = BotInbox(server: server)
+        inbox.scope = .all
+        await inbox.open()
+        guard let connection = inbox.connection,
+              inbox.rooms.contains(where: { $0.id == roomID })
+        else { return }
+        launcherPendingRoom = BotRoomKey(
+            server: server,
+            connectionID: connection.id,
+            roomID: roomID
+        )
+    }
+
     private var content: some View {
         List {
             header
                 .sessionsTopChromeListRow()
+
+            if let launcherStore, !isSearchingSessions {
+                WorkspaceLauncherView(
+                    store: launcherStore,
+                    onOpen: openLauncherItem,
+                    onAdd: { slot in launcherAddSlot = LauncherAddSlot(slot: slot) }
+                )
+                .sessionsScreenListRow()
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
+            }
 
             if isBotModeEnabled {
                 Picker("Screen", selection: $showsBots) {

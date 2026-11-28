@@ -561,6 +561,9 @@ A51F4C39A46B15FC43D650F0 /* RoomAttachmentPicker.swift in Sources */ = {isa = PB
 		682FFB6817FAFCFFFDBF079E /* RoomPinsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 958C9C076BFA1678E607B53C /* RoomPinsTests.swift */; };
 		C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */; };
 		2AF4975D2C48A7F171056537 /* AppDock.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E407F60FD7E0879977891C /* AppDock.swift */; };
+		433279210A0294B79BF90CE2 /* LauncherModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F10AB7F0260257033506D83 /* LauncherModels.swift */; };
+		FB8B89DF46CB815C80C737D6 /* WorkspaceLauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614F40182E7DE3DD8AA0DD60 /* WorkspaceLauncherView.swift */; };
+		427FAC48D20C95DF26419AA9 /* LauncherAddSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40935E2E863FC3445EE2A1D0 /* LauncherAddSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1153,6 +1156,9 @@ D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */ = {isa = PBXFileRefere
 		958C9C076BFA1678E607B53C /* RoomPinsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoomPinsTests.swift"; sourceTree = "<group>"; };
 		DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bots/RoomScheduleView.swift"; sourceTree = "<group>"; };
 		C8E407F60FD7E0879977891C /* AppDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shell/AppDock.swift"; sourceTree = "<group>"; };
+		8F10AB7F0260257033506D83 /* LauncherModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Launcher/LauncherModels.swift"; sourceTree = "<group>"; };
+		614F40182E7DE3DD8AA0DD60 /* WorkspaceLauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Launcher/WorkspaceLauncherView.swift"; sourceTree = "<group>"; };
+		40935E2E863FC3445EE2A1D0 /* LauncherAddSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Launcher/LauncherAddSheet.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1577,6 +1583,9 @@ D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */,
 				921EF1F7D4F490BC15FEE85F /* RoomPins.swift */,
 				DF5A0AA3176ACE9CF5BD0141 /* RoomScheduleView.swift */,
 				C8E407F60FD7E0879977891C /* AppDock.swift */,
+				8F10AB7F0260257033506D83 /* LauncherModels.swift */,
+				614F40182E7DE3DD8AA0DD60 /* WorkspaceLauncherView.swift */,
+				40935E2E863FC3445EE2A1D0 /* LauncherAddSheet.swift */,
 				D1C0DE000000000000000002 /* RoomIconStore.swift */,
 				2151C61191916592AFD8B5C1 /* BotSearchView.swift */,
 				383260FDF6FBE7A1877B817A /* BotSlashAutocompleteView.swift */,
@@ -2208,6 +2217,9 @@ D9F39CA6ECA626E0AF9185D3 /* RoomAttachmentPicker.swift */,
 				6101047BC5CE7A66B0961961 /* RoomPins.swift in Sources */,
 				C5685A3E4D1A8725CC1A5514 /* RoomScheduleView.swift in Sources */,
 				2AF4975D2C48A7F171056537 /* AppDock.swift in Sources */,
+				433279210A0294B79BF90CE2 /* LauncherModels.swift in Sources */,
+				FB8B89DF46CB815C80C737D6 /* WorkspaceLauncherView.swift in Sources */,
+				427FAC48D20C95DF26419AA9 /* LauncherAddSheet.swift in Sources */,
 				D1C0DE000000000000000001 /* RoomIconStore.swift in Sources */,
 				D4E8321C0A744DE3A5B8C997 /* ChatComposerPresentation.swift in Sources */,
 				AA11CC00DEAD40008EED0001 /* ChatComposerGrowth.swift in Sources */,

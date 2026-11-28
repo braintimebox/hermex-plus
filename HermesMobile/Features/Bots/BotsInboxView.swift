@@ -29,6 +29,10 @@ struct BotsInboxHome {
     /// The bot a deep link named, resolved here because this is where the live roster
     /// is. Cleared once this inbox has settled, whether or not it matched (#554).
     @Binding private var pendingDestination: BotDestination?
+    /// The group a launcher tile named. Resolved here for the same reason as
+    /// `pendingDestination` — the live roster lives in this view — and cleared once
+    /// the room is selected or found missing.
+    @Binding private var pendingRoom: BotRoomKey?
     @State private var inbox: BotInbox
     @State private var showingSearch = false
     @State private var searchedProfile: (connectionID: UUID, profileID: String)?
@@ -65,10 +69,12 @@ struct BotsInboxHome {
         scope: BotInbox.Scope = .all,
         isInConversation: Binding<Bool> = .constant(false),
         pendingDestination: Binding<BotDestination?> = .constant(nil),
+        pendingRoom: Binding<BotRoomKey?> = .constant(nil),
         onClose: (() -> Void)? = nil
     ) where HomeControl == EmptyView {
         self.init(server: server, scope: scope, isInConversation: isInConversation,
-                  pendingDestination: pendingDestination, home: nil, onClose: onClose) { EmptyView() }
+                  pendingDestination: pendingDestination, pendingRoom: pendingRoom,
+                  home: nil, onClose: onClose) { EmptyView() }
     }
 
     /// A Hermes server's home. Its sign-in form is reached through Settings there, so
@@ -78,6 +84,7 @@ struct BotsInboxHome {
         scope: BotInbox.Scope = .all,
         isInConversation: Binding<Bool> = .constant(false),
         pendingDestination: Binding<BotDestination?>,
+        pendingRoom: Binding<BotRoomKey?> = .constant(nil),
         home: BotsInboxHome?,
         onClose: (() -> Void)? = nil,
         @ViewBuilder homeControl: () -> HomeControl
@@ -89,6 +96,7 @@ struct BotsInboxHome {
         self.scope = scope
         _isInConversation = isInConversation
         _pendingDestination = pendingDestination
+        _pendingRoom = pendingRoom
         let inbox = BotInbox(server: server)
         inbox.scope = scope
         _inbox = State(initialValue: inbox)
@@ -103,6 +111,7 @@ struct BotsInboxHome {
         scope = inbox.scope
         _isInConversation = .constant(false)
         _pendingDestination = .constant(nil)
+        _pendingRoom = .constant(nil)
         _inbox = State(initialValue: inbox)
     }
 
@@ -288,6 +297,28 @@ struct BotsInboxHome {
         ) else { return }
         pendingDestination = nil
         selection.open(destination, connection: inbox.connection, profiles: inbox.profiles)
+    }
+
+    /// Opens the group a launcher tile named, once the roster can resolve it.
+    /// Mirrors `openPendingDestination`: a connecting socket keeps it pending, and
+    /// a room the host no longer has leaves the owner on the list.
+    private func openPendingRoom() {
+        guard let key = pendingRoom, key.server == server else { return }
+        selection = BotInboxSelection()
+        guard BotDeepLinkRouter.inboxCanAnswer(
+            link: inbox.link, hasConnection: inbox.connection != nil, hasSettled: hasSettled
+        ) else { return }
+        guard key.connectionID == inbox.connection?.id,
+              inbox.rooms.contains(where: { $0.id == key.roomID })
+        else {
+            // The room is gone or belongs to a replaced connection: drop the
+            // request instead of leaving it pending forever.
+            pendingRoom = nil
+            return
+        }
+        pendingRoom = nil
+        roomSequence = nil
+        selection.room = key
     }
 
     /// Resolve the selection again after the sheet closes so a refreshed roster
@@ -640,9 +671,10 @@ extension BotsInboxView {
             }
             // The subscription lives while the inbox is on screen and the app is not in the
             // background; returning, refreshing and reconnecting all go through the same open().
-            .task(id: revision) { await inbox.open(); hasSettled = true; openPendingDestination() }
-            .onChange(of: inbox.link) { openPendingDestination() }
+            .task(id: revision) { await inbox.open(); hasSettled = true; openPendingDestination(); openPendingRoom() }
+            .onChange(of: inbox.link) { openPendingDestination(); openPendingRoom() }
             .onChange(of: pendingDestination) { openPendingDestination() }
+            .onChange(of: pendingRoom) { openPendingRoom() }
             .onChange(of: selection.profile) { if selection.profile == nil { selection.conversation = nil } }
             .refreshable { await inbox.open() }
             .onChange(of: scenePhase) {
