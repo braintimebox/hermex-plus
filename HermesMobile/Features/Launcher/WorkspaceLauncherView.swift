@@ -15,7 +15,6 @@ struct WorkspaceLauncherView: View {
 
     @State private var renaming: LauncherItem?
     @State private var renameText = ""
-    @State private var draggedID: UUID?
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: 10),

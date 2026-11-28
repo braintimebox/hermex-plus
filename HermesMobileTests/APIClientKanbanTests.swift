@@ -12,20 +12,20 @@ final class APIClientKanbanTests: APIClientTestCase {
             XCTAssertNil(request.httpBody)
 
             switch request.url?.path {
-            case "/api/plugins/kanban/config":
+            case "/dash/api/plugins/kanban/config":
                 XCTAssertNil(request.url?.query)
                 return apiTestJSONResponse(Self.configurationJSON, for: request)
-            case "/api/plugins/kanban/boards":
+            case "/dash/api/plugins/kanban/boards":
                 XCTAssertNil(request.url?.query)
                 return apiTestJSONResponse(Self.boardsJSON, for: request)
-            case "/api/plugins/kanban/board":
+            case "/dash/api/plugins/kanban/board":
                 let components = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
                 XCTAssertEqual(components?.queryItems, [URLQueryItem(name: "board", value: "main board")])
                 return apiTestJSONResponse(Self.boardJSON, for: request)
-            case "/api/plugins/kanban/stats":
+            case "/dash/api/plugins/kanban/stats":
                 XCTAssertEqual(request.url?.query, "board=main%20board")
                 return apiTestJSONResponse(Self.statsJSON, for: request)
-            case "/api/plugins/kanban/assignees":
+            case "/dash/api/plugins/kanban/assignees":
                 XCTAssertEqual(request.url?.query, "board=main%20board")
                 return apiTestJSONResponse(
                     #"{"assignees":[{"name":"work","on_disk":true,"counts":{"ready":2}},"review",{"future":true}]}"#,
@@ -52,7 +52,7 @@ final class APIClientKanbanTests: APIClientTestCase {
         let client = makeClient { request in
             let components = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
             XCTAssertEqual(request.httpMethod, "GET")
-            XCTAssertEqual(components?.path, "/api/plugins/kanban/board")
+            XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/board")
             XCTAssertEqual(components?.queryItems, [
                 URLQueryItem(name: "board", value: "release"),
                 URLQueryItem(name: "tenant", value: "mobile"),
@@ -91,7 +91,7 @@ final class APIClientKanbanTests: APIClientTestCase {
             switch requestIndex {
             case 0:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/boards")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/boards")
                 let data = try XCTUnwrap(apiTestBodyData(from: request))
                 let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
                 XCTAssertEqual(Set(body.keys), ["slug", "name", "description", "icon", "color"])
@@ -103,7 +103,7 @@ final class APIClientKanbanTests: APIClientTestCase {
                 )
             case 1:
                 XCTAssertEqual(request.httpMethod, "PATCH")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/boards/release board")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/boards/release board")
                 let data = try XCTUnwrap(apiTestBodyData(from: request))
                 let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
                 XCTAssertEqual(Set(body.keys), ["name", "description", "icon", "color"])
@@ -115,7 +115,7 @@ final class APIClientKanbanTests: APIClientTestCase {
                 )
             case 2:
                 XCTAssertEqual(request.httpMethod, "DELETE")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/boards/release board")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/boards/release board")
                 XCTAssertNil(request.httpBody)
                 XCTAssertFalse(request.url?.absoluteString.contains("delete=") == true)
                 return apiTestJSONResponse(
@@ -124,7 +124,7 @@ final class APIClientKanbanTests: APIClientTestCase {
                 )
             default:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/boards/release board/switch")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/boards/release board/switch")
                 XCTAssertNil(request.httpBody)
                 return apiTestJSONResponse(
                     #"{"current":"release board","read_only":false,"future":true}"#,
@@ -162,7 +162,7 @@ final class APIClientKanbanTests: APIClientTestCase {
 
     func testBoardManagementPathKeepsSlugInOneEncodedSegmentAndResponsesDecodeTolerantly() async throws {
         let client = makeClient { request in
-            XCTAssertEqual(request.url?.path, "/api/plugins/kanban/boards/../release/switch")
+            XCTAssertEqual(request.url?.path, "/dash/api/plugins/kanban/boards/../release/switch")
             XCTAssertTrue(request.url?.absoluteString.contains("%2E%2E%2Frelease") == true)
             return apiTestJSONResponse(
                 #"{"current":42,"read_only":"false","unknown":{"db_path":"/secret"}}"#,
@@ -184,7 +184,7 @@ final class APIClientKanbanTests: APIClientTestCase {
             defer { requestIndex += 1 }
             let components = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
             XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertEqual(components?.path, "/api/plugins/kanban/dispatch")
+            XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/dispatch")
             XCTAssertEqual(components?.queryItems, [
                 URLQueryItem(name: "board", value: "release board"),
                 URLQueryItem(name: "dry_run", value: requestIndex == 0 ? "true" : "false"),
@@ -265,7 +265,7 @@ final class APIClientKanbanTests: APIClientTestCase {
             let components = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
-            XCTAssertEqual(components?.path, "/api/plugins/kanban/events")
+            XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/events")
             XCTAssertEqual(components?.queryItems, [
                 URLQueryItem(name: "board", value: "release board"),
                 URLQueryItem(name: "since", value: "0"),
@@ -357,13 +357,13 @@ final class APIClientKanbanTests: APIClientTestCase {
             switch requestIndex {
             case 0:
                 XCTAssertEqual(request.httpMethod, "GET")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1")
                 XCTAssertEqual(components?.queryItems, [URLQueryItem(name: "board", value: "release board")])
                 XCTAssertNil(request.httpBody)
                 return apiTestJSONResponse(Self.detailJSON, for: request)
             case 1:
                 XCTAssertEqual(request.httpMethod, "GET")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1/log")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1/log")
                 XCTAssertEqual(components?.queryItems, [
                     URLQueryItem(name: "board", value: "release board"),
                     URLQueryItem(name: "tail", value: "2000000")
@@ -374,7 +374,7 @@ final class APIClientKanbanTests: APIClientTestCase {
                 )
             default:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1/comments")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1/comments")
                 XCTAssertEqual(components?.queryItems, [URLQueryItem(name: "board", value: "release board")])
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
                 let body = try XCTUnwrap(apiTestBodyData(from: request))
@@ -415,7 +415,7 @@ final class APIClientKanbanTests: APIClientTestCase {
 
             if requestIndex == 0 {
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks")
                 XCTAssertEqual(Set(body.keys), [
                     "title", "body", "status", "priority", "assignee", "tenant",
                     "workspace_kind", "workspace_path", "skills", "max_runtime_seconds",
@@ -433,7 +433,7 @@ final class APIClientKanbanTests: APIClientTestCase {
             }
 
             XCTAssertEqual(request.httpMethod, "PATCH")
-            XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-153")
+            XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-153")
             XCTAssertEqual(Set(body.keys), ["title", "body", "tenant", "priority", "assignee", "status"])
             XCTAssertTrue(body["assignee"] is NSNull)
             XCTAssertTrue(body["tenant"] is NSNull)
@@ -511,7 +511,7 @@ final class APIClientKanbanTests: APIClientTestCase {
             requestIndex += 1
             let components = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
             XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/bulk")
+            XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/bulk")
             XCTAssertEqual(components?.queryItems, [URLQueryItem(name: "board", value: "release board")])
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
             let data = try XCTUnwrap(apiTestBodyData(from: request))
@@ -565,28 +565,28 @@ final class APIClientKanbanTests: APIClientTestCase {
             switch requestIndex {
             case 0:
                 XCTAssertEqual(request.httpMethod, "PATCH")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1")
                 XCTAssertEqual(body as NSDictionary, ["status": "done"])
                 return apiTestJSONResponse(#"{"task":{"id":"CARD-1","status":"done"},"read_only":false}"#, for: request)
             case 1:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1/block")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1/block")
                 XCTAssertEqual(body as NSDictionary, ["reason": "Waiting for review"])
                 return apiTestJSONResponse(#"{"task":{"id":"CARD-1","status":"blocked"},"read_only":false}"#, for: request)
             case 2:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/tasks/CARD-1/unblock")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/tasks/CARD-1/unblock")
                 XCTAssertTrue(body.isEmpty)
                 return apiTestJSONResponse(#"{"task":{"id":"CARD-1","status":"ready"},"read_only":false}"#, for: request)
             case 3:
                 XCTAssertEqual(request.httpMethod, "POST")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/links")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/links")
                 XCTAssertEqual(body as NSDictionary, ["parent_id": "CARD-0", "child_id": "CARD-1"])
                 return apiTestJSONResponse(#"{"ok":true,"parent_id":"CARD-0","child_id":"CARD-1","read_only":false}"#, for: request)
             default:
                 // The plugin distinguishes add from remove by method, not by path.
                 XCTAssertEqual(request.httpMethod, "DELETE")
-                XCTAssertEqual(components?.path, "/api/plugins/kanban/links")
+                XCTAssertEqual(components?.path, "/dash/api/plugins/kanban/links")
                 XCTAssertEqual(body as NSDictionary, ["parent_id": "CARD-0", "child_id": "CARD-1"])
                 return apiTestJSONResponse(#"{"ok":true,"changed":true,"parent_id":"CARD-0","child_id":"CARD-1","read_only":false}"#, for: request)
             }
@@ -912,6 +912,20 @@ final class APIClientKanbanTests: APIClientTestCase {
       "future_envelope_field":{"nested":true}
     }
     """
+
+    /// The plugin routes ride under the dashboard's `/dash` proxy prefix when the
+    /// base URL is the plain host, and stay bare when the link already opens the
+    /// dashboard. Both shapes must be deliberate, not incidental.
+    func testKanbanMountFollowsTheBaseURLShape() throws {
+        let plain = try XCTUnwrap(URL(string: "https://example.test"))
+        let dashboard = try XCTUnwrap(URL(string: "https://example.test/dash"))
+        let dashboardSlash = try XCTUnwrap(URL(string: "https://example.test/dash/"))
+
+        XCTAssertEqual(Endpoint.kanbanMount(in: plain), "dash/")
+        XCTAssertEqual(Endpoint.kanbanMount(in: dashboard), "")
+        XCTAssertEqual(Endpoint.kanbanMount(in: dashboardSlash), "")
+    }
+
 }
 
 private func XCTAssertThrowsErrorAsync<T>(

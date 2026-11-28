@@ -107,10 +107,9 @@ struct LauncherAddSheet: View {
                 .listStyle(.plain)
                 .overlay {
                     if filteredBots.isEmpty {
-                        ContentUnavailableView(
-                            kind == .bot ? "No bots" : "No groups",
-                            systemImage: kind.systemImage
-                        )
+                        ContentUnavailableView {
+                            Label(kind == .bot ? "No bots" : "No groups", systemImage: kind.systemImage)
+                        }
                     }
                 }
             }
